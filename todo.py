@@ -59,6 +59,39 @@ CLR_P_HIGH  = "\033[91m"  # Rouge (Priorité haute)
 CLR_P_MED   = "\033[94m"  # Bleu (Priorité moyenne)
 CLR_P_LOW   = "\033[90m"  # Gris (Priorité basse)
 
+# Palette d'origine, conservée à part : _configurer_couleurs() vide les constantes CLR_* pour
+# désactiver les couleurs, et _PALETTE permet de les restaurer ou de les réutiliser (stderr).
+_PALETTE = {nom: valeur for nom, valeur in list(globals().items()) if nom.startswith("CLR_")}
+
+# Choix explicite de l'utilisateur ('auto', 'always', 'never' ou None), fixé par main().
+_mode_couleur = None
+
+def _couleurs_activees(mode=None, flux=None):
+    """Décide si les codes couleur doivent être écrits sur `flux` (stdout par défaut).
+
+    'always' / 'never' : choix explicite, prioritaire sur tout le reste (y compris NO_COLOR).
+    'auto' ou None     : couleurs seulement si le flux est un terminal, si la variable
+                         d'environnement NO_COLOR n'est pas définie (valeur non vide, voir
+                         no-color.org) et si TERM n'est pas 'dumb'.
+    """
+    if mode == "always":
+        return True
+    if mode == "never":
+        return False
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        return False
+    flux = flux or sys.stdout
+    try:
+        return bool(flux.isatty())
+    except (AttributeError, ValueError):  # flux sans isatty() ou déjà fermé
+        return False
+
+def _configurer_couleurs(mode=None):
+    """Active ou désactive les couleurs (stdout) en vidant ou restaurant les constantes CLR_*."""
+    actives = _couleurs_activees(mode)
+    for nom, valeur in _PALETTE.items():
+        globals()[nom] = valeur if actives else ""
+
 # ==============================================================================
 # 4. FONCTIONNALITÉ DE SAUVEGARDE ET ROTATION SÉCURISÉE
 # ==============================================================================
@@ -136,7 +169,9 @@ def _charger_taches(db):
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
-            print(f" {CLR_DEL}⚠️{CLR_RESET} Entrée illisible ignorée (id: {id_str[:8]}).", file=sys.stderr)
+            # Les avertissements vont sur stderr : leur couleur dépend de stderr, pas de stdout
+            rouge, raz = (_PALETTE["CLR_DEL"], _PALETTE["CLR_RESET"]) if _couleurs_activees(_mode_couleur, sys.stderr) else ("", "")
+            print(f" {rouge}⚠️{raz} Entrée illisible ignorée (id: {id_str[:8]}).", file=sys.stderr)
             continue
         t['id'] = id_str
         taches.append(t)
@@ -1102,7 +1137,19 @@ def _entier_positif(valeur):
         raise argparse.ArgumentTypeError("doit être supérieur ou égal à 1")
     return n
 
+def _ajouter_options_couleur(p):
+    """Ajoute --color et --no-color à un parseur (principal ou de sous-commande).
+
+    default=SUPPRESS : une option absente ne doit pas écraser celle donnée à l'autre niveau,
+    ce qui permet `todo --no-color list` comme `todo list --no-color`.
+    """
+    p.add_argument('--color', choices=['auto', 'always', 'never'], dest='couleur', default=argparse.SUPPRESS,
+                   help="Couleurs : auto (défaut : seulement dans un terminal, sauf si NO_COLOR est défini), always, never")
+    p.add_argument('--no-color', action='store_const', const='never', dest='couleur', default=argparse.SUPPRESS,
+                   help="Désactive les couleurs (équivaut à --color never)")
+
 def main():
+    global _mode_couleur
     parser = argparse.ArgumentParser(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
     subparsers = parser.add_subparsers(dest="commande", help="Commandes système disponibles")
 
@@ -1172,6 +1219,11 @@ def main():
     subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
     subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
 
+    # Options de couleur : au niveau principal et sur chaque sous-commande
+    _ajouter_options_couleur(parser)
+    for sous_parseur in subparsers.choices.values():
+        _ajouter_options_couleur(sous_parseur)
+
     # Enregistrement dynamique du parseur auprès du démon d'auto-complétion argcomplete
     try:
         import argcomplete
@@ -1180,6 +1232,8 @@ def main():
         pass
 
     args = parser.parse_args()
+    _mode_couleur = getattr(args, 'couleur', None)
+    _configurer_couleurs(_mode_couleur)
 
     # Moteur d'aiguillage vers l'action requise
     if args.commande == 'add':
