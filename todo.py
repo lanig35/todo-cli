@@ -723,6 +723,71 @@ def supprimer_tache(ids):
     _afficher_bilan_lot(len(ids), nb_ok, "supprimée(s)", echecs)
     return echecs == 0
 
+def reporter_taches(ids, cible="+1d"):
+    """Reporte l'échéance d'une ou plusieurs tâches à faire.
+
+    cible : - décalage '+Nd', '+Nw', '+Nm', '+Ny' : appliqué à partir de max(échéance actuelle,
+              aujourd'hui). Reporter de 2 jours une tâche en retard (ou sans échéance) donne donc
+              « aujourd'hui + 2 jours », pas une date déjà passée.
+            - date fixe : AAAA-MM-JJ, demain, lundi... (mêmes formats que --due).
+    Retourne True si aucun identifiant n'a posé problème.
+    """
+    aujourdhui = datetime.now().date()
+    cible = (cible or "").strip()
+    if _resoudre_date(cible, aujourdhui) is None:
+        print(f" {CLR_DEL}❌ Erreur :{CLR_RESET} Date non reconnue : '{cible}'. Formats acceptés : {CLR_BOLD}{MSG_FORMATS_DATE}{CLR_RESET}.")
+        sys.exit(1)
+    relatif = re.fullmatch(r"\+(\d{1,4})([dwmy])", _sans_accents(cible).lower())
+
+    if not _base_existe():
+        print(f" 📋 {CLR_DIM}La liste est vide, rien à reporter.{CLR_RESET}")
+        return False
+
+    nb_ok = 0
+    with dbm.open(DB_NAME, 'w') as db:
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            try:
+                t = _normaliser_tache(db[key])
+            except ValueError:
+                print(f" {CLR_DEL}❌{CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
+                echecs += 1
+                continue
+            if t['statut'] == STATUT_TERMINE:
+                print(f" {CLR_DEL}❌{CLR_RESET} La tâche '{t['titre']}' est terminée : rien à reporter ('undone' pour la rouvrir).")
+                echecs += 1
+                continue
+
+            try:
+                if relatif:
+                    base = max(_parse_date(t['date_echeance']) or aujourdhui, aujourdhui)
+                    nouvelle = _decaler(base, int(relatif.group(1)), relatif.group(2))
+                else:
+                    nouvelle = _resoudre_date(cible, aujourdhui)
+                nouvelle_txt = nouvelle.strftime("%Y-%m-%d")
+            except (ValueError, OverflowError):
+                print(f" {CLR_DEL}❌{CLR_RESET} Date hors limites pour la tâche '{t['titre']}'.")
+                echecs += 1
+                continue
+
+            ancienne = t['date_echeance']
+            if nouvelle_txt == ancienne:
+                print(f" {CLR_DIM}ℹ️  La tâche '{t['titre']}' a déjà pour échéance le {ancienne}.{CLR_RESET}")
+                continue
+            t['date_echeance'] = nouvelle_txt
+            db[key] = json.dumps(t)
+            print(f" {CLR_TODO}📅{CLR_RESET} Tâche '{CLR_BOLD}{t['titre']}{CLR_RESET}' reportée : "
+                  f"{ancienne or 'aucune échéance'} → {CLR_BOLD}{nouvelle_txt}{CLR_RESET}")
+            if t['recurrence']:
+                print(f"    {CLR_DIM}↻ Tâche récurrente : les prochaines occurrences partiront de cette échéance.{CLR_RESET}")
+            nb_ok += 1
+
+    # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base
+    if nb_ok:
+        sauvegarder_base()
+    _afficher_bilan_lot(len(ids), nb_ok, "reportée(s)", echecs)
+    return echecs == 0
+
 def nettoyer_terminees():
     """Purge de masse ciblant exclusivement les tâches archivées (TERMINE)."""
     if not _base_existe():
@@ -1256,6 +1321,11 @@ def main():
         'ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
     subparsers.add_parser('remove', help='Supprimer une ou plusieurs tâches de la base').add_argument(
         'ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    parser_postpone = subparsers.add_parser('postpone', help="Reporter l'échéance d'une ou plusieurs tâches")
+    parser_postpone.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    parser_postpone.add_argument('--to', type=str, default='+1d', metavar='DATE',
+                                 help="Nouvelle échéance (défaut : +1d). +2d / +1w / +1m / +1y : décalage depuis l'échéance actuelle, "
+                                      "ou depuis aujourd'hui si elle est dépassée ou absente ; ou date fixe : AAAA-MM-JJ, demain, lundi...")
     subparsers.add_parser('clear-done', help='Purger toutes les tâches terminées')
     parser_seed = subparsers.add_parser('seed', help='Remplir la base avec des faux enregistrements')
     parser_seed.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
@@ -1279,7 +1349,7 @@ def main():
     _configurer_couleurs(_mode_couleur)
 
     # Moteur d'aiguillage vers l'action requise.
-    # `succes` passe à False si un identifiant de done / remove n'a pas pu être traité :
+    # `succes` passe à False si un identifiant de done / remove / postpone n'a pas pu être traité :
     # le code de sortie vaut alors 1, ce qui permet de s'en servir dans un script.
     succes = True
     if args.commande == 'add':
@@ -1307,6 +1377,8 @@ def main():
         succes = marquer_terminee(args.ids)
     elif args.commande == 'remove':
         succes = supprimer_tache(args.ids)
+    elif args.commande == 'postpone':
+        succes = reporter_taches(args.ids, args.to)
     elif args.commande == 'clear-done':
         nettoyer_terminees()
     elif args.commande == 'seed':

@@ -7,6 +7,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 
 - Tâches avec titre, description, priorité (`low`, `medium`, `high`), échéance et tags
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
+- Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
@@ -123,6 +124,28 @@ todo remove a1b2c3 d4e5f6
   donc s'en servir dans un script. Terminer une tâche déjà terminée n'est pas une erreur.
   `show`, `undone` et `edit`, qui ne ciblent qu'une tâche, gardent le code `0` même si
   l'identifiant est introuvable.
+
+### Reporter une échéance
+
+```bash
+todo postpone a1b2c3                  # +1 jour (valeur par défaut)
+todo postpone a1b2c3 d4e5f6 --to +2d  # plusieurs tâches, de 2 jours
+todo postpone a1b2c3 --to +1w         # une semaine
+todo postpone a1b2c3 --to lundi       # date fixe
+todo postpone a1b2c3 --to 2026-12-01  # date fixe
+```
+
+`--to` accepte :
+
+- un **décalage** `+Nd`, `+Nw`, `+Nm` ou `+Ny`, appliqué à partir de la plus tardive de l'échéance
+  actuelle et d'aujourd'hui. Reporter de 2 jours une tâche en retard (ou sans échéance) donne donc
+  « aujourd'hui + 2 jours », et non une date déjà passée ;
+- une **date fixe**, avec les mêmes formats que `--due` (`2026-12-01`, `demain`, `lundi`…).
+
+La commande affiche l'ancienne et la nouvelle échéance. Elle suit les mêmes règles que `done` et
+`remove` pour plusieurs identifiants (bilan, une seule sauvegarde, code de sortie `1` en cas
+d'échec). Une tâche terminée ne peut pas être reportée (`undone` d'abord). Pour une tâche
+récurrente, les prochaines occurrences partent de la nouvelle échéance.
 
 ### Dates
 
