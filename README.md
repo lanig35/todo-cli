@@ -12,6 +12,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Tâches en retard affichées en premier
 - Date de complétion et statistiques
 - Sauvegardes automatiques et restauration
+- Couleurs automatiquement désactivées hors terminal (pipes, redirections) et avec `NO_COLOR`
 
 ## Installation
 
@@ -145,6 +146,26 @@ todo stats
 
 Progression, charge active par priorité, tags les plus utilisés, retards et échéances du jour,
 et rythme de complétion (aujourd'hui et sur 7 jours).
+
+### Couleurs
+
+Par défaut (`auto`), les couleurs ne sont utilisées que si la sortie est un terminal : dans un pipe
+ou une redirection (`todo list | grep …`, `todo list > fichier`), aucun code d'échappement n'est écrit.
+Elles sont aussi désactivées si la variable d'environnement `NO_COLOR` est définie avec une valeur
+non vide ([no-color.org](https://no-color.org)) ou si `TERM=dumb`.
+
+```bash
+todo list --no-color          # désactive les couleurs
+todo --no-color list          # idem : l'option peut précéder ou suivre la commande
+todo list --color always      # force les couleurs, par exemple pour `| less -R`
+todo list --color never       # équivaut à --no-color
+```
+
+Un choix explicite (`--color always` ou `never`) l'emporte toujours sur `NO_COLOR` et sur la
+détection du terminal ; si les deux options sont données, la dernière gagne. La sortie `--format json`
+ne contient jamais de couleur. En mode `auto`, les avertissements écrits sur `stderr` sont colorés
+seulement si `stderr` est lui-même un terminal, indépendamment de la sortie standard
+(`todo list 2> erreurs.log` n'y met aucun code d'échappement).
 
 ### Sauvegardes et restauration
 
