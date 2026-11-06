@@ -206,6 +206,35 @@ def _resoudre_id(db, prefixe):
         return None
     return correspondances[0]
 
+def _resoudre_ids(db, prefixes):
+    """Résout plusieurs préfixes d'ID AVANT toute modification de la base.
+
+    Résoudre d'abord, modifier ensuite, rend le résultat indépendant de l'ordre et évite qu'une
+    entrée créée en cours de route (occurrence d'une tâche récurrente) rende un préfixe ambigu.
+    Retourne (clés uniques dans l'ordre donné, nombre d'identifiants en échec). Un préfixe qui
+    désigne une tâche déjà indiquée est ignoré (sinon `done` créerait deux occurrences).
+    """
+    cles, vues, echecs = [], set(), 0
+    for prefixe in prefixes:
+        cle = _resoudre_id(db, prefixe)
+        if cle is None:
+            echecs += 1
+        elif cle in vues:
+            print(f" {CLR_DIM}ℹ️  '{prefixe}' désigne une tâche déjà indiquée : ignoré.{CLR_RESET}")
+        else:
+            vues.add(cle)
+            cles.append(cle)
+    return cles, echecs
+
+def _afficher_bilan_lot(nb_demandes, nb_ok, libelle, nb_echecs):
+    """Ligne de bilan d'une commande portant sur plusieurs ids (rien n'est affiché pour un seul)."""
+    if nb_demandes < 2:
+        return
+    texte = f"{nb_ok} tâche(s) {libelle}"
+    if nb_echecs:
+        texte += f", {CLR_DEL}{nb_echecs} échec(s){CLR_RESET}"
+    print(f" {CLR_BOLD}Bilan :{CLR_RESET} {texte}.")
+
 def _parse_date(valeur):
     """Convertit 'AAAA-MM-JJ' en date, ou None si la valeur est absente ou invalide."""
     if not valeur:
@@ -431,42 +460,45 @@ def _creer_occurrence_suivante(db, t):
     t['suivante'] = id_nouvelle
     return id_nouvelle, nouvelle['date_echeance']
 
-def marquer_terminee(id_recherche):
-    """Bascule le statut d'une tâche ciblée vers 'TERMINE' via préfixe d'ID (unique).
+def marquer_terminee(ids):
+    """Bascule le statut d'une ou plusieurs tâches vers 'TERMINE' via préfixes d'ID (uniques).
 
-    Si la tâche est récurrente, l'occurrence suivante est créée dans la foulée.
+    Si une tâche est récurrente, l'occurrence suivante est créée dans la foulée.
+    Retourne True si aucun identifiant n'a posé problème (introuvable, ambigu, entrée corrompue).
     """
     if not _base_existe():
         print(f" 📋 {CLR_DIM}La liste est vide, rien à valider.{CLR_RESET}")
-        return
+        return False
 
-    modifie = False
+    nb_ok = 0
     with dbm.open(DB_NAME, 'w') as db:
-        key = _resoudre_id(db, id_recherche)
-        if key is None:
-            return
-        try:
-            t = _normaliser_tache(db[key])
-        except ValueError:
-            print(f" {CLR_DEL}❌{CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
-            return
-        if t['statut'] == STATUT_TERMINE:
-            print(f" {CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà terminée.{CLR_RESET}")
-            return
-        t['statut'] = STATUT_TERMINE
-        t['date_terminee'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-        occurrence = _creer_occurrence_suivante(db, t) if t['recurrence'] else None
-        db[key] = json.dumps(t)
-        print(f" {CLR_DONE}🎉{CLR_RESET} Tâche '{CLR_BOLD}{t['titre']}{CLR_RESET}' validée !")
-        if occurrence:
-            print(f"    {CLR_CYAN}↻ Prochaine occurrence : {occurrence[1]}{CLR_RESET} {CLR_DIM}(id: {occurrence[0][:8]}){CLR_RESET}")
-        elif t['recurrence']:
-            print(f"    {CLR_DEL}⚠️ Prochaine occurrence non créée : date hors limites.{CLR_RESET}")
-        modifie = True
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            try:
+                t = _normaliser_tache(db[key])
+            except ValueError:
+                print(f" {CLR_DEL}❌{CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
+                echecs += 1
+                continue
+            if t['statut'] == STATUT_TERMINE:
+                print(f" {CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà terminée.{CLR_RESET}")
+                continue
+            t['statut'] = STATUT_TERMINE
+            t['date_terminee'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            occurrence = _creer_occurrence_suivante(db, t) if t['recurrence'] else None
+            db[key] = json.dumps(t)
+            print(f" {CLR_DONE}🎉{CLR_RESET} Tâche '{CLR_BOLD}{t['titre']}{CLR_RESET}' validée !")
+            if occurrence:
+                print(f"    {CLR_CYAN}↻ Prochaine occurrence : {occurrence[1]}{CLR_RESET} {CLR_DIM}(id: {occurrence[0][:8]}){CLR_RESET}")
+            elif t['recurrence']:
+                print(f"    {CLR_DEL}⚠️ Prochaine occurrence non créée : date hors limites.{CLR_RESET}")
+            nb_ok += 1
 
-    # Sauvegarde APRÈS fermeture de la base, pour capturer l'écriture
-    if modifie:
+    # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base pour capturer les écritures
+    if nb_ok:
         sauvegarder_base()
+    _afficher_bilan_lot(len(ids), nb_ok, "validée(s)", echecs)
+    return echecs == 0
 
 def rouvrir_tache(id_recherche):
     """Repasse une tâche terminée au statut 'A FAIRE' via préfixe d'ID (unique)."""
@@ -663,24 +695,33 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
     # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
     sauvegarder_base()
 
-def supprimer_tache(id_recherche):
-    """Retire définitivement une entrée unique de la base de données."""
+def supprimer_tache(ids):
+    """Retire définitivement une ou plusieurs entrées de la base de données.
+
+    Retourne True si aucun identifiant n'a posé problème (introuvable, ambigu).
+    """
     if not _base_existe():
         print(f" 📋 {CLR_DIM}La liste est vide, rien à supprimer.{CLR_RESET}")
-        return
+        return False
 
-    modifie = False
+    nb_ok = 0
     with dbm.open(DB_NAME, 'w') as db:
-        key = _resoudre_id(db, id_recherche)
-        if key is None:
-            return
-        del db[key]
-        print(f" {CLR_DEL}🗑️{CLR_RESET} Tâche supprimée.")
-        modifie = True
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            try:
+                titre = _normaliser_tache(db[key])['titre']
+            except ValueError:
+                titre = None  # entrée corrompue : on peut quand même la supprimer
+            del db[key]
+            detail = f" : '{CLR_BOLD}{titre}{CLR_RESET}'" if titre else ""
+            print(f" {CLR_DEL}🗑️{CLR_RESET} Tâche supprimée{detail}.")
+            nb_ok += 1
 
-    # Sauvegarde APRÈS fermeture de la base, pour capturer la suppression
-    if modifie:
+    # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base
+    if nb_ok:
         sauvegarder_base()
+    _afficher_bilan_lot(len(ids), nb_ok, "supprimée(s)", echecs)
+    return echecs == 0
 
 def nettoyer_terminees():
     """Purge de masse ciblant exclusivement les tâches archivées (TERMINE)."""
@@ -1211,8 +1252,10 @@ def main():
     parser_restore.add_argument('-y', '--yes', action='store_true', help='Ne pas demander de confirmation')
 
     # Commandes utilitaires
-    subparsers.add_parser('done', help='Clôturer définitivement une tâche').add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    subparsers.add_parser('remove', help='Supprimer une tâche de la base').add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    subparsers.add_parser('done', help='Clôturer une ou plusieurs tâches').add_argument(
+        'ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    subparsers.add_parser('remove', help='Supprimer une ou plusieurs tâches de la base').add_argument(
+        'ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
     subparsers.add_parser('clear-done', help='Purger toutes les tâches terminées')
     parser_seed = subparsers.add_parser('seed', help='Remplir la base avec des faux enregistrements')
     parser_seed.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
@@ -1235,7 +1278,10 @@ def main():
     _mode_couleur = getattr(args, 'couleur', None)
     _configurer_couleurs(_mode_couleur)
 
-    # Moteur d'aiguillage vers l'action requise
+    # Moteur d'aiguillage vers l'action requise.
+    # `succes` passe à False si un identifiant de done / remove n'a pas pu être traité :
+    # le code de sortie vaut alors 1, ce qui permet de s'en servir dans un script.
+    succes = True
     if args.commande == 'add':
         ajouter_tache(args.titre, args.desc, args.prio, args.due, args.tags, repeter=args.repeat)
     elif args.commande == 'list':
@@ -1258,9 +1304,9 @@ def main():
     elif args.commande == 'restore':
         restaurer_base(args.backup, confirmer=not args.yes)
     elif args.commande == 'done':
-        marquer_terminee(args.id)
+        succes = marquer_terminee(args.ids)
     elif args.commande == 'remove':
-        supprimer_tache(args.id)
+        succes = supprimer_tache(args.ids)
     elif args.commande == 'clear-done':
         nettoyer_terminees()
     elif args.commande == 'seed':
@@ -1271,6 +1317,9 @@ def main():
         reinitialiser_base()
     else:
         parser.print_help()
+        sys.exit(1)
+
+    if not succes:
         sys.exit(1)
 
 if __name__ == "__main__":

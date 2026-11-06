@@ -96,12 +96,33 @@ Les commandes qui ciblent une tâche acceptent un **préfixe d'identifiant** (af
 ```bash
 todo show a1b2c3            # détail complet d'une tâche
 todo done a1b2c3            # terminer (enregistre la date de complétion)
+todo done a1b2c3 d4e5f6     # ... ou plusieurs tâches d'un coup
 todo undone a1b2c3          # rouvrir
 todo edit a1b2c3 --title "Nouveau titre" --prio low --due +3d --tags "pro,dev"
 todo edit a1b2c3 --due none --tags "" --desc ""    # supprimer échéance, tags et description
-todo remove a1b2c3          # supprimer
+todo remove a1b2c3          # supprimer (un ou plusieurs identifiants)
 todo clear-done             # supprimer toutes les tâches terminées
 ```
+
+#### Plusieurs tâches à la fois
+
+`done` et `remove` acceptent un ou plusieurs identifiants :
+
+```bash
+todo done a1b2c3 d4e5f6 9a8b7c
+todo remove a1b2c3 d4e5f6
+```
+
+- Tous les préfixes sont résolus **avant** la moindre modification. Un identifiant inconnu ou ambigu
+  est signalé, les autres sont traités quand même, et un bilan est affiché
+  (« Bilan : 2 tâche(s) validée(s), 1 échec(s). »).
+- Une tâche désignée deux fois n'est traitée qu'une seule fois (sinon `done` créerait deux
+  occurrences d'une tâche récurrente).
+- Une seule sauvegarde est faite pour tout le lot.
+- Le code de sortie est `1` si au moins un identifiant n'a pas pu être traité, `0` sinon : on peut
+  donc s'en servir dans un script. Terminer une tâche déjà terminée n'est pas une erreur.
+  `show`, `undone` et `edit`, qui ne ciblent qu'une tâche, gardent le code `0` même si
+  l'identifiant est introuvable.
 
 ### Dates
 
