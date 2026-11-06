@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Données locales : la base et ses sauvegardes ne doivent jamais être versionnées
+# (elles vivent normalement dans ~/.local/share/todo, mais TODO_DB_DIR peut les rediriger ici)
+todo_db*
+backups/
