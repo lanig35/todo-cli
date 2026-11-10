@@ -11,6 +11,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
+- Agenda : les tâches à faire jour par jour (`agenda`)
 - Date de complétion et statistiques
 - Sauvegardes automatiques et restauration
 - Couleurs automatiquement désactivées hors terminal (pipes, redirections) et avec `NO_COLOR`
@@ -182,6 +183,26 @@ Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`
   est déjà terminée).
 - `remove` n'arrête pas la série : utilisez `edit --repeat none`.
 
+### Agenda
+
+```bash
+todo agenda                      # 7 jours à partir d'aujourd'hui
+todo agenda --days 14            # deux semaines
+todo agenda --from lundi --days 7   # la semaine prochaine
+todo agenda --format json        # sortie JSON (compatible jq)
+```
+
+Les tâches **à faire** sont regroupées par jour d'échéance. Chaque jour de la fenêtre apparaît, même
+sans tâche (« rien de prévu »). Au sein d'un jour, la priorité haute passe en premier.
+
+- Une section **En retard** précède les jours quand la fenêtre commence aujourd'hui ou avant ; elle
+  est omise avec un `--from` situé dans le futur.
+- Le pied de page compte les tâches **plus tard** (après la fenêtre) et **sans échéance**.
+- Une tâche récurrente apparaît une seule fois, à son échéance actuelle : les occurrences futures
+  ne sont pas projetées.
+- `--days` va de 1 à 366 ; `--from` accepte les mêmes formats que `--due`. Le pager automatique et
+  `--no-pager` fonctionnent comme pour `list`.
+
 ### Statistiques
 
 ```bash
@@ -235,6 +256,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 |---|---|
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
+| `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
 | `dates.py` | dates relatives, récurrences, libellés d'échéance |
 | `stockage.py` | lecture de la base DBM, normalisation, résolution des identifiants |
