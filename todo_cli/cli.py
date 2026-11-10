@@ -1,6 +1,7 @@
 """Définition de la ligne de commande (argparse) et aiguillage vers les commandes."""
 import argparse
 import sys
+from .agenda import afficher_agenda
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
 from . import couleurs
@@ -116,6 +117,13 @@ def main():
     subparsers.add_parser('clear-done', help='Purger toutes les tâches terminées')
     parser_seed = subparsers.add_parser('seed', help='Remplir la base avec des faux enregistrements')
     parser_seed.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
+    parser_agenda = subparsers.add_parser('agenda', help='Voir les tâches à faire jour par jour')
+    parser_agenda.add_argument('--days', type=_entier_positif, default=7, metavar='N',
+                               help='Nombre de jours affichés (défaut : 7)')
+    parser_agenda.add_argument('--from', dest='depuis', type=str, default=None, metavar='DATE',
+                               help="Premier jour affiché (défaut : aujourd'hui ; mêmes formats que --due)")
+    parser_agenda.add_argument('--no-pager', action='store_true', help="N'utilise pas de pager, même pour un long affichage")
+    parser_agenda.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
     subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
     subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
 
@@ -169,6 +177,11 @@ def main():
         nettoyer_terminees()
     elif args.commande == 'seed':
         peupler_fausses_taches(args.count)
+    elif args.commande == 'agenda':
+        if args.days > 366:
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --days est limité à 366 jours.")
+            sys.exit(1)
+        afficher_agenda(_date_filtre(args.depuis, '--from'), args.days, args.format, pager=not args.no_pager)
     elif args.commande == 'stats':
         afficher_stats()
     elif args.commande == 'reset':
