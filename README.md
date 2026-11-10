@@ -7,6 +7,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 
 - Tâches avec titre, description, priorité (`low`, `medium`, `high`), échéance et tags
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
+- Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
@@ -96,12 +97,55 @@ Les commandes qui ciblent une tâche acceptent un **préfixe d'identifiant** (af
 ```bash
 todo show a1b2c3            # détail complet d'une tâche
 todo done a1b2c3            # terminer (enregistre la date de complétion)
+todo done a1b2c3 d4e5f6     # ... ou plusieurs tâches d'un coup
 todo undone a1b2c3          # rouvrir
 todo edit a1b2c3 --title "Nouveau titre" --prio low --due +3d --tags "pro,dev"
 todo edit a1b2c3 --due none --tags "" --desc ""    # supprimer échéance, tags et description
-todo remove a1b2c3          # supprimer
+todo remove a1b2c3          # supprimer (un ou plusieurs identifiants)
 todo clear-done             # supprimer toutes les tâches terminées
 ```
+
+#### Plusieurs tâches à la fois
+
+`done` et `remove` acceptent un ou plusieurs identifiants :
+
+```bash
+todo done a1b2c3 d4e5f6 9a8b7c
+todo remove a1b2c3 d4e5f6
+```
+
+- Tous les préfixes sont résolus **avant** la moindre modification. Un identifiant inconnu ou ambigu
+  est signalé, les autres sont traités quand même, et un bilan est affiché
+  (« Bilan : 2 tâche(s) validée(s), 1 échec(s). »).
+- Une tâche désignée deux fois n'est traitée qu'une seule fois (sinon `done` créerait deux
+  occurrences d'une tâche récurrente).
+- Une seule sauvegarde est faite pour tout le lot.
+- Le code de sortie est `1` si au moins un identifiant n'a pas pu être traité, `0` sinon : on peut
+  donc s'en servir dans un script. Terminer une tâche déjà terminée n'est pas une erreur.
+  `show`, `undone` et `edit`, qui ne ciblent qu'une tâche, gardent le code `0` même si
+  l'identifiant est introuvable.
+
+### Reporter une échéance
+
+```bash
+todo postpone a1b2c3                  # +1 jour (valeur par défaut)
+todo postpone a1b2c3 d4e5f6 --to +2d  # plusieurs tâches, de 2 jours
+todo postpone a1b2c3 --to +1w         # une semaine
+todo postpone a1b2c3 --to lundi       # date fixe
+todo postpone a1b2c3 --to 2026-12-01  # date fixe
+```
+
+`--to` accepte :
+
+- un **décalage** `+Nd`, `+Nw`, `+Nm` ou `+Ny`, appliqué à partir de la plus tardive de l'échéance
+  actuelle et d'aujourd'hui. Reporter de 2 jours une tâche en retard (ou sans échéance) donne donc
+  « aujourd'hui + 2 jours », et non une date déjà passée ;
+- une **date fixe**, avec les mêmes formats que `--due` (`2026-12-01`, `demain`, `lundi`…).
+
+La commande affiche l'ancienne et la nouvelle échéance. Elle suit les mêmes règles que `done` et
+`remove` pour plusieurs identifiants (bilan, une seule sauvegarde, code de sortie `1` en cas
+d'échec). Une tâche terminée ne peut pas être reportée (`undone` d'abord). Pour une tâche
+récurrente, les prochaines occurrences partent de la nouvelle échéance.
 
 ### Dates
 
