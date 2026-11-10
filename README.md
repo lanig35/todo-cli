@@ -227,6 +227,17 @@ annulée en restaurant cette sauvegarde (la n°2 juste après).
 Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde préalable) et
 `todo seed [N]` (ajoute N tâches factices, nécessite `faker`).
 
+## Tests
+
+La suite `pytest` pilote le programme de l'extérieur (sous-processus, base temporaire via
+`TODO_DB_DIR`, pseudo-terminal pour les couleurs et le pager) : elle ne dépend pas de l'organisation
+interne du code.
+
+```bash
+pip install pytest
+python -m pytest
+```
+
 ## Stockage
 
 | Élément | Emplacement |
