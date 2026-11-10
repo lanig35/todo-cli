@@ -1,6 +1,6 @@
 # todo-cli
 
-Gestionnaire de tâches en ligne de commande, en un seul fichier Python, sans dépendance obligatoire.
+Gestionnaire de tâches en ligne de commande en Python, sans dépendance obligatoire.
 Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique après chaque modification.
 
 ## Fonctionnalités
@@ -226,6 +226,25 @@ annulée en restaurant cette sauvegarde (la n°2 juste après).
 
 Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde préalable) et
 `todo seed [N]` (ajoute N tâches factices, nécessite `faker`).
+
+## Organisation du code
+
+`todo.py` n'est plus qu'un lanceur ; la logique est dans le paquet `todo_cli/` :
+
+| Module | Rôle |
+|---|---|
+| `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
+| `taches.py` | ajout, fin, réouverture, modification, suppression, report |
+| `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
+| `dates.py` | dates relatives, récurrences, libellés d'échéance |
+| `stockage.py` | lecture de la base DBM, normalisation, résolution des identifiants |
+| `sauvegardes.py` | sauvegardes, rotation, restauration, remise à zéro |
+| `couleurs.py` | codes ANSI et règles d'activation des couleurs |
+| `config.py` | emplacement du stockage et constantes |
+| `seed.py` | génération de tâches factices |
+
+Le lien symbolique `~/.local/bin/todo` continue de fonctionner : le lanceur retrouve le paquet à côté
+du vrai fichier. Dossier `todo_cli/` et `todo.py` doivent rester ensemble.
 
 ## Tests
 
