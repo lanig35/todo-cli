@@ -5,6 +5,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 
 ## Fonctionnalités
 
+- Saisie rapide : `todo add "Appeler Paul demain !high #pro"`
 - Tâches avec titre, description, priorité (`low`, `medium`, `high`), échéance et tags
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
 - Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
@@ -48,6 +49,34 @@ todo add "Préparer la réunion"
 todo add "Rapport mensuel" --prio high --due vendredi --tags pro,rapport --desc "Chiffres de octobre"
 todo add "Sauvegarde serveur" --repeat weekly --due lundi
 ```
+
+#### Saisie rapide
+
+La date, la priorité, les tags et la répétition peuvent s'écrire directement dans le titre :
+
+```bash
+todo add "Appeler Paul demain !high #pro"
+todo add "Envoyer la facture @vendredi #compta"
+todo add "Sauvegarde du serveur ~weekly #admin"
+```
+
+| Marqueur | Effet | Exemples |
+|---|---|---|
+| Date (avec ou sans `@`) | échéance | `demain`, `@lundi`, `+3d`, `2026-12-25` (mêmes formats que `--due`) |
+| `!priorité` | priorité | `!high` `!medium` `!low`, `!haute` `!moyenne` `!basse`, `!h` `!m` `!l` |
+| `#tag` | tag (minuscules) | `#pro #urgent` : un tag commence par une lettre, `#42` reste dans le titre |
+| `~répétition` | tâche récurrente | `~weekly`, `~2w`, `~mensuel` |
+
+- Les marqueurs sont retirés du titre, et une ligne « ⚡ Compris dans le titre » indique ce qui a été
+  interprété.
+- Un mot qui ressemble à un marqueur sans en être un (`!bravo`, `#42`, un `!` isolé) reste dans le
+  titre. Si le titre se réduirait à rien (`todo add demain`), il est conservé tel quel.
+- Un marqueur de même nature répété : le dernier l'emporte (les tags s'additionnent).
+- Une **option explicite** (`--due`, `--prio`, `--tags`, `--repeat`) est prioritaire sur le
+  marqueur équivalent, qui reste alors dans le titre. `--desc` n'est pas concerné.
+- `--literal` désactive entièrement la saisie rapide (`todo add --literal "Réunion demain"`).
+- Dans un shell, mettez le titre entre guillemets : `#` commence un commentaire et `!` déclenche
+  l'historique de bash.
 
 ### Lister
 
@@ -318,6 +347,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `archive.py` | archivage, consultation de l'archive, récupération |
+| `saisie.py` | saisie rapide (marqueurs dans le titre) |
 | `prochaine.py` | commande `next` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |

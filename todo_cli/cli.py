@@ -7,6 +7,7 @@ from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
 from . import couleurs
 from .dates import MSG_FORMATS_DATE, _resoudre_date
+from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
@@ -51,14 +52,18 @@ def main():
 
     # Commande 'add'
     parser_add = subparsers.add_parser('add', help='Créer et insérer une nouvelle tâche')
-    parser_add.add_argument('titre', type=str, help='Titre ou intitulé synthétique')
+    parser_add.add_argument('titre', type=str,
+                            help="Titre ; saisie rapide : 'Appeler Paul demain !high #pro ~weekly' (voir --literal)")
     parser_add.add_argument('--desc', type=str, default="", help='Notes explicatives complémentaires')
-    parser_add.add_argument('--prio', choices=list(PRIORITES), default='medium', help='Gravité / Priorité')
+    parser_add.add_argument('--prio', choices=list(PRIORITES), default=None, help='Gravité / Priorité (défaut : medium)')
     parser_add.add_argument('--due', type=str, default=None,
                             help="Échéance : AAAA-MM-JJ, aujourd'hui, demain, apres-demain, +3d/+2w/+1m/+1y ou un jour (lundi...)")
     parser_add.add_argument('--tags', type=str, default=None, help='Tags catégoriels indexés (ex: pro,dev)')
     parser_add.add_argument('--repeat', type=str, default=None,
                             help="Tâche récurrente : daily, weekly, monthly, yearly ou 3d/2w/1m/1y (échéance = aujourd'hui si --due absent)")
+
+    parser_add.add_argument('--literal', action='store_true',
+                            help="Garde le titre tel quel : désactive la saisie rapide (dates, !priorité, #tags, ~récurrence)")
 
     # Commande 'list'
     parser_list = subparsers.add_parser('list', help='Afficher et filtrer les entrées de la base')
@@ -166,7 +171,32 @@ def main():
     # le code de sortie vaut alors 1, ce qui permet de s'en servir dans un script.
     succes = True
     if args.commande == 'add':
-        ajouter_tache(args.titre, args.desc, args.prio, args.due, args.tags, repeter=args.repeat)
+        titre, due, prio, tags, repeter = args.titre, args.due, args.prio, args.tags, args.repeat
+        analyse = None
+        if not args.literal:
+            # Une option explicite est prioritaire : le marqueur équivalent reste alors dans le titre
+            analyse = analyser_titre(args.titre, due=args.due is None, prio=args.prio is None,
+                                     tags=args.tags is None, repeat=args.repeat is None)
+            if analyse["trouve"]:
+                titre = analyse["titre"]
+                due = analyse["due"] or due
+                prio = analyse["prio"] or prio
+                tags = ",".join(analyse["tags"]) or tags
+                repeter = analyse["repeat"] or repeter
+            else:
+                analyse = None
+        ajouter_tache(titre, args.desc, prio, due, tags, repeter=repeter)
+        if analyse:
+            compris = []
+            if analyse["due"]:
+                compris.append(f"échéance {_resoudre_date(analyse['due']).strftime('%Y-%m-%d')}")
+            if analyse["prio"]:
+                compris.append(f"priorité {analyse['prio'].upper()}")
+            if analyse["tags"]:
+                compris.append("tags " + " ".join(f"#{tg}" for tg in analyse["tags"]))
+            if analyse["repeat"]:
+                compris.append(f"répétition {analyse['repeat']}")
+            print(f"    {couleurs.CLR_DIM}⚡ Compris dans le titre : {' · '.join(compris)}{couleurs.CLR_RESET}")
     elif args.commande == 'list':
         avant = _date_filtre(args.due_before, '--due-before')
         apres = _date_filtre(args.due_after, '--due-after')
