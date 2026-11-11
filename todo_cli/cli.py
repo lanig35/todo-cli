@@ -7,7 +7,8 @@ from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
 from . import couleurs
 from .dates import MSG_FORMATS_DATE, _resoudre_date
-from .sauvegardes import reinitialiser_base, restaurer_base
+from .prochaine import afficher_prochaines
+from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
 from .taches import ajouter_tache, marquer_terminee, modifier_tache, nettoyer_terminees, reporter_taches, rouvrir_tache, supprimer_tache
 
@@ -125,6 +126,12 @@ def main():
                                help="Premier jour affiché (défaut : aujourd'hui ; mêmes formats que --due)")
     parser_agenda.add_argument('--no-pager', action='store_true', help="N'utilise pas de pager, même pour un long affichage")
     parser_agenda.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
+    subparsers.add_parser('undo', help="Annuler la dernière modification (un second 'undo' la rétablit)")
+    parser_next = subparsers.add_parser('next', help='Afficher la ou les prochaines tâches à traiter')
+    parser_next.add_argument('-n', '--count', type=_entier_positif, default=1, metavar='N', help='Nombre de tâches affichées (défaut : 1)')
+    parser_next.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
+    parser_next.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne considérer que cette priorité')
+    parser_next.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
     parser_archive = subparsers.add_parser('archive', help='Archiver les tâches terminées (ou consulter l\'archive)')
     parser_archive.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
     parser_archive.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
@@ -194,6 +201,10 @@ def main():
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --days est limité à 366 jours.")
             sys.exit(1)
         afficher_agenda(_date_filtre(args.depuis, '--from'), args.days, args.format, pager=not args.no_pager)
+    elif args.commande == 'undo':
+        succes = annuler_derniere_action()
+    elif args.commande == 'next':
+        afficher_prochaines(args.count, args.tag, args.prio, args.format)
     elif args.commande == 'archive':
         if args.lister or args.search is not None:
             if args.ids or args.anciennete:
