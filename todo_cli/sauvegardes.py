@@ -6,7 +6,7 @@ import re
 import shutil
 import sys
 from datetime import datetime
-from .config import BACKUP_DIR, DB_DIR, DB_NAME, NB_BACKUPS_MAX
+from .config import ARCHIVE_NAME, BACKUP_DIR, DB_DIR, DB_NAME, NB_BACKUPS_MAX
 from . import couleurs
 from .stockage import _base_existe
 
@@ -24,14 +24,14 @@ def _noms_sauvegardes():
     )
 
 def sauvegarder_base(rotation=True):
-    """Crée un instantané daté de la base DBM dans son propre dossier
+    """Crée un instantané daté de la base DBM (et de la base d'archive) dans son propre dossier
     et, si rotation=True, ne conserve que les NB_BACKUPS_MAX plus récents.
 
     Doit être appelée une fois la base fermée, sinon les dernières écritures
     pourraient ne pas encore être sur le disque.
     Retourne le chemin du dossier créé (ou None s'il n'y a rien à sauvegarder).
     """
-    fichiers_base = [f for f in glob.glob(f"{DB_NAME}*") if os.path.isfile(f)]
+    fichiers_base = [f for f in glob.glob(f"{DB_NAME}*") + glob.glob(f"{ARCHIVE_NAME}*") if os.path.isfile(f)]
     if not fichiers_base:
         return None
 
@@ -164,7 +164,9 @@ def restaurer_base(reference=None, confirmer=True):
 
     # 2. Remplacement des fichiers de la base par ceux de la sauvegarde
     try:
-        for f in glob.glob(f"{DB_NAME}*"):
+        # La base ET l'archive reviennent à l'état de la sauvegarde : sans cela, une tâche
+        # archivée depuis pourrait exister à la fois dans la liste restaurée et dans l'archive.
+        for f in glob.glob(f"{DB_NAME}*") + glob.glob(f"{ARCHIVE_NAME}*"):
             if os.path.isfile(f):
                 os.remove(f)
         for f in fichiers_source:

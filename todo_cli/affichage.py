@@ -11,7 +11,7 @@ from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date
-from .stockage import _base_existe, _lire_taches, _normaliser_tache, _resoudre_id
+from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 
 def afficher_tache(id_recherche):
@@ -226,9 +226,15 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
 
     _afficher_texte("\n".join(lignes), pager)
 
-def afficher_stats():
-    """Agrège les métadonnées pour générer des indicateurs de performance et des graphiques texte."""
+def afficher_stats(avec_archive=False):
+    """Agrège les métadonnées pour générer des indicateurs de performance et des graphiques texte.
+
+    avec_archive : compte aussi les tâches archivées (toutes terminées) dans le volume, la
+    progression et le rythme de complétion.
+    """
     taches = _lire_taches()
+    archivees = _lire_archive() if avec_archive else []
+    taches = taches + archivees
     total = len(taches)
     if total == 0:
         print(f" 📊 {couleurs.CLR_DIM}Aucune statistique disponible. La base est vide.{couleurs.CLR_RESET}")
@@ -271,7 +277,8 @@ def afficher_stats():
     barre_str = f"{couleurs.CLR_DONE}{'█' * blocs_faits}{couleurs.CLR_RESET}{couleurs.CLR_DIM}{'░' * (barre_longueur - blocs_faits)}{couleurs.CLR_RESET}"
 
     print(f"\n {couleurs.CLR_CYAN}─── 📊 TABLEAU DE BORD DE VOS TÂCHES ───{couleurs.CLR_RESET}")
-    print(f"  {couleurs.CLR_BOLD}Volume global :{couleurs.CLR_RESET} {total} tâche(s) au total")
+    print(f"  {couleurs.CLR_BOLD}Volume global :{couleurs.CLR_RESET} {total} tâche(s) au total"
+          + (f" {couleurs.CLR_DIM}(dont {len(archivees)} archivée(s)){couleurs.CLR_RESET}" if avec_archive else ""))
     print(f"  {couleurs.CLR_BOLD}Progression   :{couleurs.CLR_RESET} [{barre_str}] {couleurs.CLR_BOLD}{pct_accompli}%{couleurs.CLR_RESET} terminées ({faits}/{total})")
     print(f"  {couleurs.CLR_BOLD}Rythme        :{couleurs.CLR_RESET} {couleurs.CLR_DONE}{faits_aujourdhui}{couleurs.CLR_RESET} terminée(s) aujourd'hui · {couleurs.CLR_DONE}{faits_7_jours}{couleurs.CLR_RESET} sur les 7 derniers jours")
 

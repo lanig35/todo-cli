@@ -13,6 +13,9 @@ os.makedirs(BACKUP_DIR, exist_ok=True)
 # Chemin absolu de base pour le moteur DBM
 DB_NAME = os.path.join(DB_DIR, "todo_db")
 
+# Base d'archive (tâches terminées rangées hors de la liste courante), même dossier
+ARCHIVE_NAME = os.path.join(DB_DIR, "todo_archive")
+
 # Nombre maximal de sauvegardes conservées
 NB_BACKUPS_MAX = 5
 STATUT_A_FAIRE = "A FAIRE"

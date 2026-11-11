@@ -3,7 +3,7 @@ import dbm
 import glob
 import json
 import sys
-from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE
+from .config import ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_A_FAIRE
 from . import couleurs
 from .dates import _parser_recurrence
 
@@ -11,6 +11,10 @@ from .dates import _parser_recurrence
 def _base_existe():
     """Vrai si au moins un fichier de la base DBM est présent sur le disque."""
     return bool(glob.glob(f"{DB_NAME}*"))
+
+def _archive_existe():
+    """Vrai si au moins un fichier de la base d'archive est présent sur le disque."""
+    return bool(glob.glob(f"{ARCHIVE_NAME}*"))
 
 def _normaliser_tache(brut):
     """Décode une entrée DBM et complète les champs manquants (compatibilité ascendante).
@@ -54,6 +58,13 @@ def _lire_taches():
     if not _base_existe():
         return []
     with dbm.open(DB_NAME, 'r') as db:
+        return _charger_taches(db)
+
+def _lire_archive():
+    """Charge toutes les tâches archivées en lecture seule, sans jamais créer la base d'archive."""
+    if not _archive_existe():
+        return []
+    with dbm.open(ARCHIVE_NAME, 'r') as db:
         return _charger_taches(db)
 
 def _resoudre_id(db, prefixe):
