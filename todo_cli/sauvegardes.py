@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from .config import ARCHIVE_NAME, BACKUP_DIR, DB_DIR, DB_NAME, NB_BACKUPS_MAX
 from . import couleurs
-from .stockage import _base_existe
+from .stockage import _base_existe, _charger_taches, _lire_archive, _lire_taches
 
 
 # Chaque sauvegarde est un sous-dossier horodaté : backups/AAAAMMJJ_HHMMSS_µs/
@@ -182,3 +182,64 @@ def restaurer_base(reference=None, confirmer=True):
     print(f" {couleurs.CLR_DONE}♻️  Base restaurée{couleurs.CLR_RESET} depuis la sauvegarde du {couleurs.CLR_BOLD}{date_txt}{couleurs.CLR_RESET} ({nb} tâche(s)).")
     if filet:
         print(f"    {couleurs.CLR_DIM}L'état précédent a été sauvegardé : 'restore' permet de le retrouver (le plus récent juste après celui-ci).{couleurs.CLR_RESET}")
+
+
+# 6 ter. ANNULATION DE LA DERNIÈRE MODIFICATION
+def _taches_sauvegarde(nom, base):
+    """Tâches d'un fichier DBM d'un dossier de sauvegarde ('todo_db' ou 'todo_archive'), {id: tâche}."""
+    chemin = os.path.join(BACKUP_DIR, nom, base)
+    if not glob.glob(f"{chemin}*"):
+        return {}
+    with dbm.open(chemin, 'r') as db:
+        return {t['id']: t for t in _charger_taches(db)}
+
+def _resume_differences(actuel, cible, vers_la_liste=True):
+    """Phrases décrivant ce que changerait le passage de l'état `actuel` à l'état `cible` ({id: tâche})."""
+    def noms(ids, source):
+        affiches = [f"'{source[i]['titre']}'" for i in sorted(ids)[:5]]
+        return ", ".join(affiches) + (f" et {len(ids) - 5} autre(s)" if len(ids) > 5 else "")
+    retirees = set(actuel) - set(cible)
+    retablies = set(cible) - set(actuel)
+    modifiees = {i for i in set(actuel) & set(cible) if actuel[i] != cible[i]}
+    cadre = "" if vers_la_liste else " (archive)"
+    phrases = []
+    if retirees:
+        phrases.append(f"retirer{cadre} {noms(retirees, actuel)}")
+    if retablies:
+        phrases.append(f"rétablir{cadre} {noms(retablies, cible)}")
+    if modifiees:
+        phrases.append(f"remettre{cadre} dans leur état précédent {noms(modifiees, cible)}")
+    return phrases
+
+def annuler_derniere_action():
+    """Revient à l'état précédant la dernière modification.
+
+    Une sauvegarde est faite après chaque modification : la plus récente décrit normalement l'état
+    actuel, la précédente l'état d'avant, qui est donc la cible. Si l'état actuel diffère de la
+    sauvegarde la plus récente (`reset`, qui sauvegarde AVANT de vider, ou fichier modifié hors du
+    programme), c'est cette dernière qui est la cible : on rétablit ce qui a été perdu.
+    Comme `restaurer_base`, l'annulation sauvegarde l'état actuel avant de le remplacer : un second
+    `undo` rétablit donc ce qui vient d'être annulé.
+    Retourne True si une annulation a été faite.
+    """
+    noms = _noms_sauvegardes()[::-1]
+    if not noms:
+        print(f" ↩️  {couleurs.CLR_DIM}Rien à annuler : aucun état antérieur n'est sauvegardé.{couleurs.CLR_RESET}")
+        return False
+
+    actuel = ({t['id']: t for t in _lire_taches()}, {t['id']: t for t in _lire_archive()})
+    plus_recent = (_taches_sauvegarde(noms[0], "todo_db"), _taches_sauvegarde(noms[0], "todo_archive"))
+    if actuel == plus_recent:
+        if len(noms) < 2:
+            print(f" ↩️  {couleurs.CLR_DIM}Rien à annuler : aucun état antérieur n'est sauvegardé.{couleurs.CLR_RESET}")
+            return False
+        numero, cible = "2", (_taches_sauvegarde(noms[1], "todo_db"), _taches_sauvegarde(noms[1], "todo_archive"))
+    else:
+        numero, cible = "1", plus_recent
+
+    phrases = (_resume_differences(actuel[0], cible[0]) + _resume_differences(actuel[1], cible[1], vers_la_liste=False))
+    print(f" ↩️  Annulation de la dernière modification : "
+          + (" ; ".join(phrases) if phrases else "aucune différence visible dans les tâches") + ".")
+    restaurer_base(numero, confirmer=False)
+    print(f"    {couleurs.CLR_DIM}Relancez 'undo' pour rétablir ce qui vient d'être annulé.{couleurs.CLR_RESET}")
+    return True

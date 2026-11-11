@@ -12,6 +12,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
+- `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
 - Sauvegardes automatiques et restauration
@@ -184,6 +185,19 @@ Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`
   est déjà terminée).
 - `remove` n'arrête pas la série : utilisez `edit --repeat none`.
 
+### La prochaine tâche
+
+```bash
+todo next                    # la tâche à traiter maintenant
+todo next -n 3               # les trois prochaines
+todo next --tag pro --prio high
+todo next --format json
+```
+
+Classement des tâches à faire : d'abord celles **en retard**, puis celles **du jour**, puis les
+autres ; dans chaque groupe, la priorité haute d'abord, puis l'échéance la plus proche (les tâches
+sans échéance en dernier), puis la date de création. Les tâches terminées sont ignorées.
+
 ### Agenda
 
 ```bash
@@ -261,6 +275,24 @@ ne contient jamais de couleur. En mode `auto`, les avertissements écrits sur `s
 seulement si `stderr` est lui-même un terminal, indépendamment de la sortie standard
 (`todo list 2> erreurs.log` n'y met aucun code d'échappement).
 
+### Annuler la dernière modification
+
+```bash
+todo undo        # revient à l'état d'avant la dernière modification
+todo undo        # ... et un second `undo` la rétablit
+```
+
+`undo` s'appuie sur les sauvegardes : il indique ce qu'il change (« retirer 'X' », « rétablir 'Y' »,
+« remettre dans leur état précédent 'Z' »), sans confirmation puisqu'il est lui-même réversible.
+Il couvre toutes les commandes qui modifient les tâches (`add`, `done`, `edit`, `remove`,
+`postpone`, `archive`, `restore`, `reset`…).
+
+- Il ne remonte que d'**un** pas : relancer `undo` revient à l'état de départ au lieu de remonter
+  plus loin. Pour revenir plus en arrière, utilisez `todo restore` (5 sauvegardes conservées).
+- Il n'y a rien à annuler tant qu'une seule modification a été faite (aucun état antérieur) ;
+  la commande renvoie alors le code de sortie `1`.
+- Après un `reset`, `undo` rétablit les tâches vidées.
+
 ### Sauvegardes et restauration
 
 Une sauvegarde est créée après chaque modification ; les 5 plus récentes sont conservées.
@@ -286,6 +318,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `archive.py` | archivage, consultation de l'archive, récupération |
+| `prochaine.py` | commande `next` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
 | `dates.py` | dates relatives, récurrences, libellés d'échéance |
