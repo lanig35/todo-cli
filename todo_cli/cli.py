@@ -2,6 +2,7 @@
 import argparse
 import sys
 from .agenda import afficher_agenda
+from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
 from . import couleurs
@@ -124,7 +125,18 @@ def main():
                                help="Premier jour affiché (défaut : aujourd'hui ; mêmes formats que --due)")
     parser_agenda.add_argument('--no-pager', action='store_true', help="N'utilise pas de pager, même pour un long affichage")
     parser_agenda.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
-    subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
+    parser_archive = subparsers.add_parser('archive', help='Archiver les tâches terminées (ou consulter l\'archive)')
+    parser_archive.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
+    parser_archive.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+                                help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
+    parser_archive.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
+    parser_archive.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
+    parser_archive.add_argument('--no-pager', action='store_true', help="N'utilise pas de pager, même pour un long affichage")
+    parser_archive.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie de --list")
+    parser_unarchive = subparsers.add_parser('unarchive', help="Remettre des tâches archivées dans la liste")
+    parser_unarchive.add_argument('ids', nargs='+', help="Identifiants (ou préfixes) des tâches archivées à récupérer")
+    parser_stats = subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
+    parser_stats.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
     subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
 
     # Options de couleur : au niveau principal et sur chaque sous-commande
@@ -182,8 +194,28 @@ def main():
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --days est limité à 366 jours.")
             sys.exit(1)
         afficher_agenda(_date_filtre(args.depuis, '--from'), args.days, args.format, pager=not args.no_pager)
+    elif args.commande == 'archive':
+        if args.lister or args.search is not None:
+            if args.ids or args.anciennete:
+                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --list / --search ne se combinent pas avec des identifiants ni avec --older-than.")
+                sys.exit(1)
+            lister_archive(args.search, args.format, pager=not args.no_pager)
+        else:
+            if args.ids and args.anciennete:
+                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Indiquez des identifiants OU --older-than, pas les deux.")
+                sys.exit(1)
+            anciennete = None
+            if args.anciennete is not None:
+                anciennete = _parser_anciennete(args.anciennete)
+                if anciennete is None:
+                    print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Durée non reconnue pour --older-than : '{args.anciennete}'. "
+                          f"Format : {MSG_FORMAT_ANCIENNETE}.")
+                    sys.exit(1)
+            succes = archiver_taches(args.ids or None, anciennete)
+    elif args.commande == 'unarchive':
+        succes = desarchiver_taches(args.ids)
     elif args.commande == 'stats':
-        afficher_stats()
+        afficher_stats(args.with_archive)
     elif args.commande == 'reset':
         reinitialiser_base()
     else:

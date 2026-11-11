@@ -13,6 +13,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
 - Date de complétion et statistiques
+- Archivage des tâches terminées (consultation, recherche, récupération)
 - Sauvegardes automatiques et restauration
 - Couleurs automatiquement désactivées hors terminal (pipes, redirections) et avec `NO_COLOR`
 
@@ -203,6 +204,34 @@ sans tâche (« rien de prévu »). Au sein d'un jour, la priorité haute passe 
 - `--days` va de 1 à 366 ; `--from` accepte les mêmes formats que `--due`. Le pager automatique et
   `--no-pager` fonctionnent comme pour `list`.
 
+### Archivage
+
+Les tâches terminées peuvent être rangées hors de la liste, sans être supprimées :
+
+```bash
+todo archive                      # archive toutes les tâches terminées
+todo archive --older-than 30d     # seulement celles terminées depuis au moins 30 jours
+todo archive a1b2c3 d4e5f6        # ou des tâches précises (elles doivent être terminées)
+todo archive --list               # consulter l'archive
+todo archive --search facture     # chercher dans l'archive (titre, description, tags)
+todo unarchive a1b2c3             # remettre une tâche dans la liste
+todo stats --with-archive         # statistiques incluant l'historique archivé
+```
+
+- Les tâches archivées disparaissent de `list`, `agenda` et `stats` (sauf `--with-archive`).
+- `--older-than` accepte `30d`, `2w`, `6m`, `1y` et se base sur la date de complétion. Une ancienne
+  tâche terminée sans date de complétion est ignorée (son âge est inconnu) : archivez-la par
+  identifiant.
+- `--older-than` et des identifiants ne se combinent pas. `--list`, `--search` (et `--format json`,
+  `--no-pager`) consultent l'archive, de la tâche terminée le plus récemment à la plus ancienne.
+- Seules les tâches terminées s'archivent. Pour une tâche récurrente, l'occurrence suivante reste
+  dans la liste ; rouvrir l'ancienne (`undone`) demande de la récupérer d'abord avec `unarchive`.
+- Archive et liste sont **sauvegardées et restaurées ensemble** : `restore` ramène les deux à l'état
+  de la sauvegarde, de sorte qu'une tâche n'apparaisse jamais des deux côtés. `reset` ne vide que la
+  liste et conserve l'archive.
+- `archive` et `unarchive` traitent plusieurs identifiants comme `done` et `remove` (bilan, une seule
+  sauvegarde, code de sortie `1` en cas d'échec).
+
 ### Statistiques
 
 ```bash
@@ -256,6 +285,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 |---|---|
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
+| `archive.py` | archivage, consultation de l'archive, récupération |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
 | `dates.py` | dates relatives, récurrences, libellés d'échéance |
@@ -284,7 +314,8 @@ python -m pytest
 | Élément | Emplacement |
 |---|---|
 | Base | `~/.local/share/todo/todo_db*` |
-| Sauvegardes | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` |
+| Archive | `~/.local/share/todo/todo_archive*` |
+| Sauvegardes | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` (base et archive) |
 
 La variable d'environnement `TODO_DB_DIR` redirige tout le stockage vers un autre dossier
 (utile pour les tests ou pour avoir plusieurs listes séparées).
