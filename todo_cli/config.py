@@ -16,6 +16,11 @@ DB_NAME = os.path.join(DB_DIR, "todo_db")
 # Base d'archive (tâches terminées rangées hors de la liste courante), même dossier
 ARCHIVE_NAME = os.path.join(DB_DIR, "todo_archive")
 
+# Fichiers d'état du rappel (hors base : ni sauvegardés ni touchés par restore/reset)
+REMIND_OFF = os.path.join(DB_DIR, "remind_off")        # présent = rappels désactivés
+REMIND_LAST = os.path.join(DB_DIR, "remind_last")      # date du dernier rappel affiché (--once-a-day)
+REMIND_STATUS = os.path.join(DB_DIR, "remind_status")  # résumé d'une ligne écrit par --write-status
+
 # Nombre maximal de sauvegardes conservées
 NB_BACKUPS_MAX = 5
 STATUT_A_FAIRE = "A FAIRE"
