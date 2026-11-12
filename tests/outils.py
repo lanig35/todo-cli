@@ -84,10 +84,12 @@ class Todo:
         self.dossier = Path(dossier)
         self.db_dir = self.dossier / "data"
         self.db_dir.mkdir()
-        env = os.environ.copy()
-        for nom in ("NO_COLOR", "PAGER", "LESS", "COLUMNS", "LINES"):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("TODO_")}  # rien de la session du développeur
+        for nom in ("NO_COLOR", "PAGER", "LESS", "COLUMNS", "LINES", "XDG_CONFIG_HOME"):
             env.pop(nom, None)
-        env.update(TODO_DB_DIR=str(self.db_dir), PYTHONDONTWRITEBYTECODE="1", TERM="xterm")
+        self.fichier_config = self.dossier / "config.ini"     # jamais le vrai ~/.config/todo/config.ini
+        env.update(TODO_DB_DIR=str(self.db_dir), TODO_CONFIG=str(self.fichier_config),
+                   PYTHONDONTWRITEBYTECODE="1", TERM="xterm")
         self.env = env
 
     def _env(self, supplementaire):
@@ -131,6 +133,10 @@ class Todo:
         if stderr_vers:
             err.close()
         return ResultatPty(code, sortie.decode("utf-8", "replace"))
+
+    def config(self, texte):
+        """Écrit le fichier de configuration de cette instance (TODO_CONFIG)."""
+        self.fichier_config.write_text(texte, encoding="utf-8")
 
     # ------------------------------------------------------------------ données
     def seed(self, *taches):

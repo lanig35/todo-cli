@@ -1,9 +1,14 @@
-"""Configuration : emplacement du stockage et constantes métier."""
-import os
+"""Configuration : emplacement du stockage et constantes métier.
 
-# Base de données et dossiers de sauvegarde localisés dans le répertoire utilisateur.
-# La variable d'environnement TODO_DB_DIR permet de rediriger le stockage (tests, etc.).
-DB_DIR = os.environ.get("TODO_DB_DIR") or os.path.expanduser("~/.local/share/todo")
+L'emplacement du stockage et le nombre de sauvegardes viennent de `reglages` (variable
+d'environnement TODO_DB_DIR / TODO_KEEP_BACKUPS, fichier de configuration, sinon défaut) : ils sont
+déterminés une fois pour toutes à l'import.
+"""
+import os
+from . import reglages
+
+# Base de données et dossiers de sauvegarde (par défaut dans le répertoire utilisateur).
+DB_DIR = reglages.obtenir("general", "db_dir")
 BACKUP_DIR = os.path.join(DB_DIR, "backups")
 
 # Création récursive des répertoires s'ils n'existent pas encore
@@ -22,7 +27,7 @@ REMIND_LAST = os.path.join(DB_DIR, "remind_last")      # date du dernier rappel 
 REMIND_STATUS = os.path.join(DB_DIR, "remind_status")  # résumé d'une ligne écrit par --write-status
 
 # Nombre maximal de sauvegardes conservées
-NB_BACKUPS_MAX = 5
+NB_BACKUPS_MAX = reglages.obtenir("general", "keep_backups")
 STATUT_A_FAIRE = "A FAIRE"
 STATUT_TERMINE = "TERMINE"
 PRIORITES = ("low", "medium", "high")

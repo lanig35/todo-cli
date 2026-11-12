@@ -5,7 +5,8 @@ from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
-from . import couleurs
+from . import couleurs, reglages
+from .configuration import afficher_chemin, afficher_config, initialiser_config
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
@@ -56,7 +57,7 @@ def main():
     parser_add.add_argument('titre', type=str,
                             help="Titre ; saisie rapide : 'Appeler Paul demain !high #pro ~weekly' (voir --literal)")
     parser_add.add_argument('--desc', type=str, default="", help='Notes explicatives complémentaires')
-    parser_add.add_argument('--prio', choices=list(PRIORITES), default=None, help='Gravité / Priorité (défaut : medium)')
+    parser_add.add_argument('--prio', choices=list(PRIORITES), default=None, help='Gravité / Priorité (défaut : medium, ou [add] priority)')
     parser_add.add_argument('--due', type=str, default=None,
                             help="Échéance : AAAA-MM-JJ, aujourd'hui, demain, apres-demain, +3d/+2w/+1m/+1y ou un jour (lundi...)")
     parser_add.add_argument('--tags', type=str, default=None, help='Tags catégoriels indexés (ex: pro,dev)')
@@ -74,19 +75,20 @@ def main():
     parser_list.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne montrer que cette priorité')
     parser_list.add_argument('--overdue', action='store_true', help="Tâches à faire dont l'échéance est dépassée")
     parser_list.add_argument('--today', action='store_true', help="Tâches à faire dont l'échéance est aujourd'hui (avec --overdue : l'un ou l'autre)")
-    parser_list.add_argument('--no-overdue-first', action='store_true',
-                             help="Ne pas placer les tâches en retard en premier (l'ordre de --sort s'applique à toute la liste)")
+    parser_list.add_argument('--overdue-first', action=argparse.BooleanOptionalAction, default=None,
+                             help="Place (--overdue-first, défaut) ou non (--no-overdue-first) les tâches en retard en premier ; "
+                                  "sans, l'ordre de --sort s'applique à toute la liste. Réglage : [list] overdue_first")
     parser_list.add_argument('--due-before', type=str, default=None, metavar='DATE',
                              help="Échéance au plus tard à cette date, incluse (AAAA-MM-JJ, demain, +7d, vendredi...). "
                                   "Exclut les tâches sans échéance et les terminées (sauf avec --status done)")
     parser_list.add_argument('--due-after', type=str, default=None, metavar='DATE',
                              help="Échéance à partir de cette date, incluse (mêmes formats que --due-before)")
     parser_list.add_argument('--limit', type=_entier_positif, default=None, metavar='N',
-                             help="N'afficher que N tâches (après filtres et tris)")
+                             help="N'afficher que N tâches (après filtres et tris). Réglage : [list] limit")
     parser_list.add_argument('--start', type=_entier_positif, default=None, metavar='N',
                              help="Commencer à la tâche n°N de la liste (la numérotation affichée commence à 1)")
-    parser_list.add_argument('--no-pager', action='store_true',
-                             help="Ne pas utiliser de pager (less) même si la liste dépasse l'écran")
+    parser_list.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+                             help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     parser_list.add_argument('--sort', choices=['alpha', 'status', 'priority', 'due'], help='Critère de tri')
     parser_list.add_argument('--format', choices=['table', 'json'], default='table', help='Structure de la sortie textuelle')
 
@@ -126,22 +128,25 @@ def main():
     parser_seed = subparsers.add_parser('seed', help='Remplir la base avec des faux enregistrements')
     parser_seed.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
     parser_agenda = subparsers.add_parser('agenda', help='Voir les tâches à faire jour par jour')
-    parser_agenda.add_argument('--days', type=_entier_positif, default=7, metavar='N',
-                               help='Nombre de jours affichés (défaut : 7)')
+    parser_agenda.add_argument('--days', type=_entier_positif, default=None, metavar='N',
+                               help='Nombre de jours affichés (défaut : 7, ou [agenda] days)')
     parser_agenda.add_argument('--from', dest='depuis', type=str, default=None, metavar='DATE',
                                help="Premier jour affiché (défaut : aujourd'hui ; mêmes formats que --due)")
-    parser_agenda.add_argument('--no-pager', action='store_true', help="N'utilise pas de pager, même pour un long affichage")
+    parser_agenda.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+                               help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     parser_agenda.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
     subparsers.add_parser('undo', help="Annuler la dernière modification (un second 'undo' la rétablit)")
     parser_next = subparsers.add_parser('next', help='Afficher la ou les prochaines tâches à traiter')
-    parser_next.add_argument('-n', '--count', type=_entier_positif, default=1, metavar='N', help='Nombre de tâches affichées (défaut : 1)')
+    parser_next.add_argument('-n', '--count', type=_entier_positif, default=None, metavar='N',
+                             help='Nombre de tâches affichées (défaut : 1, ou [next] count)')
     parser_next.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
     parser_next.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne considérer que cette priorité')
     parser_next.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
     parser_remind = subparsers.add_parser('remind', help="Rappeler les tâches en retard (silencieux s'il n'y en a pas)")
-    parser_remind.add_argument('--limit', type=_entier_positif, default=5, metavar='N', help='Nombre maximal de tâches listées (défaut : 5)')
-    parser_remind.add_argument('--soon', type=_entier_positif, default=0, metavar='N',
-                               help="Signale aussi les échéances des N prochains jours (défaut : retards et aujourd'hui seulement)")
+    parser_remind.add_argument('--limit', type=_entier_positif, default=None, metavar='N',
+                               help='Nombre maximal de tâches listées (défaut : 5, ou [remind] limit)')
+    parser_remind.add_argument('--soon', type=_entier_positif, default=None, metavar='N',
+                               help="Signale aussi les échéances des N prochains jours (défaut : retards et aujourd'hui seulement, ou [remind] soon)")
     parser_remind.add_argument('--once-a-day', action='store_true',
                                help="N'affiche le rappel qu'une fois par jour (le premier terminal de la journée)")
     action = parser_remind.add_mutually_exclusive_group()
@@ -156,10 +161,17 @@ def main():
                                 help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
     parser_archive.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
     parser_archive.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
-    parser_archive.add_argument('--no-pager', action='store_true', help="N'utilise pas de pager, même pour un long affichage")
+    parser_archive.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+                                help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     parser_archive.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie de --list")
     parser_unarchive = subparsers.add_parser('unarchive', help="Remettre des tâches archivées dans la liste")
     parser_unarchive.add_argument('ids', nargs='+', help="Identifiants (ou préfixes) des tâches archivées à récupérer")
+    parser_config = subparsers.add_parser('config', help='Voir les réglages effectifs ou créer un fichier de configuration')
+    parser_config.add_argument('action', nargs='?', choices=['show', 'path', 'init'], default='show',
+                               help="show : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
+                                    "init : crée un fichier modèle commenté")
+    parser_config.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
+    parser_config.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie de show')
     parser_stats = subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
     parser_stats.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
     subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
@@ -177,7 +189,7 @@ def main():
         pass
 
     args = parser.parse_args()
-    couleurs._configurer_couleurs(getattr(args, 'couleur', None))
+    couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
 
     # Moteur d'aiguillage vers l'action requise.
     # `succes` passe à False si un identifiant de done / remove / postpone n'a pas pu être traité :
@@ -198,6 +210,7 @@ def main():
                 repeter = analyse["repeat"] or repeter
             else:
                 analyse = None
+        prio = prio or reglages.obtenir('add', 'priority')   # option > titre > variable > fichier > défaut
         ajouter_tache(titre, args.desc, prio, due, tags, repeter=repeter)
         if analyse:
             compris = []
@@ -218,8 +231,9 @@ def main():
             sys.exit(1)
         lister_taches(args.status, args.search, args.sort, args.format, args.tag,
                       prio_filtre=args.prio, retard=args.overdue, aujourdhui=args.today,
-                      retards_en_premier=not args.no_overdue_first,
-                      limite=args.limit, debut=args.start, pager=not args.no_pager,
+                      retards_en_premier=reglages.obtenir('list', 'overdue_first', args.overdue_first),
+                      limite=reglages.obtenir('list', 'limit', args.limit) or None, debut=args.start,
+                      pager=reglages.obtenir('general', 'pager', args.pager),
                       avant=avant, apres=apres)
     elif args.commande == 'show':
         afficher_tache(args.id)
@@ -240,14 +254,15 @@ def main():
     elif args.commande == 'seed':
         peupler_fausses_taches(args.count)
     elif args.commande == 'agenda':
-        if args.days > 366:
+        if args.days is not None and args.days > 366:
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --days est limité à 366 jours.")
             sys.exit(1)
-        afficher_agenda(_date_filtre(args.depuis, '--from'), args.days, args.format, pager=not args.no_pager)
+        afficher_agenda(_date_filtre(args.depuis, '--from'), reglages.obtenir('agenda', 'days', args.days), args.format,
+                        pager=reglages.obtenir('general', 'pager', args.pager))
     elif args.commande == 'undo':
         succes = annuler_derniere_action()
     elif args.commande == 'next':
-        afficher_prochaines(args.count, args.tag, args.prio, args.format)
+        afficher_prochaines(reglages.obtenir('next', 'count', args.count), args.tag, args.prio, args.format)
     elif args.commande == 'remind':
         if args.disable:
             desactiver_rappels()
@@ -259,13 +274,14 @@ def main():
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --once-a-day ne s'utilise pas avec --write-status.")
             sys.exit(1)
         else:
-            rappeler(args.limit, args.soon, args.once_a_day, args.write_status)
+            rappeler(reglages.obtenir('remind', 'limit', args.limit), reglages.obtenir('remind', 'soon', args.soon),
+                     args.once_a_day, args.write_status)
     elif args.commande == 'archive':
         if args.lister or args.search is not None:
             if args.ids or args.anciennete:
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --list / --search ne se combinent pas avec des identifiants ni avec --older-than.")
                 sys.exit(1)
-            lister_archive(args.search, args.format, pager=not args.no_pager)
+            lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
         else:
             if args.ids and args.anciennete:
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Indiquez des identifiants OU --older-than, pas les deux.")
@@ -280,6 +296,13 @@ def main():
             succes = archiver_taches(args.ids or None, anciennete)
     elif args.commande == 'unarchive':
         succes = desarchiver_taches(args.ids)
+    elif args.commande == 'config':
+        if args.action == 'path':
+            afficher_chemin()
+        elif args.action == 'init':
+            succes = initialiser_config(args.force)
+        else:
+            afficher_config(args.format)
     elif args.commande == 'stats':
         afficher_stats(args.with_archive)
     elif args.commande == 'reset':
