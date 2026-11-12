@@ -13,6 +13,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
+- Configuration par fichier INI, variables d'environnement et options (`todo config`)
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Date de complétion et statistiques
@@ -106,9 +107,9 @@ Options de `list` :
 | `--due-before DATE` | échéance au plus tard à cette date, **incluse** |
 | `--due-after DATE` | échéance à partir de cette date, **incluse** |
 | `--sort alpha\|status\|priority\|due` | critère de tri |
-| `--no-overdue-first` | ne regroupe pas les retards en tête |
+| `--overdue-first`, `--no-overdue-first` | regroupe (par défaut) ou non les retards en tête |
 | `--limit N`, `--start N` | tranche de la liste (`--start` commence à 1, comme la numérotation affichée) |
-| `--no-pager` | n'utilise pas de pager |
+| `--pager`, `--no-pager` | utilise ou non un pager (par défaut : oui, si l'affichage dépasse l'écran) |
 | `--format table\|json` | format de sortie |
 
 Notes :
@@ -278,7 +279,8 @@ PS1='$(cat ~/.local/share/todo/remind_status 2>/dev/null)\u@\h:\w\$ '
   `~/.bashrc` et de la crontab peuvent rester en place. `todo remind --enable` les remet en route ;
   `--status` indique l'état.
 - La variable d'environnement `TODO_NO_REMIND` (non vide) coupe les rappels dans une session
-  seulement, par exemple `TODO_NO_REMIND=1 bash`.
+  seulement, par exemple `TODO_NO_REMIND=1 bash`. Le réglage `[remind] enabled = false` du fichier de
+  configuration les coupe aussi (voir *Configuration*).
 - Le reste du programme n'est pas concerné : `list`, `next`, `agenda`… fonctionnent normalement.
 
 Les fichiers d'état (`remind_off`, `remind_last`, `remind_status`) sont dans le dossier de stockage,
@@ -392,6 +394,74 @@ Il couvre toutes les commandes qui modifient les tâches (`add`, `done`, `edit`,
   la commande renvoie alors le code de sortie `1`.
 - Après un `reset`, `undo` rétablit les tâches vidées.
 
+### Configuration
+
+Les valeurs par défaut se règlent dans un fichier de configuration (format INI). Priorité, de la plus
+forte à la plus faible :
+
+1. l'**option** de la ligne de commande (`--limit 10`) ;
+2. la **variable d'environnement** (`TODO_LIST_LIMIT=10`) ;
+3. le **fichier de configuration** ;
+4. la valeur **par défaut** du programme.
+
+```bash
+todo config init     # crée ~/.config/todo/config.ini : un modèle où tout est en commentaire
+todo config show     # valeurs effectives et leur origine (option, variable, fichier ou défaut)
+todo config path     # chemin du fichier
+```
+
+Le fichier est `$TODO_CONFIG` s'il est défini, sinon `$XDG_CONFIG_HOME/todo/config.ini`, sinon
+`~/.config/todo/config.ini`. Un fichier absent n'est pas une erreur. Exemple :
+
+```ini
+[general]
+color = auto            # auto | always | never
+pager = true
+
+[list]
+limit = 30              # 0 = pas de limite
+overdue_first = true
+
+[add]
+priority = medium
+
+[remind]
+enabled = true
+limit = 5
+soon = 0
+```
+
+| Section | Clé | Défaut | Variable d'environnement | Option qui l'emporte |
+|---|---|---|---|---|
+| `general` | `db_dir` | `~/.local/share/todo` | `TODO_DB_DIR` | — |
+| `general` | `color` | `auto` | `TODO_COLOR` (puis `NO_COLOR`) | `--color`, `--no-color` |
+| `general` | `pager` | `true` | `TODO_PAGER` | `--pager`, `--no-pager` |
+| `general` | `keep_backups` | `5` (minimum 2) | `TODO_KEEP_BACKUPS` | — |
+| `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
+| `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
+| `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
+| `agenda` | `days` | `7` (1 à 366) | `TODO_AGENDA_DAYS` | `--days` |
+| `next` | `count` | `1` | `TODO_NEXT_COUNT` | `-n`, `--count` |
+| `remind` | `enabled` | `true` | `TODO_REMIND_ENABLED` | — (voir ci-dessous) |
+| `remind` | `limit` | `5` | `TODO_REMIND_LIMIT` | `--limit` |
+| `remind` | `soon` | `0` | `TODO_REMIND_SOON` | `--soon` |
+
+- Booléens : `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0` (majuscules acceptées). Dans le fichier,
+  les commentaires commencent par `#` ou `;`, y compris en fin de ligne ; sections et clés ne
+  distinguent pas les majuscules.
+- Une variable d'environnement **vide** est ignorée, comme si elle n'était pas définie.
+- **Erreurs tolérées** : une clé ou une section inconnue, ou une valeur invalide (fichier ou variable),
+  est signalée sur `stderr` puis ignorée, avec une suggestion en cas de faute de frappe (« vouliez-vous
+  dire 'limit' ? »). Les autres réglages s'appliquent. Un fichier à la syntaxe invalide est ignoré en
+  entier, avec un avertissement.
+- **Couleurs** : l'ordre est `--color` > `TODO_COLOR` > `NO_COLOR` > fichier > auto. `NO_COLOR` étant
+  une variable d'environnement, elle l'emporte sur `color = always` du fichier.
+- **Rappels** : `enabled = false` (ou `TODO_REMIND_ENABLED=false`) coupe les rappels, comme
+  `todo remind --disable` et `TODO_NO_REMIND`. Les interrupteurs se **cumulent** : un seul suffit pour
+  couper, sauf que `TODO_REMIND_ENABLED=true` l'emporte sur `enabled = false` du fichier.
+- `db_dir` et `keep_backups` sont lus au démarrage : il n'y a pas d'option de ligne de commande
+  équivalente, mais `TODO_DB_DIR=/autre/dossier todo list` fonctionne pour un usage ponctuel.
+
 ### Sauvegardes et restauration
 
 Une sauvegarde est créée après chaque modification ; les 5 plus récentes sont conservées.
@@ -417,6 +487,8 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `archive.py` | archivage, consultation de l'archive, récupération |
+| `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
+| `configuration.py` | commande `config` (show, path, init) |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
@@ -452,8 +524,8 @@ python -m pytest
 | Archive | `~/.local/share/todo/todo_archive*` |
 | Sauvegardes | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` (base et archive) |
 
-La variable d'environnement `TODO_DB_DIR` redirige tout le stockage vers un autre dossier
-(utile pour les tests ou pour avoir plusieurs listes séparées).
+La variable d'environnement `TODO_DB_DIR` (ou `db_dir` dans le fichier de configuration) redirige tout
+le stockage vers un autre dossier (utile pour les tests ou pour avoir plusieurs listes séparées).
 
 > **Portabilité** : le format DBM dépend du backend Python (`gdbm`, `ndbm`, `dumb`). Un fichier créé
 > sur une machine n'est pas toujours lisible sur une autre. Pour transférer vos tâches, vérifiez

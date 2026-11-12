@@ -8,20 +8,18 @@ crontab. Trois fichiers d'état vivent dans le dossier de stockage, hors de la b
 """
 import os
 from datetime import datetime
-from . import couleurs
+from . import couleurs, reglages
 from .config import PRIORITES, REMIND_LAST, REMIND_OFF, REMIND_STATUS, STATUT_A_FAIRE
 from .dates import _jours_restants, _libelle_echeance
 from .stockage import _lire_taches
 
 
 # --------------------------------------------------------------------------- état
-def _desactive_par_variable():
-    return bool(os.environ.get("TODO_NO_REMIND"))
-
-
 def rappels_actifs():
-    """Faux si les rappels sont coupés (`remind --disable`) ou si TODO_NO_REMIND est définie."""
-    return not _desactive_par_variable() and not os.path.exists(REMIND_OFF)
+    """Faux si un des interrupteurs coupe les rappels : `remind --disable` (fichier d'état), ou le
+    réglage [remind] enabled (TODO_REMIND_ENABLED, fichier de configuration) ; TODO_NO_REMIND les coupe
+    toujours. Les interrupteurs se cumulent : un seul suffit pour couper."""
+    return reglages.obtenir("remind", "enabled") and not os.path.exists(REMIND_OFF)
 
 
 def _lire(chemin):
@@ -63,16 +61,17 @@ def activer_rappels():
     _supprimer(REMIND_OFF)
     _supprimer(REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
     print(f" 🔔 Rappels activés.")
-    if _desactive_par_variable():
-        print(f"    {couleurs.CLR_DIM}Attention : la variable TODO_NO_REMIND est définie dans cet environnement ; "
-              f"les rappels y restent coupés.{couleurs.CLR_RESET}")
+    if not reglages.obtenir("remind", "enabled"):
+        _, origine = reglages.obtenir_avec_origine("remind", "enabled")
+        print(f"    {couleurs.CLR_DIM}Attention : ils restent coupés ici par le réglage [remind] enabled ({origine}).{couleurs.CLR_RESET}")
 
 
 def afficher_etat_rappels():
     if os.path.exists(REMIND_OFF):
         print(f" 🔕 Rappels désactivés (todo remind --enable pour les réactiver).")
-    elif _desactive_par_variable():
-        print(f" 🔕 Rappels coupés par la variable d'environnement TODO_NO_REMIND.")
+    elif not reglages.obtenir("remind", "enabled"):
+        _, origine = reglages.obtenir_avec_origine("remind", "enabled")
+        print(f" 🔕 Rappels coupés par le réglage [remind] enabled ({origine}).")
     else:
         print(f" 🔔 Rappels activés.")
     dernier = _lire(REMIND_LAST)
