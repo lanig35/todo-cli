@@ -5,7 +5,7 @@ from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
-from . import couleurs, reglages
+from . import couleurs, reglages, journal
 from .configuration import afficher_chemin, afficher_config, initialiser_config
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .saisie import analyser_titre
@@ -22,6 +22,7 @@ def _date_filtre(valeur, option):
         return None
     date_obj = _resoudre_date(valeur)
     if date_obj is None:
+        journal.echec("invalid_date")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Date non reconnue pour {couleurs.CLR_BOLD}{option}{couleurs.CLR_RESET} : '{valeur}'. "
               f"Formats acceptés : {couleurs.CLR_BOLD}{MSG_FORMATS_DATE}{couleurs.CLR_RESET}.")
         sys.exit(1)
@@ -37,8 +38,16 @@ def _entier_positif(valeur):
         raise argparse.ArgumentTypeError("doit être supérieur ou égal à 1")
     return n
 
+class _Parseur(argparse.ArgumentParser):
+    """ArgumentParser dont les erreurs d'usage (code 2) sont aussi écrites dans le journal."""
+
+    def error(self, message):
+        journal.echec("usage", detail=message)
+        super().error(message)
+
+
 def _ajouter_options_couleur(p):
-    """Ajoute --color et --no-color à un parseur (principal ou de sous-commande).
+    """Ajoute --color, --no-color et --log-level à un parseur (principal ou de sous-commande).
 
     default=SUPPRESS : une option absente ne doit pas écraser celle donnée à l'autre niveau,
     ce qui permet `todo --no-color list` comme `todo list --no-color`.
@@ -47,9 +56,12 @@ def _ajouter_options_couleur(p):
                    help="Couleurs : auto (défaut : seulement dans un terminal, sauf si NO_COLOR est défini), always, never")
     p.add_argument('--no-color', action='store_const', const='never', dest='couleur', default=argparse.SUPPRESS,
                    help="Désactive les couleurs (équivaut à --color never)")
+    p.add_argument('--log-level', choices=['off', 'error', 'warning', 'info', 'debug'], dest='niveau_log',
+                   default=argparse.SUPPRESS, help="Niveau du journal pour cette commande (défaut : info, ou [log] level)")
 
 def main():
-    parser = argparse.ArgumentParser(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
+    journal.initialiser()
+    parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
     subparsers = parser.add_subparsers(dest="commande", help="Commandes système disponibles")
 
     # Commande 'add'
@@ -188,7 +200,10 @@ def main():
     except ImportError:
         pass
 
+    # La commande est connue du journal avant l'analyse, pour tracer aussi les erreurs d'usage
+    journal.definir_commande(next((a for a in sys.argv[1:] if a in subparsers.choices), None))
     args = parser.parse_args()
+    journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
 
     # Moteur d'aiguillage vers l'action requise.
@@ -227,6 +242,7 @@ def main():
         avant = _date_filtre(args.due_before, '--due-before')
         apres = _date_filtre(args.due_after, '--due-after')
         if avant is not None and apres is not None and apres > avant:
+            journal.echec("empty_range")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Plage vide : --due-after ({apres}) est postérieure à --due-before ({avant}).")
             sys.exit(1)
         lister_taches(args.status, args.search, args.sort, args.format, args.tag,
@@ -255,6 +271,7 @@ def main():
         peupler_fausses_taches(args.count)
     elif args.commande == 'agenda':
         if args.days is not None and args.days > 366:
+            journal.echec("days_limit")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --days est limité à 366 jours.")
             sys.exit(1)
         afficher_agenda(_date_filtre(args.depuis, '--from'), reglages.obtenir('agenda', 'days', args.days), args.format,
@@ -271,6 +288,7 @@ def main():
         elif args.status:
             afficher_etat_rappels()
         elif args.once_a_day and args.write_status:
+            journal.echec("invalid_combination")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --once-a-day ne s'utilise pas avec --write-status.")
             sys.exit(1)
         else:
@@ -279,17 +297,20 @@ def main():
     elif args.commande == 'archive':
         if args.lister or args.search is not None:
             if args.ids or args.anciennete:
+                journal.echec("invalid_combination")
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --list / --search ne se combinent pas avec des identifiants ni avec --older-than.")
                 sys.exit(1)
             lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
         else:
             if args.ids and args.anciennete:
+                journal.echec("invalid_combination")
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Indiquez des identifiants OU --older-than, pas les deux.")
                 sys.exit(1)
             anciennete = None
             if args.anciennete is not None:
                 anciennete = _parser_anciennete(args.anciennete)
                 if anciennete is None:
+                    journal.echec("invalid_duration")
                     print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Durée non reconnue pour --older-than : '{args.anciennete}'. "
                           f"Format : {MSG_FORMAT_ANCIENNETE}.")
                     sys.exit(1)
@@ -316,9 +337,18 @@ def main():
 
 
 def executer():
-    """Lance `main()` et traduit Ctrl+C en code de sortie 130."""
+    """Lance `main()`, traduit Ctrl+C en code de sortie 130 et écrit le message de synthèse du journal."""
     try:
         main()
     except KeyboardInterrupt:
         print(f"\n {couleurs.CLR_DIM}Interrompu.{couleurs.CLR_RESET}")
+        journal.terminer(130)
         sys.exit(130)
+    except SystemExit as e:
+        journal.terminer(e.code if isinstance(e.code, int) else (0 if e.code is None else 1))
+        raise
+    except Exception:
+        journal.critique()
+        journal.terminer(1)
+        raise
+    journal.terminer(0)

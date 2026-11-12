@@ -8,7 +8,7 @@ crontab. Trois fichiers d'état vivent dans le dossier de stockage, hors de la b
 """
 import os
 from datetime import datetime
-from . import couleurs, reglages
+from . import couleurs, reglages, journal
 from .config import PRIORITES, REMIND_LAST, REMIND_OFF, REMIND_STATUS, STATUT_A_FAIRE
 from .dates import _jours_restants, _libelle_echeance
 from .stockage import _lire_taches
@@ -53,12 +53,14 @@ def _supprimer(chemin):
 
 def desactiver_rappels():
     _ecrire(REMIND_OFF, "")
+    journal.noter(modifie=True, state="disabled")
     _ecrire(REMIND_STATUS, "")  # le résumé affiché dans l'invite disparaît tout de suite
     print(f" 🔕 Rappels désactivés. Pour les réactiver : {couleurs.CLR_BOLD}todo remind --enable{couleurs.CLR_RESET}")
 
 
 def activer_rappels():
     _supprimer(REMIND_OFF)
+    journal.noter(modifie=True, state="enabled")
     _supprimer(REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
     print(f" 🔔 Rappels activés.")
     if not reglages.obtenir("remind", "enabled"):

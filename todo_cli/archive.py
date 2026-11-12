@@ -8,7 +8,7 @@ import dbm
 import json
 import re
 from datetime import datetime
-from . import couleurs
+from . import couleurs, journal
 from .affichage import _afficher_texte
 from .config import ARCHIVE_NAME, DB_NAME, STATUT_TERMINE
 from .dates import _decaler, _parse_date
@@ -58,10 +58,12 @@ def archiver_taches(ids=None, anciennete=None):
                 try:
                     t = _normaliser_tache(db[cle])
                 except ValueError:
+                    journal.echec("corrupted_entry")
                     print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être archivée.")
                     echecs += 1
                     continue
                 if t['statut'] != STATUT_TERMINE:
+                    journal.echec("not_done")
                     print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} La tâche '{t['titre']}' n'est pas terminée : "
                           f"seules les tâches terminées s'archivent.")
                     echecs += 1
@@ -86,6 +88,7 @@ def archiver_taches(ids=None, anciennete=None):
             archive[cle] = json.dumps({**_sans_id(t), 'date_archivage': horodatage})
             del db[cle]
             nb_ok += 1
+            journal.noter(ids=[cle], titres=[t['titre']], modifie=True)
             if ids:
                 print(f" 📦 Tâche archivée : '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}'.")
 
@@ -120,16 +123,19 @@ def desarchiver_taches(ids):
             try:
                 t = _normaliser_tache(archive[cle])
             except ValueError:
+                journal.echec("corrupted_entry")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée d'archive est corrompue et ne peut pas être récupérée.")
                 echecs += 1
                 continue
             if cle in db:
+                journal.echec("duplicate_id")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Une tâche portant déjà cet identifiant existe dans la liste : '{t['titre']}' non récupérée.")
                 echecs += 1
                 continue
             t.pop('date_archivage', None)
             db[cle] = json.dumps(t)
             del archive[cle]
+            journal.noter(ids=[cle], titres=[t['titre']], modifie=True)
             print(f" 📤 Tâche récupérée : '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}'.")
             nb_ok += 1
 

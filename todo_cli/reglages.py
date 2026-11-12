@@ -59,6 +59,18 @@ REGLAGES = (
             "Nombre maximal de tâches listées par remind.", minimum=1),
     Reglage("remind", "soon", "int", 0,
             "Signaler aussi les échéances des N prochains jours ; 0 = retards et aujourd'hui seulement.", minimum=0),
+    Reglage("log", "level", "choix", "info",
+            "Niveau du journal : off, error, warning, info (actions et erreurs) ou debug (ajoute les lectures).",
+            choix=("off", "error", "warning", "info", "debug")),
+    Reglage("log", "target", "choix", "auto",
+            "Destination : auto (journald/syslog si disponible, sinon fichier), journal, file ou off.",
+            choix=("auto", "journal", "file", "off")),
+    Reglage("log", "file", "chemin", lambda: os.path.join(os.environ.get("XDG_STATE_HOME") or "~/.local/state", "todo", "todo.log"),
+            "Fichier de log (destination file, ou repli quand il n'y a pas de journal système)."),
+    Reglage("log", "socket", "chemin", "/dev/log",
+            "Socket syslog utilisé pour atteindre journald (rarement à changer)."),
+    Reglage("log", "titles", "bool", False,
+            "Inclure les titres des tâches dans le journal (par défaut : identifiants seulement, par discrétion)."),
 )
 _PAR_CLE = {(r.section, r.cle): r for r in REGLAGES}
 SECTIONS = tuple(dict.fromkeys(r.section for r in REGLAGES))
@@ -81,7 +93,11 @@ def chemin_config():
     return os.path.join(base, "todo", "config.ini")
 
 
+AVERTISSEMENTS = []   # messages déjà affichés, relus par `journal` une fois le journal initialisé
+
+
 def _avertir(message):
+    AVERTISSEMENTS.append(message)
     print(f" ⚠️  {message}", file=sys.stderr)
 
 
@@ -184,7 +200,7 @@ def obtenir_avec_origine(section, cle, cli=None) -> Tuple[object, str]:
     fichier = _charger_fichier()
     if (section, cle) in fichier:
         return fichier[(section, cle)], "fichier"
-    defaut = reglage.defaut
+    defaut = reglage.defaut() if callable(reglage.defaut) else reglage.defaut
     return (convertir(reglage, defaut) if reglage.type == "chemin" else defaut), "défaut"
 
 
@@ -206,7 +222,8 @@ def modele_fichier():
         for r in (r for r in REGLAGES if r.section == section):
             lignes.append(f"# {r.aide}")
             lignes.append(f"# Variable d'environnement : {nom_variable(r.section, r.cle)}")
-            defaut = str(r.defaut).lower() if r.type == "bool" else r.defaut
+            defaut = r.defaut() if callable(r.defaut) else r.defaut
+            defaut = str(defaut).lower() if r.type == "bool" else defaut
             lignes.append(f"# {r.cle} = {defaut}")
             lignes.append("")
     return "\n".join(lignes)
