@@ -4,7 +4,7 @@ import glob
 import json
 import sys
 from .config import ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_A_FAIRE
-from . import couleurs
+from . import couleurs, journal
 from .dates import _parser_recurrence
 
 
@@ -47,6 +47,7 @@ def _charger_taches(db):
         except ValueError:
             # Les avertissements vont sur stderr : leur couleur dépend de stderr, pas de stdout
             rouge, raz = couleurs._couleurs_erreur()
+            journal.echec("unreadable_entry", id=id_str[:8])
             print(f" {rouge}⚠️{raz} Entrée illisible ignorée (id: {id_str[:8]}).", file=sys.stderr)
             continue
         t['id'] = id_str
@@ -74,16 +75,19 @@ def _resoudre_id(db, prefixe):
     """
     prefixe = prefixe.strip().lower()
     if not prefixe:
+        journal.echec("empty_id")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Identifiant vide.")
         return None
 
     correspondances = [k for k in db.keys() if k.decode('utf-8', errors='replace').lower().startswith(prefixe)]
     if not correspondances:
+        journal.echec("unknown_id", prefix=prefixe)
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Aucun identifiant ne correspond à '{prefixe}'.")
         return None
     if len(correspondances) > 1:
         largeur = max(8, len(prefixe) + 2)
         candidats = ", ".join(k.decode('utf-8', errors='replace')[:largeur] for k in correspondances)
+        journal.echec("ambiguous_id", prefix=prefixe)
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Identifiant ambigu '{prefixe}' ({len(correspondances)} correspondances : {candidats}).")
         print(f"    {couleurs.CLR_DIM}Précisez davantage le préfixe.{couleurs.CLR_RESET}")
         return None
@@ -111,6 +115,7 @@ def _resoudre_ids(db, prefixes):
 
 def _afficher_bilan_lot(nb_demandes, nb_ok, libelle, nb_echecs):
     """Ligne de bilan d'une commande portant sur plusieurs ids (rien n'est affiché pour un seul)."""
+    journal.noter(total=nb_demandes, failed=nb_echecs)
     if nb_demandes < 2:
         return
     texte = f"{nb_ok} tâche(s) {libelle}"

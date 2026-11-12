@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 from datetime import timedelta
 from .config import PRIORITES
-from . import couleurs
+from . import couleurs, journal
 from .sauvegardes import sauvegarder_base
 from .taches import ajouter_tache
 
@@ -14,6 +14,7 @@ def peupler_fausses_taches(nombre):
     try:
         from faker import Faker
     except ImportError:
+        journal.echec("missing_faker")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Le module 'faker' est requis. Lancez : pip install faker")
         sys.exit(1)
 
@@ -37,5 +38,6 @@ def peupler_fausses_taches(nombre):
         ajouter_tache(titre, description, priorite, date_echeance, ",".join(tags_choisis),
                       silencieux=True, sauvegarder=False)
 
+    journal.noter(count=nombre, modifie=True)
     sauvegarder_base()
     print(f" {couleurs.CLR_DONE}🎉 Injection de données de test validée.{couleurs.CLR_RESET}")

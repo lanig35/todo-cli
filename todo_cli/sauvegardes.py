@@ -7,7 +7,7 @@ import shutil
 import sys
 from datetime import datetime
 from .config import ARCHIVE_NAME, BACKUP_DIR, DB_DIR, DB_NAME, NB_BACKUPS_MAX
-from . import couleurs
+from . import couleurs, journal
 from .stockage import _base_existe, _charger_taches, _lire_archive, _lire_taches
 
 
@@ -72,6 +72,7 @@ def reinitialiser_base():
     with dbm.open(DB_NAME, 'w') as db:
         for key in list(db.keys()):
             del db[key]
+    journal.noter(modifie=True)
     print(f" {couleurs.CLR_DONE}🗑️ Base réinitialisée.{couleurs.CLR_RESET}")
 
 # 6 bis. RESTAURATION À PARTIR DES SAUVEGARDES
@@ -95,14 +96,17 @@ def _resoudre_sauvegarde(reference, noms_recents_d_abord):
         n = int(reference)
         if 1 <= n <= len(noms_recents_d_abord):
             return noms_recents_d_abord[n - 1]
+        journal.echec("invalid_backup_number")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Numéro de sauvegarde invalide : {reference} (1 à {len(noms_recents_d_abord)}).")
         return None
 
     correspondances = [d for d in noms_recents_d_abord if d.startswith(reference)] if reference else []
     if not correspondances:
+        journal.echec("unknown_backup")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Aucune sauvegarde ne correspond à '{reference}'.")
         return None
     if len(correspondances) > 1:
+        journal.echec("ambiguous_backup")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Référence ambiguë '{reference}' ({len(correspondances)} sauvegardes). Utilisez le numéro affiché par 'restore'.")
         return None
     return correspondances[0]
@@ -142,6 +146,7 @@ def restaurer_base(reference=None, confirmer=True):
 
     date_txt, nb = _infos_sauvegarde(nom)
     if nb is None:
+        journal.echec("unreadable_backup")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} La sauvegarde du {date_txt} est illisible : restauration annulée.")
         return
 
@@ -172,6 +177,7 @@ def restaurer_base(reference=None, confirmer=True):
         for f in fichiers_source:
             shutil.copy2(f, os.path.join(DB_DIR, os.path.basename(f)))
     except OSError as e:
+        journal.echec("restore_error", detail=str(e))
         print(f" {couleurs.CLR_DEL}❌ Erreur pendant la restauration :{couleurs.CLR_RESET} {e}")
         if filet:
             print(f"    L'état précédent est conservé dans : {filet}")
@@ -179,6 +185,7 @@ def restaurer_base(reference=None, confirmer=True):
 
     # 3. Nouvelle sauvegarde de l'état restauré (avec rotation)
     sauvegarder_base()
+    journal.noter(modifie=True, backup=nom)
     print(f" {couleurs.CLR_DONE}♻️  Base restaurée{couleurs.CLR_RESET} depuis la sauvegarde du {couleurs.CLR_BOLD}{date_txt}{couleurs.CLR_RESET} ({nb} tâche(s)).")
     if filet:
         print(f"    {couleurs.CLR_DIM}L'état précédent a été sauvegardé : 'restore' permet de le retrouver (le plus récent juste après celui-ci).{couleurs.CLR_RESET}")

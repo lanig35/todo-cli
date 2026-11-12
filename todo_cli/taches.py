@@ -6,7 +6,7 @@ import sys
 import uuid
 from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
-from . import couleurs
+from . import couleurs, journal
 from .dates import MSG_FORMATS_DATE, MSG_FORMATS_REPETITION, _decaler, _libelle_recurrence, _parse_date, _parser_recurrence, _prochaine_echeance, _resoudre_date, _sans_accents
 from .sauvegardes import sauvegarder_base
 from .stockage import _afficher_bilan_lot, _base_existe, _normaliser_tache, _resoudre_id, _resoudre_ids
@@ -19,11 +19,13 @@ def _parser_tags(tags_str):
 def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silencieux=False, sauvegarder=True, repeter=None):
     """Insère une tâche sérialisée en JSON dans la base clé-valeur intégrée."""
     if not titre or not titre.strip():
+        journal.echec("empty_title")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Le titre ne peut pas être vide.")
         sys.exit(1)
 
     priorite = (priorite or "medium").lower()
     if priorite not in PRIORITES:
+        journal.echec("invalid_priority")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Priorité invalide. Valeurs possibles : {couleurs.CLR_BOLD}{', '.join(PRIORITES)}{couleurs.CLR_RESET}.")
         sys.exit(1)
 
@@ -31,6 +33,7 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
     if date_echeance:
         date_obj = _resoudre_date(date_echeance)
         if date_obj is None:
+            journal.echec("invalid_date")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Date non reconnue. Formats acceptés : {couleurs.CLR_BOLD}{MSG_FORMATS_DATE}{couleurs.CLR_RESET}.")
             sys.exit(1)
         date_echeance = date_obj.strftime("%Y-%m-%d")
@@ -41,6 +44,7 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
     if repeter:
         recurrence = _parser_recurrence(repeter)
         if recurrence is None:
+            journal.echec("invalid_repeat")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Répétition non reconnue. Valeurs acceptées : {couleurs.CLR_BOLD}{MSG_FORMATS_REPETITION}{couleurs.CLR_RESET}.")
             sys.exit(1)
         if not date_echeance:
@@ -64,6 +68,7 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
         }
         # Conversion du dictionnaire en chaîne JSON exploitable par DBM
         db[id_tache] = json.dumps(donnees_tache)
+        journal.noter(ids=[id_tache], titres=[titre.strip()], modifie=True)
 
     if not silencieux:
         print(f" {couleurs.CLR_DONE}✅{couleurs.CLR_RESET} Tâche ajoutée : '{couleurs.CLR_BOLD}{titre.strip()}{couleurs.CLR_RESET}'")
@@ -116,6 +121,7 @@ def marquer_terminee(ids):
             try:
                 t = _normaliser_tache(db[key])
             except ValueError:
+                journal.echec("corrupted_entry")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
                 echecs += 1
                 continue
@@ -132,6 +138,7 @@ def marquer_terminee(ids):
             elif t['recurrence']:
                 print(f"    {couleurs.CLR_DEL}⚠️ Prochaine occurrence non créée : date hors limites.{couleurs.CLR_RESET}")
             nb_ok += 1
+            journal.noter(ids=[key], titres=[t['titre']], modifie=True)
 
     # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base pour capturer les écritures
     if nb_ok:
@@ -153,6 +160,7 @@ def rouvrir_tache(id_recherche):
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
+            journal.echec("corrupted_entry")
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
             return
         if t['statut'] == STATUT_A_FAIRE:
@@ -169,6 +177,7 @@ def rouvrir_tache(id_recherche):
                 except ValueError:
                     suivante = None
                 if suivante is not None and suivante['statut'] != STATUT_A_FAIRE:
+                    journal.echec("next_occurrence_done")
                     print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Impossible : l'occurrence suivante de '{t['titre']}' est déjà terminée.")
                     return
                 if suivante is not None:
@@ -183,6 +192,7 @@ def rouvrir_tache(id_recherche):
         if echeance_supprimee:
             print(f"    {couleurs.CLR_DIM}↻ L'occurrence suivante (échéance {echeance_supprimee}) a été supprimée.{couleurs.CLR_RESET}")
         modifie = True
+        journal.noter(ids=[key], titres=[t['titre']], modifie=True)
 
     # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
     if modifie:
@@ -196,6 +206,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
     - repeter       : 'weekly', '2w'... ; 'none' (ou chaîne vide) supprime la répétition.
     """
     if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter)):
+        journal.echec("nothing_to_edit")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat.")
         return
 
@@ -203,12 +214,14 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
     if titre is not None:
         titre = titre.strip()
         if not titre:
+            journal.echec("empty_title")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Le titre ne peut pas être vide.")
             sys.exit(1)
 
     if priorite is not None:
         priorite = priorite.lower()
         if priorite not in PRIORITES:
+            journal.echec("invalid_priority")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Priorité invalide. Valeurs possibles : {couleurs.CLR_BOLD}{', '.join(PRIORITES)}{couleurs.CLR_RESET}.")
             sys.exit(1)
 
@@ -219,6 +232,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
         else:
             date_obj = _resoudre_date(date_echeance)
             if date_obj is None:
+                journal.echec("invalid_date")
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Date non reconnue. Formats acceptés : {couleurs.CLR_BOLD}{MSG_FORMATS_DATE}{couleurs.CLR_RESET} (ou 'none' pour supprimer).")
                 sys.exit(1)
             date_echeance = date_obj.strftime("%Y-%m-%d")  # forme absolue normalisée
@@ -230,6 +244,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
         else:
             recurrence_norm = _parser_recurrence(repeter)
             if recurrence_norm is None:
+                journal.echec("invalid_repeat")
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Répétition non reconnue. Valeurs acceptées : {couleurs.CLR_BOLD}{MSG_FORMATS_REPETITION}{couleurs.CLR_RESET}.")
                 sys.exit(1)
             repeter = recurrence_norm
@@ -246,6 +261,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
+            journal.echec("corrupted_entry")
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
             return
 
@@ -273,6 +289,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
         # Une tâche récurrente doit toujours avoir une échéance
         if t['recurrence'] and not t['date_echeance']:
             if date_echeance == "":
+                journal.echec("recurrence_needs_due")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Une tâche récurrente doit avoir une échéance : supprimez d'abord la répétition (--repeat none).")
                 return
             t['date_echeance'] = datetime.now().date().strftime("%Y-%m-%d")
@@ -283,6 +300,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
             return
 
         db[key] = json.dumps(t)
+        journal.noter(ids=[key], titres=[t['titre']], modifie=True, fields=modifications)
         print(f" {couleurs.CLR_DONE}✏️{couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' modifiée ({', '.join(modifications)}).")
 
     # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
@@ -306,6 +324,7 @@ def supprimer_tache(ids):
             except ValueError:
                 titre = None  # entrée corrompue : on peut quand même la supprimer
             del db[key]
+            journal.noter(ids=[key], titres=[titre] if titre else None, modifie=True)
             detail = f" : '{couleurs.CLR_BOLD}{titre}{couleurs.CLR_RESET}'" if titre else ""
             print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} Tâche supprimée{detail}.")
             nb_ok += 1
@@ -328,6 +347,7 @@ def reporter_taches(ids, cible="+1d"):
     aujourdhui = datetime.now().date()
     cible = (cible or "").strip()
     if _resoudre_date(cible, aujourdhui) is None:
+        journal.echec("invalid_date")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Date non reconnue : '{cible}'. Formats acceptés : {couleurs.CLR_BOLD}{MSG_FORMATS_DATE}{couleurs.CLR_RESET}.")
         sys.exit(1)
     relatif = re.fullmatch(r"\+(\d{1,4})([dwmy])", _sans_accents(cible).lower())
@@ -343,10 +363,12 @@ def reporter_taches(ids, cible="+1d"):
             try:
                 t = _normaliser_tache(db[key])
             except ValueError:
+                journal.echec("corrupted_entry")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
                 echecs += 1
                 continue
             if t['statut'] == STATUT_TERMINE:
+                journal.echec("postpone_done_task")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} La tâche '{t['titre']}' est terminée : rien à reporter ('undone' pour la rouvrir).")
                 echecs += 1
                 continue
@@ -359,6 +381,7 @@ def reporter_taches(ids, cible="+1d"):
                     nouvelle = _resoudre_date(cible, aujourdhui)
                 nouvelle_txt = nouvelle.strftime("%Y-%m-%d")
             except (ValueError, OverflowError):
+                journal.echec("date_out_of_range")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Date hors limites pour la tâche '{t['titre']}'.")
                 echecs += 1
                 continue
@@ -374,6 +397,7 @@ def reporter_taches(ids, cible="+1d"):
             if t['recurrence']:
                 print(f"    {couleurs.CLR_DIM}↻ Tâche récurrente : les prochaines occurrences partiront de cette échéance.{couleurs.CLR_RESET}")
             nb_ok += 1
+            journal.noter(ids=[key], titres=[t['titre']], modifie=True)
 
     # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base
     if nb_ok:
@@ -400,5 +424,6 @@ def nettoyer_terminees():
             return
         for k in cles:
             del db[k]
+        journal.noter(count=len(cles), modifie=True)
         print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} Nettoyage réussi ({len(cles)} supprimée(s)).")
     sauvegarder_base()

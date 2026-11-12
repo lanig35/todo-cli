@@ -1,7 +1,7 @@
 """Commande `config` : consulter les réglages effectifs et créer un fichier de configuration modèle."""
 import json
 import os
-from . import couleurs
+from . import couleurs, journal
 from .config import REMIND_OFF
 from .reglages import REGLAGES, chemin_config, modele_fichier, nom_variable, obtenir_avec_origine
 
@@ -60,6 +60,7 @@ def initialiser_config(forcer=False):
     """Crée un fichier de configuration modèle (toutes les valeurs en commentaire). Retourne True si créé."""
     chemin = chemin_config()
     if os.path.exists(chemin) and not forcer:
+        journal.echec("config_exists")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} {chemin} existe déjà. "
               f"Utilisez {couleurs.CLR_BOLD}--force{couleurs.CLR_RESET} pour le remplacer.")
         return False
@@ -68,8 +69,10 @@ def initialiser_config(forcer=False):
         with open(chemin, "w", encoding="utf-8") as f:
             f.write(modele_fichier())
     except OSError as e:
+        journal.echec("config_write_error", detail=e.strerror or str(e))
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} impossible d'écrire {chemin} : {e.strerror or e}.")
         return False
+    journal.noter(modifie=True, file=chemin)
     print(f" 📝 Fichier de configuration créé : {couleurs.CLR_BOLD}{chemin}{couleurs.CLR_RESET}")
     print(f"    {couleurs.CLR_DIM}Toutes les valeurs y sont en commentaire : décommentez celles à changer.{couleurs.CLR_RESET}")
     return True

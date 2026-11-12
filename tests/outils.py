@@ -88,8 +88,10 @@ class Todo:
         for nom in ("NO_COLOR", "PAGER", "LESS", "COLUMNS", "LINES", "XDG_CONFIG_HOME"):
             env.pop(nom, None)
         self.fichier_config = self.dossier / "config.ini"     # jamais le vrai ~/.config/todo/config.ini
-        env.update(TODO_DB_DIR=str(self.db_dir), TODO_CONFIG=str(self.fichier_config),
-                   PYTHONDONTWRITEBYTECODE="1", TERM="xterm")
+        self.fichier_log = self.dossier / "todo.log"
+        # Journal coupé par défaut : jamais de message dans le vrai journald ni dans ~/.local/state
+        env.update(TODO_DB_DIR=str(self.db_dir), TODO_CONFIG=str(self.fichier_config), TODO_LOG_TARGET="off",
+                   TODO_LOG_FILE=str(self.fichier_log), PYTHONDONTWRITEBYTECODE="1", TERM="xterm")
         self.env = env
 
     def _env(self, supplementaire):
@@ -133,6 +135,14 @@ class Todo:
         if stderr_vers:
             err.close()
         return ResultatPty(code, sortie.decode("utf-8", "replace"))
+
+    def journal(self):
+        """Lignes du fichier de log (cible `file`), sans l'horodatage ni le pid : 'INFO add ids=…'."""
+        if not self.fichier_log.exists():
+            return []
+        import re as _re
+        return [_re.sub(r"^\S+ \S+ (\w+) todo\[\d+\]: ", r"\1 ", l)
+                for l in self.fichier_log.read_text(encoding="utf-8").splitlines()]
 
     def config(self, texte):
         """Écrit le fichier de configuration de cette instance (TODO_CONFIG)."""

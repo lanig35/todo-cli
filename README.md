@@ -13,6 +13,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
+- Journal des actions et des erreurs, lisible avec `journalctl -t todo`
 - Configuration par fichier INI, variables d'environnement et options (`todo config`)
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
@@ -445,6 +446,11 @@ soon = 0
 | `remind` | `enabled` | `true` | `TODO_REMIND_ENABLED` | — (voir ci-dessous) |
 | `remind` | `limit` | `5` | `TODO_REMIND_LIMIT` | `--limit` |
 | `remind` | `soon` | `0` | `TODO_REMIND_SOON` | `--soon` |
+| `log` | `level` | `info` | `TODO_LOG_LEVEL` | `--log-level` |
+| `log` | `target` | `auto` | `TODO_LOG_TARGET` | — |
+| `log` | `file` | `~/.local/state/todo/todo.log` | `TODO_LOG_FILE` | — |
+| `log` | `socket` | `/dev/log` | `TODO_LOG_SOCKET` | — |
+| `log` | `titles` | `false` | `TODO_LOG_TITLES` | — |
 
 - Booléens : `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0` (majuscules acceptées). Dans le fichier,
   les commentaires commencent par `#` ou `;`, y compris en fin de ligne ; sections et clés ne
@@ -461,6 +467,68 @@ soon = 0
   couper, sauf que `TODO_REMIND_ENABLED=true` l'emporte sur `enabled = false` du fichier.
 - `db_dir` et `keep_backups` sont lus au démarrage : il n'y a pas d'option de ligne de commande
   équivalente, mais `TODO_DB_DIR=/autre/dossier todo list` fonctionne pour un usage ponctuel.
+
+### Journal
+
+Les actions et les erreurs sont tracées dans le journal système, **en plus** des messages affichés
+dans le terminal :
+
+```bash
+journalctl -t todo                     # tout ce que todo a écrit
+journalctl -t todo -p warning          # refus et erreurs seulement
+journalctl -t todo --since today -o cat
+journalctl TODO_COMMAND=done           # avec python3-systemd (champs structurés, voir plus bas)
+```
+
+Exemple de messages :
+
+```
+INFO    add ids=265a96c5 exit=0
+INFO    done ids=265a96c5,de6b5818 total=3 failed=1 exit=1   (WARNING si la commande échoue en partie)
+WARNING done refus reason=unknown_id prefix=zzzz
+INFO    edit ids=265a96c5 fields=titre,priorité exit=0
+WARNING add refus reason=invalid_date
+INFO    restore backup=20261112_201500_123456 exit=0
+```
+
+- **Actions tracées (INFO)** : `add`, `edit`, `done`, `undone`, `remove`, `postpone`, `archive`,
+  `unarchive`, `clear-done`, `restore`, `undo`, `reset`, `seed`, `config init` et
+  `remind --enable` / `--disable`. Une ligne par commande, avec les identifiants concernés (20 au plus,
+  puis `count=N`) ; pour `edit`, les **champs** modifiés mais pas leurs valeurs.
+- **Erreurs (WARNING)** : un message `refus reason=…` à chaque erreur affichée (identifiant inconnu ou
+  ambigu, date invalide, entrée illisible, erreur d'usage de la ligne de commande…), les avertissements
+  de configuration, et `sortie exit=N` quand une commande échoue sans message plus précis.
+- **Exceptions (CRITICAL)** : une erreur inattendue est journalisée avec sa trace complète, qui reste
+  aussi affichée sur `stderr`.
+- **Lectures** (`list`, `show`, `stats`, `agenda`, `next`, `remind`…) : rien au niveau `info`, pour ne
+  pas encombrer le journal (`remind` s'exécute à chaque ouverture de terminal). Le niveau `debug` les
+  ajoute : `todo --log-level debug list`.
+- **Discrétion** : le journal système est lisible par les administrateurs de la machine, donc **aucun
+  titre, description ni tag** n'y figure par défaut, seulement des identifiants. `[log] titles = true`
+  (ou `TODO_LOG_TITLES=1`) ajoute les titres.
+
+**Niveaux** : `off`, `error`, `warning`, `info` (défaut) et `debug`.
+
+**Destinations** (`[log] target`) :
+
+| Valeur | Effet |
+|---|---|
+| `auto` (défaut) | journald s'il est joignable, sinon le fichier de log |
+| `journal` | journald uniquement ; s'il est introuvable, un avertissement est affiché et le fichier prend le relais |
+| `file` | fichier tournant `~/.local/state/todo/todo.log` (512 Ko, 3 anciennes versions) |
+| `off` | aucun journal |
+
+- Sans module supplémentaire, les messages passent par le socket syslog `/dev/log`, que journald écoute :
+  ils sont identifiés par `todo` (`journalctl -t todo`) et leur gravité est reconnue par `-p`.
+- Si le paquet Debian **`python3-systemd`** est installé (`sudo apt install python3-systemd`), todo
+  l'utilise automatiquement et ajoute des champs structurés filtrables : `TODO_COMMAND`, `TODO_EVENT`,
+  `TODO_IDS`, `TODO_REASON`, `TODO_EXIT`… (par exemple `journalctl TODO_COMMAND=remove TODO_IDS=a1b2c3d4`).
+- Le journal **ne bloque jamais** une commande : s'il est injoignable ou si le fichier de log n'est pas
+  inscriptible, la commande se déroule normalement, sans message d'erreur.
+- Pour lire ses propres messages sans `sudo`, il faut soit un journal persistant (`/var/log/journal`
+  existe, ce qui est le cas sur une Debian standard : `journalctl --user -t todo`), soit appartenir au
+  groupe `systemd-journal` ou `adm`.
+- `[log] socket` indique un autre socket syslog si `/dev/log` n'est pas le bon.
 
 ### Sauvegardes et restauration
 
@@ -487,6 +555,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `archive.py` | archivage, consultation de l'archive, récupération |
+| `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
 | `configuration.py` | commande `config` (show, path, init) |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
@@ -520,6 +589,7 @@ python -m pytest
 | Élément | Emplacement |
 |---|---|
 | Base | `~/.local/share/todo/todo_db*` |
+| Journal (cible `file`) | `~/.local/state/todo/todo.log` |
 | État du rappel | `~/.local/share/todo/remind_off`, `remind_last`, `remind_status` |
 | Archive | `~/.local/share/todo/todo_archive*` |
 | Sauvegardes | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` (base et archive) |

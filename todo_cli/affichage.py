@@ -9,7 +9,7 @@ import sys
 from collections import Counter
 from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
-from . import couleurs
+from . import couleurs, journal
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date
 from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
@@ -27,6 +27,7 @@ def afficher_tache(id_recherche):
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
+            journal.echec("corrupted_entry")
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être affichée.")
             return
         id_complet = key.decode('utf-8', errors='replace')
