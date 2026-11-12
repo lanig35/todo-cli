@@ -13,6 +13,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
+- `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
@@ -214,6 +215,75 @@ Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`
   est déjà terminée).
 - `remove` n'arrête pas la série : utilisez `edit --repeat none`.
 
+### Rappel des tâches en retard
+
+```bash
+todo remind                 # retards et tâches du jour ; rien d'affiché s'il n'y en a pas
+todo remind --soon 3        # + les échéances des 3 prochains jours
+todo remind --limit 10      # 10 tâches listées au plus (5 par défaut)
+todo remind --once-a-day    # une seule fois par jour
+todo remind --write-status  # n'affiche rien ; met à jour un résumé d'une ligne (pour cron)
+todo remind --disable       # coupe les rappels ; --enable les réactive ; --status indique l'état
+```
+
+`remind` est **silencieuse quand il n'y a rien à signaler** et ne modifie jamais les tâches (ni
+sauvegarde). Les tâches sont classées comme dans `next` : retards d'abord (priorité haute, puis les
+plus anciens), puis tâches du jour. L'en-tête compte tout, même au-delà de `--limit`.
+
+`--once-a-day` n'affiche le rappel qu'une fois par jour : le premier terminal ouvert après qu'il y a
+quelque chose à signaler. S'il n'y a rien, la journée n'est pas « consommée » : un retard qui
+apparaît plus tard dans la journée sera affiché au terminal suivant.
+
+#### À l'ouverture du terminal
+
+Ajoutez à `~/.bashrc`, en gardant le test d'interactivité pour ne rien afficher dans `scp`, `rsync`
+ou les scripts :
+
+```bash
+if [[ $- == *i* ]] && command -v todo >/dev/null; then
+    todo remind --once-a-day
+fi
+```
+
+#### Avec cron
+
+Un job `cron` n'a pas de terminal : sa sortie part par e-mail local, ou est perdue si aucun serveur de
+messagerie n'est installé (cas d'une Debian de base). Deux usages :
+
+```cron
+# crontab -e
+# 1. Mise à jour du résumé d'une ligne toutes les 15 minutes (aucune sortie, donc aucun e-mail)
+*/15 * * * *  /home/vous/bin/todo remind --write-status
+
+# 2. Rappel complet par e-mail local, en semaine à 9 h (nécessite un serveur de messagerie local)
+0 9 * * 1-5   /home/vous/bin/todo remind
+```
+
+Utilisez le chemin complet de `todo`, `cron` n'ayant pas votre `PATH`. Si vous avez redirigé le stockage
+avec `TODO_DB_DIR`, définissez-la aussi dans la crontab.
+
+`--write-status` écrit un résumé d'une ligne, sans couleur (`⚠ 2 en retard · 1 aujourd'hui `), dans
+`~/.local/share/todo/remind_status` ; le fichier est vide quand il n'y a rien. Pour l'afficher dans
+l'invite du shell sans lancer Python à chaque commande :
+
+```bash
+# ~/.bashrc
+PS1='$(cat ~/.local/share/todo/remind_status 2>/dev/null)\u@\h:\w\$ '
+```
+
+#### Désactiver les rappels
+
+- `todo remind --disable` coupe les rappels de façon durable : `remind`, `--once-a-day` et
+  `--write-status` deviennent muets, et le résumé de l'invite est vidé tout de suite. Les lignes de
+  `~/.bashrc` et de la crontab peuvent rester en place. `todo remind --enable` les remet en route ;
+  `--status` indique l'état.
+- La variable d'environnement `TODO_NO_REMIND` (non vide) coupe les rappels dans une session
+  seulement, par exemple `TODO_NO_REMIND=1 bash`.
+- Le reste du programme n'est pas concerné : `list`, `next`, `agenda`… fonctionnent normalement.
+
+Les fichiers d'état (`remind_off`, `remind_last`, `remind_status`) sont dans le dossier de stockage,
+hors de la base : ils ne sont ni sauvegardés ni modifiés par `restore` ou `reset`.
+
 ### La prochaine tâche
 
 ```bash
@@ -348,6 +418,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
+| `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
@@ -377,6 +448,7 @@ python -m pytest
 | Élément | Emplacement |
 |---|---|
 | Base | `~/.local/share/todo/todo_db*` |
+| État du rappel | `~/.local/share/todo/remind_off`, `remind_last`, `remind_status` |
 | Archive | `~/.local/share/todo/todo_archive*` |
 | Sauvegardes | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` (base et archive) |
 

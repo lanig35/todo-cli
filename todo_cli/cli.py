@@ -9,6 +9,7 @@ from . import couleurs
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
+from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
 from .taches import ajouter_tache, marquer_terminee, modifier_tache, nettoyer_terminees, reporter_taches, rouvrir_tache, supprimer_tache
@@ -137,6 +138,18 @@ def main():
     parser_next.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
     parser_next.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne considérer que cette priorité')
     parser_next.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
+    parser_remind = subparsers.add_parser('remind', help="Rappeler les tâches en retard (silencieux s'il n'y en a pas)")
+    parser_remind.add_argument('--limit', type=_entier_positif, default=5, metavar='N', help='Nombre maximal de tâches listées (défaut : 5)')
+    parser_remind.add_argument('--soon', type=_entier_positif, default=0, metavar='N',
+                               help="Signale aussi les échéances des N prochains jours (défaut : retards et aujourd'hui seulement)")
+    parser_remind.add_argument('--once-a-day', action='store_true',
+                               help="N'affiche le rappel qu'une fois par jour (le premier terminal de la journée)")
+    action = parser_remind.add_mutually_exclusive_group()
+    action.add_argument('--write-status', action='store_true',
+                        help="N'affiche rien : met à jour le résumé d'une ligne lu par l'invite du shell (pour cron)")
+    action.add_argument('--disable', action='store_true', help='Désactive les rappels (remind et --write-status deviennent muets)')
+    action.add_argument('--enable', action='store_true', help='Réactive les rappels')
+    action.add_argument('--status', action='store_true', help='Indique si les rappels sont activés')
     parser_archive = subparsers.add_parser('archive', help='Archiver les tâches terminées (ou consulter l\'archive)')
     parser_archive.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
     parser_archive.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
@@ -235,6 +248,18 @@ def main():
         succes = annuler_derniere_action()
     elif args.commande == 'next':
         afficher_prochaines(args.count, args.tag, args.prio, args.format)
+    elif args.commande == 'remind':
+        if args.disable:
+            desactiver_rappels()
+        elif args.enable:
+            activer_rappels()
+        elif args.status:
+            afficher_etat_rappels()
+        elif args.once_a_day and args.write_status:
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --once-a-day ne s'utilise pas avec --write-status.")
+            sys.exit(1)
+        else:
+            rappeler(args.limit, args.soon, args.once_a_day, args.write_status)
     elif args.commande == 'archive':
         if args.lister or args.search is not None:
             if args.ids or args.anciennete:
