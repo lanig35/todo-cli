@@ -287,6 +287,26 @@ PS1='$(cat ~/.local/share/todo/remind_status 2>/dev/null)\u@\h:\w\$ '
 Les fichiers d'état (`remind_off`, `remind_last`, `remind_status`) sont dans le dossier de stockage,
 hors de la base : ils ne sont ni sauvegardés ni modifiés par `restore` ou `reset`.
 
+#### Sortie JSON (jq)
+
+`todo remind --format json` émet **toujours** un document JSON, même quand il n'y a rien à signaler
+(le mode texte, lui, reste muet) : un script peut donc l'analyser sans cas particulier. Le nombre de
+tâches n'est pas limité (`--limit` ne s'applique qu'au texte) ; `--soon N` fonctionne comme en texte.
+
+```bash
+todo remind --format json | jq '.compteurs.retards'
+todo remind --format json --soon 3 | jq -r '.retards[] | "\(.jours_restants)j \(.titre)"'
+```
+
+Le document contient `date`, `actif`, `desactive_par` (la liste des interrupteurs qui coupent les
+rappels), `bientot_jours`, `compteurs` et trois listes `retards`, `aujourdhui`, `a_venir`. Chaque
+tâche a les champs de `list --format json` plus `jours_restants` (négatif = en retard). Si les rappels
+sont désactivés, les listes sont vides et `desactive_par` en donne la raison.
+
+Avec `--enable`, `--disable` ou `--status`, `--format json` décrit l'état des rappels :
+`{"actif": …, "desactive_par": […], "dernier_rappel": …}`. Il ne se combine pas avec `--once-a-day`
+ni `--write-status` (erreur, code 1).
+
 ### La prochaine tâche
 
 ```bash
@@ -465,6 +485,10 @@ soon = 0
 - **Rappels** : `enabled = false` (ou `TODO_REMIND_ENABLED=false`) coupe les rappels, comme
   `todo remind --disable` et `TODO_NO_REMIND`. Les interrupteurs se **cumulent** : un seul suffit pour
   couper, sauf que `TODO_REMIND_ENABLED=true` l'emporte sur `enabled = false` du fichier.
+- **Sortie JSON** : `todo config --format json` fonctionne pour `show` (réglages et origines),
+  `path` (`{"fichier", "existe"}`) et `init` (`{"fichier", "cree", "ecrase"}` ; en cas d'échec, le
+  document ajoute `erreur` — `existe_deja` ou `ecriture_impossible` — et `detail`, avec le code 1).
+  Par exemple : `todo config --format json | jq -r '.reglages[] | select(.origine != "défaut") | .cle'`.
 - `db_dir` et `keep_backups` sont lus au démarrage : il n'y a pas d'option de ligne de commande
   équivalente, mais `TODO_DB_DIR=/autre/dossier todo list` fonctionne pour un usage ponctuel.
 
