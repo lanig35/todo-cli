@@ -6,6 +6,7 @@ crontab. Trois fichiers d'état vivent dans le dossier de stockage, hors de la b
   remind_last    date du dernier rappel affiché (`--once-a-day`)
   remind_status  résumé d'une ligne, mis à jour par `--write-status`, à lire depuis l'invite du shell
 """
+import json
 import os
 from datetime import datetime
 from . import couleurs, reglages, journal
@@ -51,24 +52,49 @@ def _supprimer(chemin):
         pass
 
 
-def desactiver_rappels():
+def etat_rappels():
+    """État des rappels : actif ou non, ce qui les coupe, et date du dernier rappel `--once-a-day`.
+
+    Plusieurs interrupteurs peuvent être actifs en même temps : `desactive_par` les liste tous
+    (« commande remind --disable », « variable TODO_NO_REMIND », « fichier »…).
+    """
+    raisons = []
+    if os.path.exists(REMIND_OFF):
+        raisons.append("commande remind --disable")
+    valeur, origine = reglages.obtenir_avec_origine("remind", "enabled")
+    if not valeur:
+        raisons.append(origine)
+    return {"actif": not raisons, "desactive_par": raisons, "dernier_rappel": _lire(REMIND_LAST) or None}
+
+
+def _afficher_json(document):
+    print(json.dumps(document, indent=2, ensure_ascii=False))
+
+
+def desactiver_rappels(fmt="table"):
     _ecrire(REMIND_OFF, "")
     journal.noter(modifie=True, state="disabled")
     _ecrire(REMIND_STATUS, "")  # le résumé affiché dans l'invite disparaît tout de suite
+    if fmt == "json":
+        return _afficher_json(etat_rappels())
     print(f" 🔕 Rappels désactivés. Pour les réactiver : {couleurs.CLR_BOLD}todo remind --enable{couleurs.CLR_RESET}")
 
 
-def activer_rappels():
+def activer_rappels(fmt="table"):
     _supprimer(REMIND_OFF)
     journal.noter(modifie=True, state="enabled")
     _supprimer(REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
+    if fmt == "json":
+        return _afficher_json(etat_rappels())
     print(f" 🔔 Rappels activés.")
     if not reglages.obtenir("remind", "enabled"):
         _, origine = reglages.obtenir_avec_origine("remind", "enabled")
         print(f"    {couleurs.CLR_DIM}Attention : ils restent coupés ici par le réglage [remind] enabled ({origine}).{couleurs.CLR_RESET}")
 
 
-def afficher_etat_rappels():
+def afficher_etat_rappels(fmt="table"):
+    if fmt == "json":
+        return _afficher_json(etat_rappels())
     if os.path.exists(REMIND_OFF):
         print(f" 🔕 Rappels désactivés (todo remind --enable pour les réactiver).")
     elif not reglages.obtenir("remind", "enabled"):
@@ -153,8 +179,38 @@ def texte_rappel(retards, du_jour, a_venir, aujourdhui, limite):
 
 
 # --------------------------------------------------------------------------- commande
-def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False):
+def _taches_json(taches, aujourdhui):
+    """Les tâches telles que `list --format json` les décrit, plus `jours_restants` (négatif = en retard)."""
+    return [{**t, "jours_restants": _jours_restants(t, aujourdhui)} for t in taches]
+
+
+def rappel_json(bientot=0):
+    """Document JSON du rappel : toujours émis (même vide), sans limite de nombre de tâches.
+
+    Contrairement au texte, qui reste muet quand il n'y a rien à signaler, un consommateur de JSON
+    (jq, script) a besoin d'un document valide à chaque appel. Si les rappels sont désactivés, les
+    listes sont vides et `desactive_par` en donne la raison.
+    """
+    aujourdhui = datetime.now().date()
+    etat = etat_rappels()
+    retards, du_jour, a_venir = construire_rappel(_lire_taches(), aujourdhui, bientot) if etat["actif"] else ([], [], [])
+    return {
+        "date": aujourdhui.isoformat(),
+        "actif": etat["actif"],
+        "desactive_par": etat["desactive_par"],
+        "bientot_jours": bientot,
+        "compteurs": {"retards": len(retards), "aujourdhui": len(du_jour), "a_venir": len(a_venir),
+                      "total": len(retards) + len(du_jour) + len(a_venir)},
+        "retards": _taches_json(retards, aujourdhui),
+        "aujourdhui": _taches_json(du_jour, aujourdhui),
+        "a_venir": _taches_json(a_venir, aujourdhui),
+    }
+
+
+def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False, fmt="table"):
     """Affiche le rappel (ou, avec `ecrire_statut`, met à jour le résumé d'une ligne sans rien afficher)."""
+    if fmt == "json":
+        return _afficher_json(rappel_json(bientot))
     if not rappels_actifs():
         if ecrire_statut:
             _ecrire(REMIND_STATUS, "")

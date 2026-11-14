@@ -51,16 +51,35 @@ def afficher_config(fmt="table"):
     print(f"\n  {couleurs.CLR_DIM}Priorité : option > variable d'environnement > fichier > défaut.{couleurs.CLR_RESET}\n")
 
 
-def afficher_chemin():
+def afficher_chemin(fmt="table"):
     """Écrit le chemin du fichier de configuration (seul, pour pouvoir s'en servir dans un script)."""
-    print(chemin_config())
-
-
-def initialiser_config(forcer=False):
-    """Crée un fichier de configuration modèle (toutes les valeurs en commentaire). Retourne True si créé."""
     chemin = chemin_config()
-    if os.path.exists(chemin) and not forcer:
+    if fmt == "json":
+        print(json.dumps({"fichier": chemin, "existe": os.path.isfile(chemin)}, indent=2, ensure_ascii=False))
+    else:
+        print(chemin)
+
+
+def _json_init(chemin, cree, erreur=None, detail=None, ecrase=False):
+    document = {"fichier": chemin, "cree": cree, "ecrase": ecrase}
+    if erreur:
+        document["erreur"], document["detail"] = erreur, detail
+    print(json.dumps(document, indent=2, ensure_ascii=False))
+
+
+def initialiser_config(forcer=False, fmt="table"):
+    """Crée un fichier de configuration modèle (toutes les valeurs en commentaire). Retourne True si créé.
+
+    En JSON, le résultat (créé ou non, et la raison d'un échec) est un document, pour qu'un script
+    n'ait jamais à analyser un message destiné à un humain.
+    """
+    chemin = chemin_config()
+    existait = os.path.exists(chemin)
+    if existait and not forcer:
         journal.echec("config_exists")
+        if fmt == "json":
+            _json_init(chemin, False, "existe_deja", "utilisez --force pour le remplacer")
+            return False
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} {chemin} existe déjà. "
               f"Utilisez {couleurs.CLR_BOLD}--force{couleurs.CLR_RESET} pour le remplacer.")
         return False
@@ -70,9 +89,15 @@ def initialiser_config(forcer=False):
             f.write(modele_fichier())
     except OSError as e:
         journal.echec("config_write_error", detail=e.strerror or str(e))
+        if fmt == "json":
+            _json_init(chemin, False, "ecriture_impossible", e.strerror or str(e))
+            return False
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} impossible d'écrire {chemin} : {e.strerror or e}.")
         return False
     journal.noter(modifie=True, file=chemin)
+    if fmt == "json":
+        _json_init(chemin, True, ecrase=existait)
+        return True
     print(f" 📝 Fichier de configuration créé : {couleurs.CLR_BOLD}{chemin}{couleurs.CLR_RESET}")
     print(f"    {couleurs.CLR_DIM}Toutes les valeurs y sont en commentaire : décommentez celles à changer.{couleurs.CLR_RESET}")
     return True

@@ -167,6 +167,9 @@ def main():
     action.add_argument('--disable', action='store_true', help='Désactive les rappels (remind et --write-status deviennent muets)')
     action.add_argument('--enable', action='store_true', help='Réactive les rappels')
     action.add_argument('--status', action='store_true', help='Indique si les rappels sont activés')
+    parser_remind.add_argument('--format', choices=['table', 'json'], default='table',
+                               help="Format de sortie : json émet toujours un document (même sans rien à signaler), "
+                                    "sans limite de tâches ; avec --enable, --disable ou --status, il décrit l'état des rappels")
     parser_archive = subparsers.add_parser('archive', help='Archiver les tâches terminées (ou consulter l\'archive)')
     parser_archive.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
     parser_archive.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
@@ -183,7 +186,7 @@ def main():
                                help="show : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
                                     "init : crée un fichier modèle commenté")
     parser_config.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
-    parser_config.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie de show')
+    parser_config.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie (json : compatible jq, pour show, path et init)')
     parser_stats = subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
     parser_stats.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
     subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
@@ -282,18 +285,23 @@ def main():
         afficher_prochaines(reglages.obtenir('next', 'count', args.count), args.tag, args.prio, args.format)
     elif args.commande == 'remind':
         if args.disable:
-            desactiver_rappels()
+            desactiver_rappels(args.format)
         elif args.enable:
-            activer_rappels()
+            activer_rappels(args.format)
         elif args.status:
-            afficher_etat_rappels()
+            afficher_etat_rappels(args.format)
         elif args.once_a_day and args.write_status:
             journal.echec("invalid_combination")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --once-a-day ne s'utilise pas avec --write-status.")
             sys.exit(1)
+        elif args.format == 'json' and (args.once_a_day or args.write_status):
+            journal.echec("invalid_combination")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --format json ne se combine pas avec --once-a-day ni --write-status "
+                  f"(le JSON est émis à chaque appel).")
+            sys.exit(1)
         else:
             rappeler(reglages.obtenir('remind', 'limit', args.limit), reglages.obtenir('remind', 'soon', args.soon),
-                     args.once_a_day, args.write_status)
+                     args.once_a_day, args.write_status, args.format)
     elif args.commande == 'archive':
         if args.lister or args.search is not None:
             if args.ids or args.anciennete:
@@ -319,9 +327,9 @@ def main():
         succes = desarchiver_taches(args.ids)
     elif args.commande == 'config':
         if args.action == 'path':
-            afficher_chemin()
+            afficher_chemin(args.format)
         elif args.action == 'init':
-            succes = initialiser_config(args.force)
+            succes = initialiser_config(args.force, args.format)
         else:
             afficher_config(args.format)
     elif args.commande == 'stats':
