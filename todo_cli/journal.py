@@ -183,6 +183,15 @@ def noter(ids=None, titres=None, modifie=False, **champs):
     _etat["champs"].update({k: v for k, v in champs.items() if v is not None})
 
 
+def titres_actifs():
+    return _etat["titres_actifs"]
+
+
+def activer_titres():
+    """Fait figurer les titres dans le message de synthèse de cette commande (ex. `remove -m`)."""
+    _etat["titres_actifs"] = True
+
+
 def echec(raison, **champs):
     """Refus ou erreur d'utilisation (WARNING), au moment où le message d'erreur est affiché."""
     _etat["echecs"] += 1

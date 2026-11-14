@@ -13,6 +13,7 @@ from .prochaine import afficher_prochaines
 from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
+from .notes import commande_note
 from .taches import ajouter_tache, marquer_terminee, modifier_tache, nettoyer_terminees, reporter_taches, rouvrir_tache, supprimer_tache
 
 
@@ -113,12 +114,19 @@ def main():
     parser_edit.add_argument('--due', type=str, default=None,
                              help="Nouvelle échéance : AAAA-MM-JJ, demain, +3d, lundi... ('none' pour la supprimer)")
     parser_edit.add_argument('--tags', type=str, default=None, help="Nouveaux tags, remplace les anciens (chaîne vide pour tout effacer)")
+    parser_edit.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
     parser_edit.add_argument('--repeat', type=str, default=None,
                              help="Nouvelle répétition : daily, weekly, monthly, yearly, 3d/2w/1m/1y ('none' pour la supprimer)")
 
     # Commandes 'show' et 'undone'
     subparsers.add_parser('show', help="Afficher le détail complet d'une tâche").add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    subparsers.add_parser('undone', help='Rouvrir une tâche terminée').add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    parser_undone = subparsers.add_parser('undone', help='Rouvrir une tâche terminée')
+    parser_undone.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    parser_undone.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
+    parser_note = subparsers.add_parser('note', help="Ajouter une note à une tâche, ou lister ses notes")
+    parser_note.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    parser_note.add_argument('texte', nargs='*', help="Texte de la note (500 caractères au plus) ; sans texte : liste les notes de la tâche")
+    parser_note.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
 
     # Commande 'restore'
     parser_restore = subparsers.add_parser('restore', help='Lister les sauvegardes ou restaurer l\'une d\'elles')
@@ -127,12 +135,16 @@ def main():
     parser_restore.add_argument('-y', '--yes', action='store_true', help='Ne pas demander de confirmation')
 
     # Commandes utilitaires
-    subparsers.add_parser('done', help='Clôturer une ou plusieurs tâches').add_argument(
-        'ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
-    subparsers.add_parser('remove', help='Supprimer une ou plusieurs tâches de la base').add_argument(
-        'ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    parser_done = subparsers.add_parser('done', help='Clôturer une ou plusieurs tâches')
+    parser_done.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    parser_done.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche clôturée")
+    parser_remove = subparsers.add_parser('remove', help='Supprimer une ou plusieurs tâches de la base')
+    parser_remove.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    parser_remove.add_argument('-m', '--note', type=str, default=None,
+                               help="Motif de la suppression : la tâche disparaît, il est écrit au journal (avec le titre)")
     parser_postpone = subparsers.add_parser('postpone', help="Reporter l'échéance d'une ou plusieurs tâches")
     parser_postpone.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    parser_postpone.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche reportée")
     parser_postpone.add_argument('--to', type=str, default='+1d', metavar='DATE',
                                  help="Nouvelle échéance (défaut : +1d). +2d / +1w / +1m / +1y : décalage depuis l'échéance actuelle, "
                                       "ou depuis aujourd'hui si elle est dépassée ou absente ; ou date fixe : AAAA-MM-JJ, demain, lundi...")
@@ -254,17 +266,19 @@ def main():
     elif args.commande == 'show':
         afficher_tache(args.id)
     elif args.commande == 'undone':
-        rouvrir_tache(args.id)
+        rouvrir_tache(args.id, args.note)
     elif args.commande == 'edit':
-        modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat)
+        modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note)
+    elif args.commande == 'note':
+        succes = commande_note(args.id, args.texte, args.format)
     elif args.commande == 'restore':
         restaurer_base(args.backup, confirmer=not args.yes)
     elif args.commande == 'done':
-        succes = marquer_terminee(args.ids)
+        succes = marquer_terminee(args.ids, args.note)
     elif args.commande == 'remove':
-        succes = supprimer_tache(args.ids)
+        succes = supprimer_tache(args.ids, args.note)
     elif args.commande == 'postpone':
-        succes = reporter_taches(args.ids, args.to)
+        succes = reporter_taches(args.ids, args.to, args.note)
     elif args.commande == 'clear-done':
         nettoyer_terminees()
     elif args.commande == 'seed':
