@@ -16,6 +16,14 @@ def _archive_existe():
     """Vrai si au moins un fichier de la base d'archive est présent sur le disque."""
     return bool(glob.glob(f"{ARCHIVE_NAME}*"))
 
+def _normaliser_notes(brutes):
+    """Liste de notes valides ({date, texte, action}) ; ce qui n'est pas une note exploitable est ignoré."""
+    notes = []
+    for n in brutes if isinstance(brutes, list) else []:
+        if isinstance(n, dict) and n.get('texte'):
+            notes.append({"date": str(n.get('date') or ""), "texte": str(n['texte']), "action": str(n.get('action') or "note")})
+    return notes
+
 def _normaliser_tache(brut):
     """Décode une entrée DBM et complète les champs manquants (compatibilité ascendante).
 
@@ -35,6 +43,7 @@ def _normaliser_tache(brut):
     # Récurrence : valeur invalide ou absente => tâche non récurrente
     t['recurrence'] = _parser_recurrence(str(t['recurrence'])) if t.get('recurrence') else None
     t['suivante'] = t.get('suivante') or None  # id de l'occurrence créée à la complétion
+    t['notes'] = _normaliser_notes(t.get('notes'))  # journal daté de la tâche (absent des anciennes tâches)
     return t
 
 def _charger_taches(db):

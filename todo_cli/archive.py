@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime
 from . import couleurs, journal
-from .affichage import _afficher_texte
+from .affichage import _afficher_texte, _texte_recherche
 from .config import ARCHIVE_NAME, DB_NAME, STATUT_TERMINE
 from .dates import _decaler, _parse_date
 from .sauvegardes import sauvegarder_base
@@ -150,7 +150,7 @@ def lister_archive(recherche=None, fmt="table", pager=True):
     taches = _lire_archive_triee()
     if recherche:
         motif = recherche.lower()
-        taches = [t for t in taches if motif in (t['titre'] + " " + t['description'] + " " + " ".join(t['tags'])).lower()]
+        taches = [t for t in taches if motif in _texte_recherche(t)]
 
     if fmt == "json":
         print(json.dumps(taches, indent=2, ensure_ascii=False))

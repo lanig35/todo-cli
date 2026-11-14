@@ -8,6 +8,7 @@ from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs, journal
 from .dates import MSG_FORMATS_DATE, MSG_FORMATS_REPETITION, _decaler, _libelle_recurrence, _parse_date, _parser_recurrence, _prochaine_echeance, _resoudre_date, _sans_accents
+from . import notes as carnet
 from .sauvegardes import sauvegarder_base
 from .stockage import _afficher_bilan_lot, _base_existe, _normaliser_tache, _resoudre_id, _resoudre_ids
 
@@ -104,12 +105,14 @@ def _creer_occurrence_suivante(db, t):
     t['suivante'] = id_nouvelle
     return id_nouvelle, nouvelle['date_echeance']
 
-def marquer_terminee(ids):
+def marquer_terminee(ids, note=None):
     """Bascule le statut d'une ou plusieurs tâches vers 'TERMINE' via préfixes d'ID (uniques).
 
     Si une tâche est récurrente, l'occurrence suivante est créée dans la foulée.
+    `note` (optionnel) est ajoutée à chaque tâche effectivement terminée.
     Retourne True si aucun identifiant n'a posé problème (introuvable, ambigu, entrée corrompue).
     """
+    note = carnet.valider_note(note) if note is not None else None
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à valider.{couleurs.CLR_RESET}")
         return False
@@ -131,8 +134,12 @@ def marquer_terminee(ids):
             t['statut'] = STATUT_TERMINE
             t['date_terminee'] = datetime.now().strftime("%Y-%m-%d %H:%M")
             occurrence = _creer_occurrence_suivante(db, t) if t['recurrence'] else None
+            if note:
+                carnet.ajouter_a(t, note, "done")  # la note reste sur l'occurrence terminée, pas sur la suivante
             db[key] = json.dumps(t)
             print(f" {couleurs.CLR_DONE}🎉{couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' validée !")
+            if note:
+                carnet.confirmer_ajout()
             if occurrence:
                 print(f"    {couleurs.CLR_CYAN}↻ Prochaine occurrence : {occurrence[1]}{couleurs.CLR_RESET} {couleurs.CLR_DIM}(id: {occurrence[0][:8]}){couleurs.CLR_RESET}")
             elif t['recurrence']:
@@ -146,8 +153,9 @@ def marquer_terminee(ids):
     _afficher_bilan_lot(len(ids), nb_ok, "validée(s)", echecs)
     return echecs == 0
 
-def rouvrir_tache(id_recherche):
-    """Repasse une tâche terminée au statut 'A FAIRE' via préfixe d'ID (unique)."""
+def rouvrir_tache(id_recherche, note=None):
+    """Repasse une tâche terminée au statut 'A FAIRE' via préfixe d'ID (unique). `note` est ajoutée à la tâche."""
+    note = carnet.valider_note(note) if note is not None else None
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à rouvrir.{couleurs.CLR_RESET}")
         return
@@ -187,8 +195,12 @@ def rouvrir_tache(id_recherche):
 
         t['statut'] = STATUT_A_FAIRE
         t['date_terminee'] = None  # une tâche rouverte n'est plus terminée
+        if note:
+            carnet.ajouter_a(t, note, "undone")
         db[key] = json.dumps(t)
         print(f" {couleurs.CLR_TODO}↩️{couleurs.CLR_RESET}  Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' rouverte.")
+        if note:
+            carnet.confirmer_ajout()
         if echeance_supprimee:
             print(f"    {couleurs.CLR_DIM}↻ L'occurrence suivante (échéance {echeance_supprimee}) a été supprimée.{couleurs.CLR_RESET}")
         modifie = True
@@ -198,17 +210,20 @@ def rouvrir_tache(id_recherche):
     if modifie:
         sauvegarder_base()
 
-def modifier_tache(id_recherche, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None):
+def modifier_tache(id_recherche, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None, note=None):
     """Modifie les champs fournis d'une tâche (None = champ inchangé).
 
     - date_echeance : date absolue ou relative ; 'none' (ou chaîne vide) supprime l'échéance.
     - tags_str      : chaîne vide supprime tous les tags ; sinon remplace la liste.
     - repeter       : 'weekly', '2w'... ; 'none' (ou chaîne vide) supprime la répétition.
+    - note          : texte ajouté aux notes de la tâche (seul ou avec d'autres modifications).
     """
-    if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter)):
+    if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter, note)):
         journal.echec("nothing_to_edit")
-        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat.")
+        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat, --note.")
         return
+    if note is not None:
+        note = carnet.valider_note(note)
 
     # --- Validation des valeurs AVANT toute ouverture de la base ---
     if titre is not None:
@@ -295,6 +310,10 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
             t['date_echeance'] = datetime.now().date().strftime("%Y-%m-%d")
             modifications.append("échéance (aujourd'hui par défaut)")
 
+        if note:
+            carnet.ajouter_a(t, note, "edit")
+            modifications.append("note")
+
         if not modifications:
             print(f" {couleurs.CLR_DIM}ℹ️  Aucun changement : les valeurs fournies sont déjà celles de la tâche '{t['titre']}'.{couleurs.CLR_RESET}")
             return
@@ -306,11 +325,17 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
     # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
     sauvegarder_base()
 
-def supprimer_tache(ids):
+def supprimer_tache(ids, note=None):
     """Retire définitivement une ou plusieurs entrées de la base de données.
 
+    `note` (le motif) ne peut pas être gardée dans une tâche qui disparaît : elle est écrite au
+    journal, avec le titre, seul souvenir de la suppression.
     Retourne True si aucun identifiant n'a posé problème (introuvable, ambigu).
     """
+    note = carnet.valider_note(note) if note is not None else None
+    if note:
+        journal.activer_titres()
+        journal.noter(note=note, note_len=len(note))
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à supprimer.{couleurs.CLR_RESET}")
         return False
@@ -327,6 +352,8 @@ def supprimer_tache(ids):
             journal.noter(ids=[key], titres=[titre] if titre else None, modifie=True)
             detail = f" : '{couleurs.CLR_BOLD}{titre}{couleurs.CLR_RESET}'" if titre else ""
             print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} Tâche supprimée{detail}.")
+            if note:
+                print(f"    {couleurs.CLR_DIM}📝 Motif transmis au journal.{couleurs.CLR_RESET}")
             nb_ok += 1
 
     # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base
@@ -335,15 +362,17 @@ def supprimer_tache(ids):
     _afficher_bilan_lot(len(ids), nb_ok, "supprimée(s)", echecs)
     return echecs == 0
 
-def reporter_taches(ids, cible="+1d"):
+def reporter_taches(ids, cible="+1d", note=None):
     """Reporte l'échéance d'une ou plusieurs tâches à faire.
 
     cible : - décalage '+Nd', '+Nw', '+Nm', '+Ny' : appliqué à partir de max(échéance actuelle,
               aujourd'hui). Reporter de 2 jours une tâche en retard (ou sans échéance) donne donc
               « aujourd'hui + 2 jours », pas une date déjà passée.
             - date fixe : AAAA-MM-JJ, demain, lundi... (mêmes formats que --due).
+    `note` (optionnel) est ajoutée à chaque tâche effectivement reportée.
     Retourne True si aucun identifiant n'a posé problème.
     """
+    note = carnet.valider_note(note) if note is not None else None
     aujourdhui = datetime.now().date()
     cible = (cible or "").strip()
     if _resoudre_date(cible, aujourdhui) is None:
@@ -391,9 +420,13 @@ def reporter_taches(ids, cible="+1d"):
                 print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' a déjà pour échéance le {ancienne}.{couleurs.CLR_RESET}")
                 continue
             t['date_echeance'] = nouvelle_txt
+            if note:
+                carnet.ajouter_a(t, note, "postpone")
             db[key] = json.dumps(t)
             print(f" {couleurs.CLR_TODO}📅{couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' reportée : "
                   f"{ancienne or 'aucune échéance'} → {couleurs.CLR_BOLD}{nouvelle_txt}{couleurs.CLR_RESET}")
+            if note:
+                carnet.confirmer_ajout()
             if t['recurrence']:
                 print(f"    {couleurs.CLR_DIM}↻ Tâche récurrente : les prochaines occurrences partiront de cette échéance.{couleurs.CLR_RESET}")
             nb_ok += 1

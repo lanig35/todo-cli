@@ -11,6 +11,7 @@ from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs, journal
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date
+from .notes import lignes_notes
 from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 
@@ -59,6 +60,9 @@ def afficher_tache(id_recherche):
         print(f"  {couleurs.CLR_BOLD}Suivante    :{couleurs.CLR_RESET} {t['suivante']}")
     print(f"  {couleurs.CLR_BOLD}Tags        :{couleurs.CLR_RESET} {tags}")
     print(f"  {couleurs.CLR_BOLD}Description :{couleurs.CLR_RESET} {description}")
+    if t['notes']:
+        print(f"  {couleurs.CLR_BOLD}Notes ({len(t['notes'])}){couleurs.CLR_RESET}")
+        print("\n".join(lignes_notes(t['notes'])))
     print(f" {couleurs.CLR_CYAN}─────────────────────────────{couleurs.CLR_RESET}\n")
 
 def _afficher_texte(texte, pager=True):
@@ -93,6 +97,10 @@ def _afficher_texte(texte, pager=True):
             except OSError:
                 pass  # pager inutilisable : repli sur l'affichage direct
     print(texte)
+
+def _texte_recherche(t):
+    """Texte parcouru par --search : titre, description, tags et notes."""
+    return (t['titre'] + " " + t['description'] + " " + " ".join(t['tags']) + " " + " ".join(n['texte'] for n in t['notes'])).lower()
 
 def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="table", tag_filtre=None,
                   prio_filtre=None, retard=False, aujourdhui=False, retards_en_premier=True,
@@ -135,7 +143,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
             jours = _jours_restants(t, maintenant)
             if t['statut'] != STATUT_A_FAIRE or jours is None: continue
             if not ((retard and jours < 0) or (aujourdhui and jours == 0)): continue
-        if recherche_filtre and recherche_filtre.lower() not in (t['titre'] + " " + t['description'] + " " + " ".join(t['tags'])).lower(): continue
+        if recherche_filtre and recherche_filtre.lower() not in _texte_recherche(t): continue
         liste_taches.append(t)
 
     if not liste_taches:
@@ -209,8 +217,9 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
         echeance_str = _libelle_echeance(t, maintenant)
         display_tags = f" {couleurs.CLR_TAG}" + " ".join([f"#{tg}" for tg in t['tags']]) + f"{couleurs.CLR_RESET}" if t['tags'] else ""
         rec_str = f" {couleurs.CLR_DIM}↻ {_libelle_recurrence(t['recurrence'])}{couleurs.CLR_RESET}" if (t['recurrence'] and a_faire) else ""
+        nb_notes = f" {couleurs.CLR_DIM}📝{len(t['notes'])}{couleurs.CLR_RESET}" if t['notes'] else ""
         numero = f"{couleurs.CLR_DIM}{position:>{largeur}}.{couleurs.CLR_RESET}"
-        lignes.append(f"  {numero} {prefixe} {prio_color} {texte_titre}{echeance_str}{rec_str}{display_tags} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
+        lignes.append(f"  {numero} {prefixe} {prio_color} {texte_titre}{echeance_str}{rec_str}{display_tags}{nb_notes} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
         if t['description']:
             lignes.append(f"      {' ' * (largeur + 2)}{couleurs.CLR_DIM if not a_faire else ''}↳ {t['description']}{couleurs.CLR_RESET}")
     lignes.append(f" {couleurs.CLR_CYAN}──────────────────────────────────────{couleurs.CLR_RESET}")

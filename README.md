@@ -17,6 +17,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Configuration par fichier INI, variables d'environnement et options (`todo config`)
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
+- Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
 - Sauvegardes automatiques et restauration
@@ -159,6 +160,38 @@ todo remove a1b2c3 d4e5f6
   donc s'en servir dans un script. Terminer une tâche déjà terminée n'est pas une erreur.
   `show`, `undone` et `edit`, qui ne ciblent qu'une tâche, gardent le code `0` même si
   l'identifiant est introuvable.
+
+### Notes
+
+Une tâche a une `description` (ce qu'il faut faire) et des **notes** : un journal daté, en ajout
+seul, de ce qui se passe autour d'elle.
+
+```bash
+todo note a1b2c3 "appelé le client, rappeler jeudi"   # ajoute une note (500 caractères au plus)
+todo note a1b2c3                                       # liste les notes de la tâche
+todo note a1b2c3 --format json | jq -r '.notes[].texte'
+todo done a1b2c3 -m "validé par Paul"                  # -m / --note : action + note en une commande
+todo undone a1b2c3 -m "le client a rappelé"
+todo postpone a1b2c3 d4e5f6 --to +3d -m "client absent"
+todo edit a1b2c3 -m "à traiter avec Julie"             # une note seule suffit pour edit
+todo remove a1b2c3 -m "doublon de a9f8e7"
+```
+
+- Chaque note enregistre sa date, son texte et l'**action** qui l'a produite (`note`, `done`,
+  `undone`, `postpone`, `edit`) ; `show` les affiche de la plus ancienne à la plus récente, et `list`
+  signale une tâche annotée par `📝N`. Il n'y a pas de note automatique : seul ce que vous écrivez
+  est enregistré.
+- Avec plusieurs identifiants, la même note est ajoutée à chaque tâche réellement traitée (pas à celle
+  déjà terminée, ni à celle dont l'échéance ne change pas). Une note vide est refusée avant toute
+  modification.
+- `done` sur une tâche récurrente : la note reste sur l'occurrence terminée ; la suivante repart sans note.
+- Les notes font partie de la tâche : elles suivent l'archivage (`archive`, `unarchive`), les
+  sauvegardes et `undo`, apparaissent dans les sorties `--format json` (`"notes": [...]`) et sont
+  incluses dans `list --search` et `archive --search`. Une note ne peut être ni modifiée ni supprimée.
+- **`remove -m`** : la tâche disparaît, ses notes aussi. Le motif est donc écrit **au journal**
+  (`journalctl -t todo`), avec le titre, seul souvenir de la suppression.
+- Journal : l'ajout d'une note est tracé sans son texte (seulement sa longueur `note_len`), sauf si
+  `[log] titles = true`.
 
 ### Reporter une échéance
 
@@ -578,6 +611,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 |---|---|
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
+| `notes.py` | notes des tâches (commande `note`, option `-m`) |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
