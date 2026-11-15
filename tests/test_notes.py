@@ -270,3 +270,109 @@ def test_notes_suivent_l_archivage(une_tache):
     assert todo("archive", "--search", "garder").sortie.count("Appeler client") >= 1
     todo("unarchive", d[0]["id"][:8])
     assert notes_de(todo, "Appeler client")[0]["texte"] == "à garder"
+
+
+# ------------------------------------------------------------------ modifier et supprimer une note
+@pytest.fixture
+def trois_notes(une_tache):
+    todo, i = une_tache
+    for texte in ("un", "deux", "trois"):
+        todo("note", i, texte)
+    return todo, i
+
+
+def textes(todo):
+    return [n["texte"] for n in notes_de(todo, "Appeler client")]
+
+
+def test_notes_numerotees(trois_notes):
+    todo, i = trois_notes
+    sortie = todo("note", i).sortie
+    assert "1. " in sortie and "3. " in sortie
+    assert "1. " in todo("show", i).sortie
+
+
+def test_note_edit_remplace_le_texte_et_garde_la_date(trois_notes):
+    todo, i = trois_notes
+    date = notes_de(todo, "Appeler client")[1]["date"]
+    r = todo("note", i, "--edit", "2", "deux", "corrigé")
+    assert r.code == 0 and "n°2 modifiée" in r.sortie
+    assert textes(todo) == ["un", "deux corrigé", "trois"]
+    n = notes_de(todo, "Appeler client")[1]
+    assert n["date"] == date and n["modifiee"] and n["action"] == "note"
+    assert "modifiée" in todo("note", i).sortie
+
+
+def test_note_edit_garde_l_action_d_origine(une_tache):
+    todo, i = une_tache
+    todo("done", i, "-m", "ok")
+    todo("note", i, "--edit", "1", "validé")
+    assert notes_de(todo, "Appeler client")[0]["action"] == "done"
+
+
+def test_note_delete(trois_notes):
+    todo, i = trois_notes
+    r = todo("note", i, "--delete", "1")
+    assert r.code == 0 and "supprimée" in r.sortie and "2 au total" in r.sortie
+    assert textes(todo) == ["deux", "trois"]
+
+
+def test_note_delete_derniere_puis_liste_vide(une_tache):
+    todo, i = une_tache
+    todo("note", i, "seule")
+    todo("note", i, "--delete", "1")
+    assert textes(todo) == [] and "Aucune note" in todo("note", i).sortie
+
+
+def test_note_edit_delete_json(trois_notes):
+    todo, i = trois_notes
+    d = todo("note", i, "--edit", "3", "nouveau", "--format", "json").json()
+    assert d["note"]["texte"] == "nouveau" and d["total"] == 3
+    d = todo("note", i, "--delete", "2", "--format", "json").json()
+    assert d["supprimee"]["texte"] == "deux" and d["total"] == 2
+
+
+@pytest.mark.parametrize("args", [("--delete", "0"), ("--delete", "4"), ("--edit", "4", "x"), ("--edit", "0", "x")])
+def test_note_numero_invalide(trois_notes, args):
+    todo, i = trois_notes
+    r = todo("note", i, *args)
+    assert r.code == 1 and "introuvable" in r.texte and textes(todo) == ["un", "deux", "trois"]
+
+
+def test_note_numero_sur_tache_sans_note(une_tache):
+    todo, i = une_tache
+    r = todo("note", i, "--delete", "1")
+    assert r.code == 1 and "aucune note" in r.texte
+
+
+def test_note_edit_sans_texte_ou_delete_avec_texte(trois_notes):
+    todo, i = trois_notes
+    assert todo("note", i, "--edit", "1").code == 1
+    assert todo("note", i, "--delete", "1", "texte").code == 1
+    assert todo("note", i, "--edit", "1", "x", "--delete", "2").code != 0
+    assert textes(todo) == ["un", "deux", "trois"]
+
+
+def test_note_edit_texte_invalide_refuse(trois_notes):
+    todo, i = trois_notes
+    assert todo("note", i, "--edit", "1", "x" * 501).code == 1
+    assert textes(todo)[0] == "un"
+
+
+def test_note_edit_delete_sauvegarde_et_undo(trois_notes):
+    todo, i = trois_notes
+    todo("note", i, "--delete", "1")
+    todo("undo")
+    assert textes(todo) == ["un", "deux", "trois"]
+    todo("note", i, "--edit", "1", "autre")
+    todo("undo")
+    assert textes(todo)[0] == "un"
+
+
+def test_note_edit_delete_au_journal(trois_notes):
+    todo, i = trois_notes
+    todo("note", i, "--edit", "2", "secret", env=JOURNAL)
+    todo("note", i, "--delete", "1", env=JOURNAL)
+    lignes = [l for l in todo.journal() if l.startswith("INFO note")]
+    assert any("note_edited=2" in l and "secret" not in l for l in lignes)
+    assert any("note_deleted=1" in l for l in lignes)
