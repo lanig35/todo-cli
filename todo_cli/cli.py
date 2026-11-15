@@ -13,6 +13,7 @@ from .prochaine import afficher_prochaines
 from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
+from .echange import exporter, importer
 from .notes import commande_note
 from .taches import ajouter_tache, marquer_terminee, modifier_tache, nettoyer_terminees, reporter_taches, rouvrir_tache, supprimer_tache
 
@@ -130,6 +131,22 @@ def main():
     groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
     groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note ID`)")
     parser_note.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+
+    # Commandes 'export' et 'import'
+    parser_export = subparsers.add_parser('export', help="Exporter les tâches (et l'archive) en JSON")
+    parser_export.add_argument('fichier', nargs='?', default=None,
+                               help="Fichier à écrire ; sans argument ou `-` : sortie standard (pour jq ou une redirection)")
+    parser_export.add_argument('--no-archive', action='store_true', help="Ne pas exporter l'archive")
+    parser_export.add_argument('--force', action='store_true', help="Remplacer le fichier s'il existe déjà")
+    parser_import = subparsers.add_parser('import', help="Importer des tâches depuis un fichier JSON (export todo-cli ou `list --format json`)")
+    parser_import.add_argument('fichier', help="Fichier JSON à lire ; `-` : entrée standard")
+    mode_import = parser_import.add_mutually_exclusive_group()
+    mode_import.add_argument('--update', action='store_true',
+                             help="Si l'identifiant existe déjà, le contenu du fichier remplace la tâche (défaut : elle est ignorée)")
+    mode_import.add_argument('--replace', action='store_true', help="Vide la liste et l'archive avant d'importer (confirmation demandée)")
+    parser_import.add_argument('--dry-run', action='store_true', help="Indique ce qui serait importé, sans rien modifier")
+    parser_import.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation (avec --replace)")
+    parser_import.add_argument('--format', choices=['table', 'json'], default='table', help="Format du bilan (json : compatible jq)")
 
     # Commande 'restore'
     parser_restore = subparsers.add_parser('restore', help='Lister les sauvegardes ou restaurer l\'une d\'elles')
@@ -277,6 +294,11 @@ def main():
         modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note)
     elif args.commande == 'note':
         succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
+    elif args.commande == 'export':
+        succes = exporter(args.fichier, not args.no_archive, args.force)
+    elif args.commande == 'import':
+        mode = 'mettre_a_jour' if args.update else ('remplacer' if args.replace else 'ajouter')
+        succes = importer(args.fichier, mode, args.dry_run, not args.yes, args.format)
     elif args.commande == 'restore':
         restaurer_base(args.backup, confirmer=not args.yes)
     elif args.commande == 'done':
