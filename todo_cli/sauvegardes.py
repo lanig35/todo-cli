@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from .config import ARCHIVE_NAME, BACKUP_DIR, DB_DIR, DB_NAME, NB_BACKUPS_MAX
 from . import couleurs, journal
-from .stockage import _base_existe, _charger_taches, _lire_archive, _lire_taches
+from .stockage import _charger_taches, _lire_archive, _lire_taches
 
 
 # Chaque sauvegarde est un sous-dossier horodaté : backups/AAAAMMJJ_HHMMSS_µs/
@@ -49,31 +49,42 @@ def sauvegarder_base(rotation=True):
             shutil.rmtree(os.path.join(BACKUP_DIR, ancien), ignore_errors=True)
     return dossier
 
-def reinitialiser_base():
-    """Remise à zéro complète après confirmation et sauvegarde ultime."""
-    if not _base_existe():
-        print(f" 📋 {couleurs.CLR_DIM}La base de données est déjà vide.{couleurs.CLR_RESET}")
+def _compter(nom):
+    """Nombre d'entrées d'une base DBM (0 si elle n'existe pas)."""
+    try:
+        with dbm.open(nom, 'r') as db:
+            return len(db)
+    except (*dbm.error, OSError):     # dbm.error est un tuple de classes
+        return 0
+
+
+def reinitialiser_base(avec_archive=False):
+    """Remise à zéro après confirmation et sauvegarde ultime : la liste, et l'archive si `avec_archive`."""
+    nb_taches = _compter(DB_NAME)               # toutes les entrées, y compris les illisibles : reset les supprime aussi
+    nb_archive = _compter(ARCHIVE_NAME) if avec_archive else 0
+    if nb_taches == 0 and nb_archive == 0:
+        quoi = "La base de données et l'archive sont déjà vides." if avec_archive else "La base de données est déjà vide."
+        print(f" 📋 {couleurs.CLR_DIM}{quoi}{couleurs.CLR_RESET}")
         return
 
-    with dbm.open(DB_NAME, 'r') as db:
-        if len(db) == 0:
-            print(f" 📋 {couleurs.CLR_DIM}La base de données est déjà vide.{couleurs.CLR_RESET}")
-            return
-
+    cible = f"la base ({nb_taches} tâche(s)) ET l'archive ({nb_archive})" if avec_archive else "la base"
     try:
-        reponse = input(f" {couleurs.CLR_DEL}⚠️ DANGER :{couleurs.CLR_RESET} Purger intégralement la base ? (y/N) : ").strip().lower()
+        reponse = input(f" {couleurs.CLR_DEL}⚠️ DANGER :{couleurs.CLR_RESET} Purger intégralement {cible} ? (y/N) : ").strip().lower()
     except EOFError:
         reponse = ""
     if reponse != 'y':
         print(" ❌ Opération annulée.")
         return
 
-    sauvegarder_base()  # Sauvegarde de l'état AVANT purge (base fermée)
-    with dbm.open(DB_NAME, 'w') as db:
-        for key in list(db.keys()):
-            del db[key]
-    journal.noter(modifie=True)
-    print(f" {couleurs.CLR_DONE}🗑️ Base réinitialisée.{couleurs.CLR_RESET}")
+    sauvegarder_base()  # Sauvegarde de l'état AVANT purge (bases fermées) : liste et archive
+    bases = [(DB_NAME, nb_taches)] + ([(ARCHIVE_NAME, nb_archive)] if avec_archive else [])
+    for nom, nombre in bases:
+        if nombre:
+            with dbm.open(nom, 'w') as db:
+                for key in list(db.keys()):
+                    del db[key]
+    journal.noter(modifie=True, **({"archive_included": True, "count": nb_taches + nb_archive} if avec_archive else {}))
+    print(f" {couleurs.CLR_DONE}🗑️ {'Base et archive réinitialisées' if avec_archive else 'Base réinitialisée'}.{couleurs.CLR_RESET}")
 
 # 6 bis. RESTAURATION À PARTIR DES SAUVEGARDES
 def _infos_sauvegarde(nom):

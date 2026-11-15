@@ -135,6 +135,7 @@ Les commandes qui ciblent une tâche acceptent un **préfixe d'identifiant** (af
 
 ```bash
 todo show a1b2c3            # détail complet d'une tâche
+todo show a1b2c3 --format json | jq '.notes[].texte'   # le même, en JSON (un objet, comme dans `list --format json`)
 todo done a1b2c3            # terminer (enregistre la date de complétion)
 todo done a1b2c3 d4e5f6     # ... ou plusieurs tâches d'un coup
 todo undone a1b2c3          # rouvrir
@@ -407,7 +408,7 @@ todo stats --with-archive         # statistiques incluant l'historique archivé
   dans la liste ; rouvrir l'ancienne (`undone`) demande de la récupérer d'abord avec `unarchive`.
 - Archive et liste sont **sauvegardées et restaurées ensemble** : `restore` ramène les deux à l'état
   de la sauvegarde, de sorte qu'une tâche n'apparaisse jamais des deux côtés. `reset` ne vide que la
-  liste et conserve l'archive.
+  liste et conserve l'archive, sauf avec `reset --include-archive`.
 - `archive` et `unarchive` traitent plusieurs identifiants comme `done` et `remove` (bilan, une seule
   sauvegarde, code de sortie `1` en cas d'échec).
 
@@ -644,7 +645,7 @@ todo restore 3 -y        # sans confirmation
 Avant toute restauration, l'état actuel est lui-même sauvegardé : une restauration peut être
 annulée en restaurant cette sauvegarde (la n°2 juste après).
 
-Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde préalable) et
+Autres commandes : `todo reset` (vide la liste, avec confirmation et sauvegarde préalable ; `--include-archive` vide aussi l'archive, la confirmation en indique alors les effectifs, et `undo` rétablit tout) et
 `todo seed [N]` (ajoute N tâches factices, nécessite `faker`).
 
 ## Organisation du code

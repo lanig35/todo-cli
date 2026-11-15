@@ -120,7 +120,10 @@ def main():
                              help="Nouvelle répétition : daily, weekly, monthly, yearly, 3d/2w/1m/1y ('none' pour la supprimer)")
 
     # Commandes 'show' et 'undone'
-    subparsers.add_parser('show', help="Afficher le détail complet d'une tâche").add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    parser_show = subparsers.add_parser('show', help="Afficher le détail complet d'une tâche")
+    parser_show.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    parser_show.add_argument('--format', choices=['table', 'json'], default='table',
+                             help="Format de sortie (json : un objet, comme un élément de `list --format json`, compatible jq)")
     parser_undone = subparsers.add_parser('undone', help='Rouvrir une tâche terminée')
     parser_undone.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
     parser_undone.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
@@ -221,7 +224,9 @@ def main():
     parser_config.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie (json : compatible jq, pour show, path et init)')
     parser_stats = subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
     parser_stats.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
-    subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
+    parser_reset = subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
+    parser_reset.add_argument('--include-archive', action='store_true',
+                              help="Vide aussi l'archive (par défaut, reset ne touche qu'à la liste)")
 
     # Options de couleur : au niveau principal et sur chaque sous-commande
     _ajouter_options_couleur(parser)
@@ -287,7 +292,7 @@ def main():
                       pager=reglages.obtenir('general', 'pager', args.pager),
                       avant=avant, apres=apres)
     elif args.commande == 'show':
-        afficher_tache(args.id)
+        afficher_tache(args.id, args.format)
     elif args.commande == 'undone':
         rouvrir_tache(args.id, args.note)
     elif args.commande == 'edit':
@@ -374,7 +379,7 @@ def main():
     elif args.commande == 'stats':
         afficher_stats(args.with_archive)
     elif args.commande == 'reset':
-        reinitialiser_base()
+        reinitialiser_base(args.include_archive)
     else:
         parser.print_help()
         sys.exit(1)
