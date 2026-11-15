@@ -21,6 +21,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
 - Sauvegardes automatiques et restauration
+- Export et import JSON (`export`, `import`), indépendants du format de la base
 - Couleurs automatiquement désactivées hors terminal (pipes, redirections) et avec `NO_COLOR`
 
 ## Installation
@@ -587,6 +588,40 @@ INFO    restore backup=20261112_201500_123456 exit=0
   groupe `systemd-journal` ou `adm`.
 - `[log] socket` indique un autre socket syslog si `/dev/log` n'est pas le bon.
 
+### Export et import JSON
+
+L'export est un fichier JSON lisible, indépendant du backend DBM : c'est le moyen de transférer vos
+tâches d'une machine à l'autre, ou d'en garder une copie hors du dossier de stockage.
+
+```bash
+todo export sauvegarde.json            # tâches + archive, dans un fichier (refus d'écraser sans --force)
+todo export | jq '.taches[] | .titre'  # sans fichier (ou `-`) : sortie standard
+todo export --no-archive > actives.json
+todo import sauvegarde.json            # ajoute ce qui manque
+todo import sauvegarde.json --dry-run  # montre ce qui serait importé, sans rien modifier
+```
+
+Le document contient `format` (`todo-cli`), `version`, `exporte_le`, `compteurs`, et les listes `taches` et
+`archive` (chaque tâche avec son `id`, ses notes, sa récurrence… ; les archivées ont en plus
+`date_archivage`).
+
+**Import** : le fichier peut être un export, ou la sortie de `list --format json`. Trois modes :
+
+| Option | Identifiant déjà présent (dans la liste ou l'archive) |
+|---|---|
+| *(aucune)* | la tâche du fichier est **ignorée** : l'import ne détruit jamais rien |
+| `--update` | le contenu du fichier **remplace** la tâche, et elle va là où le fichier la place (liste ou archive) |
+| `--replace` | la liste et l'archive sont **vidées** avant l'import (confirmation demandée, `-y` pour passer outre) |
+
+- Tout le fichier est vérifié **avant** la moindre modification. Une entrée invalide (titre vide, priorité,
+  statut, échéance ou récurrence incorrects, identifiant en double dans le fichier…) est signalée par sa
+  position (`taches[3]`) et ignorée ; les autres sont importées, et le code de sortie vaut 1.
+- Une entrée sans `id` en reçoit un nouveau. Un fichier de version plus récente que celle que `todo` sait
+  lire est refusé.
+- Une sauvegarde est faite après un import qui modifie quelque chose : `todo undo` l'annule.
+- `--format json` donne le bilan (`ajoutees`, `mises_a_jour`, `ignorees`, `supprimees`, `invalides`) ;
+  `-` lit le fichier sur l'entrée standard (avec `--replace`, ajoutez `-y`).
+
 ### Sauvegardes et restauration
 
 Une sauvegarde est créée après chaque modification ; les 5 plus récentes sont conservées.
@@ -623,6 +658,7 @@ Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde p
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
 | `dates.py` | dates relatives, récurrences, libellés d'échéance |
 | `stockage.py` | lecture de la base DBM, normalisation, résolution des identifiants |
+| `echange.py` | export et import JSON |
 | `sauvegardes.py` | sauvegardes, rotation, restauration, remise à zéro |
 | `couleurs.py` | codes ANSI et règles d'activation des couleurs |
 | `config.py` | emplacement du stockage et constantes |
@@ -657,7 +693,8 @@ le stockage vers un autre dossier (utile pour les tests ou pour avoir plusieurs 
 
 > **Portabilité** : le format DBM dépend du backend Python (`gdbm`, `ndbm`, `dumb`). Un fichier créé
 > sur une machine n'est pas toujours lisible sur une autre. Pour transférer vos tâches, vérifiez
-> que les deux machines utilisent le même backend.
+> que les deux machines utilisent le même backend, ou passez par `todo export` / `todo import`, qui ne
+> dépendent pas du backend.
 
 Les anciennes entrées (créées avant l'ajout d'un champ, par exemple la date de complétion ou la
 récurrence) restent lisibles : les champs manquants prennent une valeur par défaut. Une entrée
