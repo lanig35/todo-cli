@@ -127,6 +127,9 @@ def main():
     parser_note = subparsers.add_parser('note', help="Ajouter une note à une tâche, ou lister ses notes")
     parser_note.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
     parser_note.add_argument('texte', nargs='*', help="Texte de la note (500 caractères au plus) ; sans texte : liste les notes de la tâche")
+    groupe_note = parser_note.add_mutually_exclusive_group()
+    groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
+    groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note ID`)")
     parser_note.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
 
     # Commandes 'export' et 'import'
@@ -290,7 +293,7 @@ def main():
     elif args.commande == 'edit':
         modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note)
     elif args.commande == 'note':
-        succes = commande_note(args.id, args.texte, args.format)
+        succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
     elif args.commande == 'export':
         succes = exporter(args.fichier, not args.no_archive, args.force)
     elif args.commande == 'import':
