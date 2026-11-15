@@ -98,11 +98,15 @@ def test_remove_postpone_archive(jr):
     assert jr.derniere() == "INFO remove ids=jrnl0001 total=1 failed=0 exit=0"
 
 
-def test_clear_done_reset_restore_undo(jr):
+def test_purge_reset_restore_undo(jr):
     jr("add", "A"); jr("add", "B")
     jr("done", court(jr, "A"))
-    jr("clear-done")
-    assert jr.derniere() == "INFO clear-done count=1 exit=0"
+    jr("archive")
+    jr("archive", "--purge", "-y")
+    assert re.fullmatch(r"INFO archive ids=\S+ purged=1 exit=0", jr.derniere())
+    jr("done", court(jr, "B"))
+    jr("add", "C")
+    jr("remove", court(jr, "C"))
     jr("restore", "2", "-y")
     assert re.fullmatch(r"INFO restore backup=\d{8}_\d{6}_\d+ exit=0", jr.derniere())
     jr("undo")
@@ -236,14 +240,14 @@ def test_sortie_en_erreur_sans_detail(jr):
 
 def test_exception_inattendue(jr, tmp_path):
     code = ("import sys\nsys.path.insert(0, sys.argv[1])\nfrom todo_cli import cli\n"
-            "cli.nettoyer_terminees = lambda: 1 / 0\nsys.argv = ['todo', 'clear-done']\ncli.executer()\n")
+            "cli.purger_archive = lambda *a, **k: 1 / 0\nsys.argv = ['todo', 'archive', '--purge', '-y']\ncli.executer()\n")
     p = subprocess.run([sys.executable, "-B", "-c", code, str(RACINE)], capture_output=True, text=True, cwd=tmp_path,
                        env={**jr.env, **FICHIER})
     assert p.returncode == 1 and "ZeroDivisionError" in p.stderr               # la trace reste visible sur stderr
     lignes = jr.lignes()
-    assert lignes[0] == "CRITICAL clear-done exception type=ZeroDivisionError"
+    assert lignes[0] == "CRITICAL archive exception type=ZeroDivisionError"
     assert any("ZeroDivisionError: division by zero" in l for l in lignes)      # trace complète dans le journal
-    assert any(l.startswith("WARNING clear-done sortie exit=1") for l in lignes)
+    assert any(l.startswith("WARNING archive sortie exit=1") for l in lignes)
 
 
 def test_avertissements_de_configuration_journalises_une_fois(jr):

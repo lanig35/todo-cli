@@ -110,6 +110,75 @@ def archiver_taches(ids=None, anciennete=None):
     return echecs == 0
 
 
+def purger_archive(ids=None, anciennete=None, confirmer=True):
+    """Supprime DÉFINITIVEMENT des tâches de l'archive, après confirmation.
+
+    ids        : préfixes d'identifiants de tâches archivées ; sans ids, toute l'archive est visée.
+    anciennete : (n, unité) ; ne retient que les tâches terminées depuis au moins cette durée.
+    Les cibles sont choisies et confirmées AVANT toute écriture ; une sauvegarde suit la purge, donc
+    `undo` la rétablit. Retourne True si aucun identifiant n'a posé problème (annuler n'est pas un échec).
+    """
+    if not _archive_existe():
+        print(f" 📦 {couleurs.CLR_DIM}L'archive est vide, rien à purger.{couleurs.CLR_RESET}")
+        return not ids
+
+    sans_date = 0
+    echecs = 0
+    with dbm.open(ARCHIVE_NAME, 'r') as archive:
+        cibles = []                                 # (clé, titre)
+        if ids:
+            cles, echecs = _resoudre_ids(archive, ids)
+            for cle in cles:
+                try:
+                    titre = _normaliser_tache(archive[cle])['titre']
+                except ValueError:
+                    titre = "(entrée illisible)"    # une entrée corrompue doit pouvoir être supprimée
+                cibles.append((cle, titre))
+        else:
+            limite = _decaler(datetime.now().date(), -anciennete[0], anciennete[1]) if anciennete else None
+            for t in _lire_archive():
+                if limite is not None:
+                    date_fin = _parse_date((t['date_terminee'] or "")[:10])
+                    if date_fin is None:
+                        sans_date += 1
+                        continue
+                    if date_fin > limite:
+                        continue
+                cibles.append((t['id'].encode('utf-8'), t['titre']))
+
+    if sans_date:
+        print(f" {couleurs.CLR_DIM}ℹ️  {sans_date} tâche(s) sans date de complétion ignorée(s) : âge inconnu "
+              f"(purgez-les par identifiant).{couleurs.CLR_RESET}")
+    if not cibles:
+        qualif = f" terminée depuis au moins {anciennete[0]}{anciennete[1]}" if anciennete else ""
+        if not ids:
+            print(f" 📦 {couleurs.CLR_DIM}Aucune tâche archivée{qualif} à purger.{couleurs.CLR_RESET}")
+        _afficher_bilan_lot(len(ids or []), 0, "purgée(s)", echecs)
+        return echecs == 0
+
+    if confirmer:
+        apercu = ", ".join(f"'{titre}'" for _, titre in cibles[:5]) + (" …" if len(cibles) > 5 else "")
+        try:
+            reponse = input(f" {couleurs.CLR_DEL}⚠️ DANGER :{couleurs.CLR_RESET} Supprimer définitivement {len(cibles)} tâche(s) "
+                            f"de l'archive ({apercu}) ? L'état actuel est sauvegardé avant (`undo`). (y/N) : ").strip().lower()
+        except EOFError:
+            reponse = ""
+        if reponse != 'y':
+            print(" ❌ Opération annulée.")
+            return True
+
+    with dbm.open(ARCHIVE_NAME, 'w') as archive:
+        for cle, titre in cibles:
+            del archive[cle]
+            journal.noter(ids=[cle], titres=[titre], modifie=True)
+    journal.noter(purged=len(cibles))
+    sauvegarder_base()                              # APRÈS fermeture de l'archive : la purge reste annulable
+    print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} {len(cibles)} tâche(s) supprimée(s) de l'archive.")
+    if ids:
+        _afficher_bilan_lot(len(ids), len(cibles), "purgée(s)", echecs)
+    return echecs == 0
+
+
 def desarchiver_taches(ids):
     """Remet des tâches archivées dans la liste courante. Retourne True si aucun id n'a posé problème."""
     if not _archive_existe():

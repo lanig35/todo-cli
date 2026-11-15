@@ -2,7 +2,7 @@
 import argparse
 import sys
 from .agenda import afficher_agenda
-from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive
+from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
 from . import couleurs, reglages, journal
@@ -15,7 +15,7 @@ from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_
 from .seed import peupler_fausses_taches
 from .echange import exporter, importer
 from .notes import commande_note
-from .taches import ajouter_tache, marquer_terminee, modifier_tache, nettoyer_terminees, reporter_taches, rouvrir_tache, supprimer_tache
+from .taches import ajouter_tache, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
 def _date_filtre(valeur, option):
@@ -171,7 +171,6 @@ def main():
     parser_postpone.add_argument('--to', type=str, default='+1d', metavar='DATE',
                                  help="Nouvelle échéance (défaut : +1d). +2d / +1w / +1m / +1y : décalage depuis l'échéance actuelle, "
                                       "ou depuis aujourd'hui si elle est dépassée ou absente ; ou date fixe : AAAA-MM-JJ, demain, lundi...")
-    subparsers.add_parser('clear-done', help='Purger toutes les tâches terminées')
     parser_seed = subparsers.add_parser('seed', help='Remplir la base avec des faux enregistrements')
     parser_seed.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
     parser_agenda = subparsers.add_parser('agenda', help='Voir les tâches à faire jour par jour')
@@ -209,6 +208,10 @@ def main():
     parser_archive.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
     parser_archive.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
                                 help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
+    parser_archive.add_argument('--purge', action='store_true',
+                                help="Supprime DÉFINITIVEMENT des tâches de l'archive (identifiants, ou --older-than, ou toute l'archive) ; "
+                                     "confirmation demandée, annulable avec undo")
+    parser_archive.add_argument('-y', '--yes', action='store_true', help="Avec --purge : ne pas demander de confirmation")
     parser_archive.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
     parser_archive.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
     parser_archive.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
@@ -312,8 +315,6 @@ def main():
         succes = supprimer_tache(args.ids, args.note)
     elif args.commande == 'postpone':
         succes = reporter_taches(args.ids, args.to, args.note)
-    elif args.commande == 'clear-done':
-        nettoyer_terminees()
     elif args.commande == 'seed':
         peupler_fausses_taches(args.count)
     elif args.commande == 'agenda':
@@ -347,6 +348,10 @@ def main():
             rappeler(reglages.obtenir('remind', 'limit', args.limit), reglages.obtenir('remind', 'soon', args.soon),
                      args.once_a_day, args.write_status, args.format)
     elif args.commande == 'archive':
+        if args.purge and (args.lister or args.search is not None):
+            journal.echec("invalid_combination")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --purge ne se combine pas avec --list ni --search.")
+            sys.exit(1)
         if args.lister or args.search is not None:
             if args.ids or args.anciennete:
                 journal.echec("invalid_combination")
@@ -366,7 +371,10 @@ def main():
                     print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Durée non reconnue pour --older-than : '{args.anciennete}'. "
                           f"Format : {MSG_FORMAT_ANCIENNETE}.")
                     sys.exit(1)
-            succes = archiver_taches(args.ids or None, anciennete)
+            if args.purge:
+                succes = purger_archive(args.ids or None, anciennete, not args.yes)
+            else:
+                succes = archiver_taches(args.ids or None, anciennete)
     elif args.commande == 'unarchive':
         succes = desarchiver_taches(args.ids)
     elif args.commande == 'config':
