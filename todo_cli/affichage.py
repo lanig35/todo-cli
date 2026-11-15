@@ -15,8 +15,8 @@ from .notes import lignes_notes
 from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 
-def afficher_tache(id_recherche):
-    """Affiche le détail complet d'une tâche (lecture seule)."""
+def afficher_tache(id_recherche, fmt="table"):
+    """Affiche le détail complet d'une tâche (lecture seule). `fmt="json"` : l'objet tel que `list --format json` le décrit."""
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à afficher.{couleurs.CLR_RESET}")
         return
@@ -32,6 +32,11 @@ def afficher_tache(id_recherche):
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être affichée.")
             return
         id_complet = key.decode('utf-8', errors='replace')
+
+    if fmt == "json":
+        t['id'] = id_complet
+        print(json.dumps(t, indent=2, ensure_ascii=False))
+        return
 
     maintenant = datetime.now().date()
     a_faire = t['statut'] == STATUT_A_FAIRE

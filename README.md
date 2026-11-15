@@ -135,13 +135,13 @@ Les commandes qui ciblent une tâche acceptent un **préfixe d'identifiant** (af
 
 ```bash
 todo show a1b2c3            # détail complet d'une tâche
+todo show a1b2c3 --format json | jq '.notes[].texte'   # le même, en JSON (un objet, comme dans `list --format json`)
 todo done a1b2c3            # terminer (enregistre la date de complétion)
 todo done a1b2c3 d4e5f6     # ... ou plusieurs tâches d'un coup
 todo undone a1b2c3          # rouvrir
 todo edit a1b2c3 --title "Nouveau titre" --prio low --due +3d --tags "pro,dev"
 todo edit a1b2c3 --due none --tags "" --desc ""    # supprimer échéance, tags et description
 todo remove a1b2c3          # supprimer (un ou plusieurs identifiants)
-todo clear-done             # supprimer toutes les tâches terminées
 ```
 
 #### Plusieurs tâches à la fois
@@ -398,6 +398,7 @@ todo archive a1b2c3 d4e5f6        # ou des tâches précises (elles doivent êtr
 todo archive --list               # consulter l'archive
 todo archive --search facture     # chercher dans l'archive (titre, description, tags)
 todo unarchive a1b2c3             # remettre une tâche dans la liste
+todo archive --purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce qui date de plus d'un an
 todo stats --with-archive         # statistiques incluant l'historique archivé
 ```
 
@@ -407,11 +408,19 @@ todo stats --with-archive         # statistiques incluant l'historique archivé
   identifiant.
 - `--older-than` et des identifiants ne se combinent pas. `--list`, `--search` (et `--format json`,
   `--no-pager`) consultent l'archive, de la tâche terminée le plus récemment à la plus ancienne.
+- **`archive --purge`** supprime définitivement des tâches **de l'archive** : celles désignées par
+  identifiant, celles terminées depuis au moins `--older-than`, ou toute l'archive. Les cibles sont
+  affichées (titres, au plus 5) et une confirmation est demandée (`-y` pour la passer, par exemple dans
+  un cron) ; la liste courante n'est jamais touchée. Une sauvegarde suit, donc `todo undo` rétablit la
+  purge. `--purge` ne se combine pas avec `--list` ni `--search`.
+  Cette commande remplace l'ancien `clear-done` (qui supprimait d'un coup toutes les tâches terminées
+  de la liste) : archivez-les d'abord (`todo archive`), puis purgez l'archive selon l'âge voulu ; pour
+  supprimer des tâches précises sans passer par l'archive, `todo remove`.
 - Seules les tâches terminées s'archivent. Pour une tâche récurrente, l'occurrence suivante reste
   dans la liste ; rouvrir l'ancienne (`undone`) demande de la récupérer d'abord avec `unarchive`.
 - Archive et liste sont **sauvegardées et restaurées ensemble** : `restore` ramène les deux à l'état
   de la sauvegarde, de sorte qu'une tâche n'apparaisse jamais des deux côtés. `reset` ne vide que la
-  liste et conserve l'archive.
+  liste et conserve l'archive, sauf avec `reset --include-archive`.
 - `archive` et `unarchive` traitent plusieurs identifiants comme `done` et `remove` (bilan, une seule
   sauvegarde, code de sortie `1` en cas d'échec).
 
@@ -563,7 +572,7 @@ INFO    restore backup=20261112_201500_123456 exit=0
 ```
 
 - **Actions tracées (INFO)** : `add`, `edit`, `done`, `undone`, `remove`, `postpone`, `archive`,
-  `unarchive`, `clear-done`, `restore`, `undo`, `reset`, `seed`, `config init` et
+  `unarchive`, `restore`, `undo`, `reset`, `seed`, `config init` et
   `remind --enable` / `--disable`. Une ligne par commande, avec les identifiants concernés (20 au plus,
   puis `count=N`) ; pour `edit`, les **champs** modifiés mais pas leurs valeurs.
 - **Erreurs (WARNING)** : un message `refus reason=…` à chaque erreur affichée (identifiant inconnu ou
@@ -648,7 +657,7 @@ todo restore 3 -y        # sans confirmation
 Avant toute restauration, l'état actuel est lui-même sauvegardé : une restauration peut être
 annulée en restaurant cette sauvegarde (la n°2 juste après).
 
-Autres commandes : `todo reset` (vide la base, avec confirmation et sauvegarde préalable) et
+Autres commandes : `todo reset` (vide la liste, avec confirmation et sauvegarde préalable ; `--include-archive` vide aussi l'archive, la confirmation en indique alors les effectifs, et `undo` rétablit tout) et
 `todo seed [N]` (ajoute N tâches factices, nécessite `faker`).
 
 ## Organisation du code
