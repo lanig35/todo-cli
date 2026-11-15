@@ -1,0 +1,3 @@
+pytest
+# seed (données factices) : un test du journal le vérifie, ignoré sans faker
+faker
