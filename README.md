@@ -1,5 +1,7 @@
 # todo-cli
 
+[![Tests](https://github.com/lanig35/todo-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/lanig35/todo-cli/actions/workflows/tests.yml)
+
 Gestionnaire de tâches en ligne de commande en Python, sans dépendance obligatoire.
 Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique après chaque modification.
 
@@ -638,9 +640,16 @@ La suite `pytest` pilote le programme de l'extérieur (sous-processus, base temp
 interne du code.
 
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt   # pytest et faker
 python -m pytest
 ```
+
+### Intégration continue
+
+Le workflow `.github/workflows/tests.yml` lance la suite sur Python 3.11, 3.12 et 3.13 (Debian 12 et 13)
+à chaque PR et à chaque push sur `main`. Un nouveau push sur une branche annule l'exécution précédente.
+Pour exiger un résultat vert avant la fusion : *Settings → Branches → Branch protection rules → Require
+status checks to pass* (cocher `pytest (Python 3.11)`, `3.12` et `3.13`).
 
 ## Stockage
 
