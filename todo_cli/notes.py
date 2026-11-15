@@ -1,7 +1,7 @@
 """Notes des tâches : un journal daté, en ajout seul, distinct de la description.
 
 Chaque note est `{"date", "texte", "action"}` ; `action` dit ce qui l'a produite (`note`, `done`,
-`undone`, `postpone`, `edit`). Les notes vivent dans la tâche : elles suivent l'archivage, les
+`undone`, `postpone`, `edit`). Une note corrigée par `note --edit` garde sa date et reçoit `modifiee`. Les notes vivent dans la tâche : elles suivent l'archivage, les
 sauvegardes et `undo`. `remove` supprime la tâche : sa note (le motif) va au journal système.
 """
 import dbm
@@ -45,45 +45,81 @@ def confirmer_ajout():
 
 
 def lignes_notes(notes, indent="    "):
-    """Notes mises en forme, de la plus ancienne à la plus récente."""
+    """Notes numérotées (1 = la plus ancienne), de la plus ancienne à la plus récente."""
+    largeur = len(str(len(notes)))
     lignes = []
-    for n in notes:
+    for position, n in enumerate(notes, 1):
         origine = f" {couleurs.CLR_DIM}({n['action']}){couleurs.CLR_RESET}" if n['action'] != "note" else ""
-        lignes.append(f"{indent}{couleurs.CLR_DIM}{n['date'] or '?':<16}{couleurs.CLR_RESET}  {n['texte']}{origine}")
+        modifiee = f" {couleurs.CLR_DIM}[modifiée {n['modifiee']}]{couleurs.CLR_RESET}" if n.get('modifiee') else ""
+        lignes.append(f"{indent}{couleurs.CLR_DIM}{position:>{largeur}}. {n['date'] or '?':<16}{couleurs.CLR_RESET}  {n['texte']}{origine}{modifiee}")
     return lignes
 
 
-def commande_note(id_recherche, mots, fmt="table"):
-    """`todo note ID texte…` ajoute une note ; `todo note ID` liste celles de la tâche. Retourne False en cas d'échec."""
+def _erreur(raison, message, **champs):
+    journal.echec(raison, **champs)
+    print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} {message}")
+    return False
+
+
+def commande_note(id_recherche, mots, fmt="table", modifier=None, supprimer=None):
+    """Ajoute, liste, modifie (`modifier` = numéro) ou supprime (`supprimer` = numéro) les notes d'une tâche.
+
+    `todo note ID texte…` ajoute ; `todo note ID` liste ; `--edit N texte…` remplace le texte de la note N
+    (sa date est conservée) ; `--delete N` la supprime. Retourne False en cas d'échec.
+    """
+    if modifier is not None and supprimer is not None:
+        return _erreur("invalid_combination", "--edit et --delete ne se combinent pas.")
+    if supprimer is not None and mots:
+        return _erreur("invalid_combination", "--delete ne prend pas de texte.")
+    if modifier is not None and not mots:
+        return _erreur("empty_note", "--edit demande le nouveau texte de la note.")
     texte = valider_note(" ".join(mots)) if mots else None
+    ecriture = bool(texte) or supprimer is not None
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, aucune tâche à annoter.{couleurs.CLR_RESET}")
         return False
 
-    with dbm.open(DB_NAME, 'w' if texte else 'r') as db:
+    with dbm.open(DB_NAME, 'w' if ecriture else 'r') as db:
         cle = _resoudre_id(db, id_recherche)
         if cle is None:
             return False
         try:
             t = _normaliser_tache(db[cle])
         except ValueError:
-            journal.echec("corrupted_entry")
-            print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
-            return False
+            return _erreur("corrupted_entry", "Cette entrée est corrompue et ne peut pas être modifiée.")
         id_complet = cle.decode('utf-8', errors='replace')
-        if texte:
-            note = ajouter_a(t, texte, "note")
+        numero = modifier if modifier is not None else supprimer
+        if numero is not None and not 1 <= numero <= len(t['notes']):
+            quoi = "n'a aucune note" if not t['notes'] else f"n'a que {len(t['notes'])} note(s)"
+            return _erreur("invalid_note_number", f"Note n°{numero} introuvable : '{t['titre']}' {quoi}.", index=numero)
+
+        resultat = None
+        if supprimer is not None:
+            resultat = t['notes'].pop(supprimer - 1)
+            journal.noter(note_deleted=supprimer, note=resultat['texte'] if journal.titres_actifs() else None)
+        elif modifier is not None:
+            resultat = t['notes'][modifier - 1]
+            resultat['texte'] = texte
+            resultat['modifiee'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            journal.noter(note_edited=modifier, note_len=len(texte), note=texte if journal.titres_actifs() else None)
+        elif texte:
+            resultat = ajouter_a(t, texte, "note")
+        if ecriture:
             db[cle] = json.dumps(t)
             journal.noter(ids=[cle], titres=[t['titre']], modifie=True)
 
-    if texte:
+    if ecriture:
         sauvegarder_base()          # APRÈS fermeture de la base, pour capturer la modification
+        total = len(t['notes'])
         if fmt == "json":
-            print(json.dumps({"id": id_complet, "titre": t['titre'], "note": note, "total": len(t['notes'])},
+            cle_json = "supprimee" if supprimer is not None else "note"
+            print(json.dumps({"id": id_complet, "titre": t['titre'], cle_json: resultat, "total": total},
                              indent=2, ensure_ascii=False))
         else:
-            print(f" {couleurs.CLR_DONE}📝{couleurs.CLR_RESET} Note ajoutée à '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' "
-                  f"({len(t['notes'])} au total).")
+            verbe = "supprimée de" if supprimer is not None else ("modifiée sur" if modifier is not None else "ajoutée à")
+            nom = f"Note n°{numero} " if numero is not None else "Note "
+            print(f" {couleurs.CLR_DONE}📝{couleurs.CLR_RESET} {nom}{verbe} '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' "
+                  f"({total} au total).")
     elif fmt == "json":
         print(json.dumps({"id": id_complet, "titre": t['titre'], "notes": t['notes']}, indent=2, ensure_ascii=False))
     elif not t['notes']:

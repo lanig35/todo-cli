@@ -22,6 +22,8 @@ def _normaliser_notes(brutes):
     for n in brutes if isinstance(brutes, list) else []:
         if isinstance(n, dict) and n.get('texte'):
             notes.append({"date": str(n.get('date') or ""), "texte": str(n['texte']), "action": str(n.get('action') or "note")})
+            if n.get('modifiee'):
+                notes[-1]["modifiee"] = str(n['modifiee'])
     return notes
 
 def _normaliser_tache(brut):

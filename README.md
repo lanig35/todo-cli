@@ -172,6 +172,8 @@ seul, de ce qui se passe autour d'elle.
 todo note a1b2c3 "appelé le client, rappeler jeudi"   # ajoute une note (500 caractères au plus)
 todo note a1b2c3                                       # liste les notes de la tâche
 todo note a1b2c3 --format json | jq -r '.notes[].texte'
+todo note a1b2c3 --edit 2 "texte corrigé"               # corrige la note n°2 (date conservée)
+todo note a1b2c3 --delete 1                            # supprime la note n°1
 todo done a1b2c3 -m "validé par Paul"                  # -m / --note : action + note en une commande
 todo undone a1b2c3 -m "le client a rappelé"
 todo postpone a1b2c3 d4e5f6 --to +3d -m "client absent"
@@ -189,7 +191,12 @@ todo remove a1b2c3 -m "doublon de a9f8e7"
 - `done` sur une tâche récurrente : la note reste sur l'occurrence terminée ; la suivante repart sans note.
 - Les notes font partie de la tâche : elles suivent l'archivage (`archive`, `unarchive`), les
   sauvegardes et `undo`, apparaissent dans les sorties `--format json` (`"notes": [...]`) et sont
-  incluses dans `list --search` et `archive --search`. Une note ne peut être ni modifiée ni supprimée.
+  incluses dans `list --search` et `archive --search`.
+- Les notes sont **numérotées** à partir de 1 (la plus ancienne) dans `todo note ID` et `show`. `--edit N`
+  remplace le texte de la note N : elle garde sa date et son origine, et reçoit une marque
+  `[modifiée AAAA-MM-JJ HH:MM]` (champ `modifiee` en JSON). `--delete N` la supprime ; les suivantes sont
+  renumérotées. Les deux sont annulables avec `undo`, et tracés au journal (`note_edited`, `note_deleted`,
+  sans le texte sauf `[log] titles = true`).
 - **`remove -m`** : la tâche disparaît, ses notes aussi. Le motif est donc écrit **au journal**
   (`journalctl -t todo`), avec le titre, seul souvenir de la suppression.
 - Journal : l'ajout d'une note est tracé sans son texte (seulement sa longueur `note_len`), sauf si
