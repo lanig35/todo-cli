@@ -99,6 +99,7 @@ def _creer_occurrence_suivante(db, t):
         "date_echeance": prochaine.strftime("%Y-%m-%d"),
         "tags": list(t['tags']),
         "recurrence": t['recurrence'],
+        "ancre": t['ancre'] or t['date_echeance'],   # l'échéance d'origine de la série se transmet d'occurrence en occurrence
     }
     id_nouvelle = str(uuid.uuid4())
     db[id_nouvelle] = json.dumps(nouvelle)
@@ -291,6 +292,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
             modifications.append("priorité")
         if date_echeance is not None and (date_echeance or None) != t['date_echeance']:
             t['date_echeance'] = date_echeance or None
+            t['ancre'] = None                      # nouvelle échéance voulue : la série repart de cette date
             modifications.append("échéance")
         if tags_str is not None:
             nouveaux_tags = _parser_tags(tags_str)
@@ -299,6 +301,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
                 modifications.append("tags")
         if repeter is not None and (repeter or None) != t['recurrence']:
             t['recurrence'] = repeter or None
+            t['ancre'] = None
             modifications.append("répétition")
 
         # Une tâche récurrente doit toujours avoir une échéance
@@ -420,6 +423,7 @@ def reporter_taches(ids, cible="+1d", note=None):
                 print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' a déjà pour échéance le {ancienne}.{couleurs.CLR_RESET}")
                 continue
             t['date_echeance'] = nouvelle_txt
+            t['ancre'] = None                       # le report décale la série : elle repart de la nouvelle échéance
             if note:
                 carnet.ajouter_a(t, note, "postpone")
             db[key] = json.dumps(t)

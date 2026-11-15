@@ -110,15 +110,21 @@ def _libelle_recurrence(rec):
             "m": f"tous les {n} mois", "y": f"tous les {n} ans"}[unite]
 
 def _prochaine_echeance(t, aujourdhui):
-    """Prochaine échéance d'une tâche récurrente, calculée depuis son échéance d'origine
-    (sans dérive) et strictement postérieure à aujourd'hui : les occurrences manquées
-    ne s'accumulent pas en retard.
+    """Prochaine échéance d'une tâche récurrente : sans dérive, strictement postérieure à aujourd'hui
+    et à l'échéance actuelle (les occurrences manquées ne s'accumulent pas en retard).
+
+    Elle se calcule depuis l'échéance d'ORIGINE de la série (`t['ancre']`, sinon l'échéance actuelle) :
+    k × la durée à partir de là. Avec « tous les mois à partir du 31 janvier », on obtient 28 février,
+    31 mars, 30 avril, 31 mai… et non 28 février, 28 mars, 28 avril… comme en repartant à chaque fois
+    de la date précédente, déjà ramenée au 28.
     """
     n, unite = int(t['recurrence'][:-1]), t['recurrence'][-1]
-    base = _parse_date(t['date_echeance']) or aujourdhui
+    actuelle = _parse_date(t['date_echeance'])
+    base = _parse_date(t.get('ancre')) or actuelle or aujourdhui
+    plancher = max(aujourdhui, actuelle) if actuelle else aujourdhui
     k = 1
     prochaine = _decaler(base, n * k, unite)
-    while prochaine <= aujourdhui:
+    while prochaine <= plancher:
         k += 1
         prochaine = _decaler(base, n * k, unite)
     return prochaine

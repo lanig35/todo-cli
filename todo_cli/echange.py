@@ -24,7 +24,7 @@ from .stockage import _lire_archive, _lire_taches, _normaliser_notes
 FORMAT = "todo-cli"
 VERSION = 1
 CHAMPS = ("titre", "description", "priorite", "statut", "date_creation", "date_echeance", "date_terminee",
-          "tags", "recurrence", "suivante", "notes")
+          "tags", "recurrence", "suivante", "ancre", "notes")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _DATE_HEURE = re.compile(r"\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?")
 
@@ -166,6 +166,9 @@ def _valider(entree, archive):
         recurrence = _parser_recurrence(str(recurrence))
         if recurrence is None:
             return None, f"récurrence invalide : {entree.get('recurrence')!r}"
+    ancre = entree.get("ancre") or None
+    if ancre is not None and not (isinstance(ancre, str) and _DATE.fullmatch(ancre)):
+        return None, f"ancre invalide : {ancre!r} (AAAA-MM-JJ attendu)"
     identifiant = entree.get("id")
     if identifiant is None or identifiant == "":
         identifiant = str(uuid.uuid4())
@@ -177,7 +180,7 @@ def _valider(entree, archive):
         "date_creation": entree.get("date_creation") or _maintenant(), "date_echeance": echeance,
         "date_terminee": entree.get("date_terminee") or None,
         "tags": [x.strip().lower() for x in tags if x.strip()], "recurrence": recurrence,
-        "suivante": entree.get("suivante") or None, "notes": _normaliser_notes(entree.get("notes")),
+        "suivante": entree.get("suivante") or None, "ancre": ancre, "notes": _normaliser_notes(entree.get("notes")),
     }
     if archive:
         enregistrement["date_archivage"] = entree.get("date_archivage") or _maintenant()

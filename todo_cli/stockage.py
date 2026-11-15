@@ -45,6 +45,9 @@ def _normaliser_tache(brut):
     # Récurrence : valeur invalide ou absente => tâche non récurrente
     t['recurrence'] = _parser_recurrence(str(t['recurrence'])) if t.get('recurrence') else None
     t['suivante'] = t.get('suivante') or None  # id de l'occurrence créée à la complétion
+    # Échéance d'origine de la série (AAAA-MM-JJ) : les occurrences se calculent depuis elle, pas depuis
+    # la précédente, sinon un « 31 du mois » ramené au 28 en février resterait au 28 (voir _prochaine_echeance)
+    t['ancre'] = t['ancre'] if isinstance(t.get('ancre'), str) and t['ancre'] else None
     t['notes'] = _normaliser_notes(t.get('notes'))  # journal daté de la tâche (absent des anciennes tâches)
     return t
 
