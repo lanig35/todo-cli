@@ -689,10 +689,10 @@ python -m pytest
 
 ### Intégration continue
 
-Le workflow `.github/workflows/tests.yml` lance la suite sur Python 3.11, 3.12 et 3.13 (Debian 12 et 13)
+Le workflow `.github/workflows/tests.yml` lance la suite sur Python 3.13 (Debian 13)
 à chaque PR et à chaque push sur `main`. Un nouveau push sur une branche annule l'exécution précédente.
 Pour exiger un résultat vert avant la fusion : *Settings → Branches → Branch protection rules → Require
-status checks to pass* (cocher `pytest (Python 3.11)`, `3.12` et `3.13`).
+status checks to pass* (cocher `pytest (Python`3.13`).
 
 ## Stockage
 
