@@ -20,7 +20,7 @@ def test_anciennes_entrees_sans_champs_recents(todo):
 
 
 def test_toutes_les_commandes_sur_base_vide(todo):
-    for cmd in (["list"], ["stats"], ["restore"], ["clear-done"]):
+    for cmd in (["list"], ["stats"], ["restore"], ["archive", "--purge", "-y"]):
         assert todo(*cmd).code == 0, cmd
 
 

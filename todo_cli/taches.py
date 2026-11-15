@@ -437,26 +437,3 @@ def reporter_taches(ids, cible="+1d", note=None):
         sauvegarder_base()
     _afficher_bilan_lot(len(ids), nb_ok, "reportée(s)", echecs)
     return echecs == 0
-
-def nettoyer_terminees():
-    """Purge de masse ciblant exclusivement les tâches archivées (TERMINE)."""
-    if not _base_existe():
-        print(f" 🧹 {couleurs.CLR_DIM}Aucune tâche terminée à nettoyer.{couleurs.CLR_RESET}")
-        return
-
-    with dbm.open(DB_NAME, 'w') as db:
-        cles = []
-        for k in list(db.keys()):
-            try:
-                if _normaliser_tache(db[k])['statut'] == STATUT_TERMINE:
-                    cles.append(k)
-            except ValueError:
-                continue  # entrée illisible : on la laisse intacte
-        if not cles:
-            print(f" 🧹 {couleurs.CLR_DIM}Aucune tâche terminée à nettoyer.{couleurs.CLR_RESET}")
-            return
-        for k in cles:
-            del db[k]
-        journal.noter(count=len(cles), modifie=True)
-        print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} Nettoyage réussi ({len(cles)} supprimée(s)).")
-    sauvegarder_base()

@@ -84,15 +84,6 @@ def test_remove(todo):
     assert todo.taches() == {}
 
 
-def test_clear_done(todo):
-    todo("add", "A"); todo("add", "B")
-    todo("done", todo.id_de("A"))
-    r = todo("clear-done")
-    assert r.code == 0
-    assert [t["titre"] for t in todo.taches().values()] == ["B"]
-    assert "Aucune tâche terminée" in todo("clear-done").texte
-
-
 def test_reset_demande_confirmation(todo):
     todo("add", "A")
     assert "annulée" in todo("reset", entree="n\n").texte
