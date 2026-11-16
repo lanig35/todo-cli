@@ -253,8 +253,12 @@ Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`
 - Une tâche récurrente a toujours une échéance (aujourd'hui par défaut).
 - `done` termine la tâche et crée l'occurrence suivante, avec le même titre, la même description,
   la même priorité et les mêmes tags.
-- L'échéance suivante part de l'échéance d'origine (pas de dérive) et est toujours postérieure à
-  aujourd'hui : les occurrences manquées ne s'accumulent pas.
+- L'échéance suivante part de l'échéance d'origine de la série (pas de dérive) et est toujours postérieure
+  à aujourd'hui : les occurrences manquées ne s'accumulent pas. Un mois court n'entraîne pas de glissement :
+  « tous les mois à partir du 31 janvier » donne 28 février, **31** mars, 30 avril, **31** mai… (champ
+  `ancre` des tâches, en JSON). Modifier l'échéance (`edit --due`), la répétition ou reporter
+  (`postpone`) repart de la nouvelle date. Les séries commencées avant cette correction repartent de leur
+  échéance actuelle.
 - Terminer une tâche avant son échéance saute à l'occurrence suivante.
 - `undone` sur une tâche récurrente supprime l'occurrence qu'elle avait créée (refusé si celle-ci
   est déjà terminée).
