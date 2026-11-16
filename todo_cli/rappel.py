@@ -71,7 +71,7 @@ def _afficher_json(document):
     print(json.dumps(document, indent=2, ensure_ascii=False))
 
 
-def desactiver_rappels(fmt="table"):
+def desactiver_rappels(fmt="text"):
     _ecrire(REMIND_OFF, "")
     journal.noter(modifie=True, state="disabled")
     _ecrire(REMIND_STATUS, "")  # le résumé affiché dans l'invite disparaît tout de suite
@@ -80,7 +80,7 @@ def desactiver_rappels(fmt="table"):
     print(f" 🔕 Rappels désactivés. Pour les réactiver : {couleurs.CLR_BOLD}todo remind --enable{couleurs.CLR_RESET}")
 
 
-def activer_rappels(fmt="table"):
+def activer_rappels(fmt="text"):
     _supprimer(REMIND_OFF)
     journal.noter(modifie=True, state="enabled")
     _supprimer(REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
@@ -92,7 +92,7 @@ def activer_rappels(fmt="table"):
         print(f"    {couleurs.CLR_DIM}Attention : ils restent coupés ici par le réglage [remind] enabled ({origine}).{couleurs.CLR_RESET}")
 
 
-def afficher_etat_rappels(fmt="table"):
+def afficher_etat_rappels(fmt="text"):
     if fmt == "json":
         return _afficher_json(etat_rappels())
     if os.path.exists(REMIND_OFF):
@@ -207,7 +207,7 @@ def rappel_json(bientot=0):
     }
 
 
-def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False, fmt="table"):
+def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False, fmt="text"):
     """Affiche le rappel (ou, avec `ecrire_statut`, met à jour le résumé d'une ligne sans rien afficher)."""
     if fmt == "json":
         return _afficher_json(rappel_json(bientot))

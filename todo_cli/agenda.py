@@ -5,6 +5,7 @@ from . import couleurs
 from .affichage import _afficher_texte
 from .config import PRIORITES, STATUT_A_FAIRE
 from .dates import _libelle_recurrence, _parse_date
+from .formats import imprimer_plain, tableau
 from .stockage import _lire_taches
 
 _NOMS_JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
@@ -58,7 +59,7 @@ def _ligne_tache(t):
             f"{rec}{tags} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
 
 
-def afficher_agenda(debut=None, nb_jours=7, fmt="table", pager=True):
+def afficher_agenda(debut=None, nb_jours=7, fmt="text", pager=True):
     """Affiche l'agenda des `nb_jours` jours à partir de `debut` (aujourd'hui par défaut)."""
     aujourdhui = datetime.now().date()
     debut = debut or aujourdhui
@@ -72,6 +73,19 @@ def afficher_agenda(debut=None, nb_jours=7, fmt="table", pager=True):
             "jours": [{"date": j.isoformat(), "taches": ts} for j, ts in jours.items()],
             "plus_tard": len(plus_tard), "sans_echeance": len(sans),
         }, indent=2, ensure_ascii=False))
+        return
+
+    if fmt in ("plain", "table"):
+        # Une ligne par tâche : quand = « retard » ou la date du jour ; les jours sans tâche n'apparaissent pas
+        rangees = [("retard", t['id'][:8] if fmt == "table" else t['id'], t['priorite'], t['titre']) for t in retards]
+        rangees += [(j.isoformat(), t['id'][:8] if fmt == "table" else t['id'], t['priorite'], t['titre'])
+                    for j, ts in jours.items() for t in ts]
+        if fmt == "plain":
+            imprimer_plain(rangees)
+        elif rangees:
+            print(tableau(("QUAND", "ID", "PRIO", "TITRE"), rangees))
+        else:
+            print(f" {couleurs.CLR_DIM}Rien de prévu du {debut.isoformat()} au {fin.isoformat()}.{couleurs.CLR_RESET}")
         return
 
     lignes = [f"\n {couleurs.CLR_CYAN}─── 🗓️  AGENDA : {_libelle_jour(debut, aujourdhui)} → {_libelle_jour(fin, aujourdhui)} ───{couleurs.CLR_RESET}"]

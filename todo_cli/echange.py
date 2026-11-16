@@ -189,7 +189,7 @@ def _valider(entree, archive):
 
 
 # --------------------------------------------------------------------------- import : application
-def importer(source, mode="ajouter", simuler=False, confirmer=True, fmt="table"):
+def importer(source, mode="ajouter", simuler=False, confirmer=True, fmt="text"):
     """Importe un fichier JSON.
 
     mode : "ajouter" (défaut : les identifiants déjà présents sont ignorés), "mettre_a_jour" (le contenu

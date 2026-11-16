@@ -11,11 +11,34 @@ from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs, journal
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date
+from .formats import imprimer_plain, sortie_taches, tableau
 from .notes import lignes_notes
 from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 
-def afficher_tache(id_recherche, fmt="table"):
+def champs_tache(t, id_complet):
+    """Champs renseignés d'une tâche, pour `show --format plain|table` : (clé, libellé, valeur ou tuple de valeurs).
+
+    Les notes sont des tuples (date, texte). Les clés sont stables : c'est le contrat du format plain.
+    """
+    champs = [("id", "ID", id_complet), ("titre", "Titre", t['titre']),
+              ("statut", "Statut", "done" if t['statut'] == STATUT_TERMINE else "todo"),
+              ("priorite", "Priorité", t['priorite']), ("creee", "Créée le", t.get('date_creation') or ""),
+              ("echeance", "Échéance", t['date_echeance'] or "")]
+    if t['statut'] == STATUT_TERMINE:
+        champs.append(("terminee", "Terminée le", t['date_terminee'] or ""))
+    if t['recurrence']:
+        champs.append(("repetition", "Répétition", t['recurrence']))
+    if t['suivante']:
+        champs.append(("suivante", "Suivante", t['suivante']))
+    champs.append(("tags", "Tags", ",".join(t['tags'])))
+    champs.append(("description", "Description", t['description'] or ""))
+    for i, n in enumerate(t['notes'], start=1):
+        champs.append(("note", f"Note {i}", (n['date'], n['texte'])))
+    return champs
+
+
+def afficher_tache(id_recherche, fmt="text"):
     """Affiche le détail complet d'une tâche (lecture seule). `fmt="json"` : l'objet tel que `list --format json` le décrit."""
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à afficher.{couleurs.CLR_RESET}")
@@ -36,6 +59,14 @@ def afficher_tache(id_recherche, fmt="table"):
     if fmt == "json":
         t['id'] = id_complet
         print(json.dumps(t, indent=2, ensure_ascii=False))
+        return True
+
+    if fmt in ("plain", "table"):
+        champs = champs_tache(t, id_complet)
+        if fmt == "plain":
+            imprimer_plain(([c] + ([v] if isinstance(v, str) else list(v))) for c, _, v in champs)
+        else:
+            print(tableau(("CHAMP", "VALEUR"), [(lib, v if isinstance(v, str) else " · ".join(v)) for _, lib, v in champs]))
         return True
 
     maintenant = datetime.now().date()
@@ -108,7 +139,7 @@ def _texte_recherche(t):
     """Texte parcouru par --search : titre, description, tags et notes."""
     return (t['titre'] + " " + t['description'] + " " + " ".join(t['tags']) + " " + " ".join(n['texte'] for n in t['notes'])).lower()
 
-def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="table", tag_filtre=None,
+def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text", tag_filtre=None,
                   prio_filtre=None, retard=False, aujourdhui=False, retards_en_premier=True,
                   limite=None, debut=None, pager=True, avant=None, apres=None):
     """Extrait, filtre, trie et met en forme l'ensemble des enregistrements actifs.
@@ -128,7 +159,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
     if not toutes:
         if fmt == "json":
             print("[]")
-        else:
+        elif fmt != "plain":
             print(f" 📋 {couleurs.CLR_DIM}La liste est vide !{couleurs.CLR_RESET}")
         return
 
@@ -155,7 +186,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
     if not liste_taches:
         if fmt == "json":
             print("[]")
-        else:
+        elif fmt != "plain":
             print(f" {couleurs.CLR_DIM}Aucune tâche ne correspond à vos critères.{couleurs.CLR_RESET}")
         return
 
@@ -201,7 +232,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
     if not page:
         if fmt == "json":
             print("[]")
-        else:
+        elif fmt != "plain":
             print(f" {couleurs.CLR_DIM}Aucune tâche à partir de la position {indice_debut + 1} : la liste n'en compte que {total}.{couleurs.CLR_RESET}")
         return
 
@@ -210,7 +241,11 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
         print(json.dumps(page, indent=2, ensure_ascii=False))
         return
 
-    # --- MODE AFFICHAGE TABLEAU ANSI STYLISÉ ---
+    # --- plain (une ligne par tâche, pour les pipes) et table (tableau aligné, sans couleur) ---
+    if sortie_taches(fmt, page):
+        return
+
+    # --- MODE AFFICHAGE TEXTE (ANSI, STYLISÉ) ---
     lignes = [f"\n {couleurs.CLR_CYAN}─── 📋 MA TO-DO LIST ───{couleurs.CLR_RESET}"]
     largeur = len(str(indice_debut + len(page)))  # largeur de la numérotation (alignement)
 
@@ -242,7 +277,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="tabl
 
     _afficher_texte("\n".join(lignes), pager)
 
-def afficher_stats(avec_archive=False):
+def afficher_stats(avec_archive=False, fmt="text"):
     """Agrège les métadonnées pour générer des indicateurs de performance et des graphiques texte.
 
     avec_archive : compte aussi les tâches archivées (toutes terminées) dans le volume, la
@@ -253,7 +288,10 @@ def afficher_stats(avec_archive=False):
     taches = taches + archivees
     total = len(taches)
     if total == 0:
-        print(f" 📊 {couleurs.CLR_DIM}Aucune statistique disponible. La base est vide.{couleurs.CLR_RESET}")
+        if fmt == "json":
+            print(json.dumps({"total": 0}, indent=2))
+        elif fmt != "plain":
+            print(f" 📊 {couleurs.CLR_DIM}Aucune statistique disponible. La base est vide.{couleurs.CLR_RESET}")
         return
 
     faits = 0
@@ -285,6 +323,25 @@ def afficher_stats(avec_archive=False):
             jours = (date_obj - maintenant).days
             if jours < 0: retards += 1
             elif jours == 0: aujourdhui += 1
+
+    if fmt in ("json", "plain", "table"):
+        top = Counter(tous_les_tags).most_common(3)
+        mesures = [("total", "Tâches au total", total)]
+        if avec_archive:
+            mesures.append(("archivees", "dont archivées", len(archivees)))
+        mesures += [("terminees", "Terminées", faits), ("pourcentage_termine", "Terminées (%)", int((faits / total) * 100)),
+                    ("terminees_aujourdhui", "Terminées aujourd'hui", faits_aujourdhui),
+                    ("terminees_7_jours", "Terminées sur 7 jours", faits_7_jours)]
+        mesures += [(f"priorite_{p}", f"À faire, priorité {p}", prio_counts[p]) for p in PRIORITES[::-1]]
+        mesures += [("en_retard", "En retard", retards), ("pour_aujourdhui", "Pour aujourd'hui", aujourdhui)]
+        mesures += [(f"tag.{tg}", f"Tag #{tg}", c) for tg, c in top]
+        if fmt == "json":
+            print(json.dumps({cle: v for cle, _, v in mesures}, indent=2, ensure_ascii=False))
+        elif fmt == "plain":
+            imprimer_plain((cle, v) for cle, _, v in mesures)
+        else:
+            print(tableau(("INDICATEUR", "VALEUR"), [(lib, v) for _, lib, v in mesures]))
+        return
 
     # Rendu de la barre de complétion horizontale
     pct_accompli = int((faits / total) * 100)

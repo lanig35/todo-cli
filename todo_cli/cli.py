@@ -15,6 +15,7 @@ from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, 
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
 from .echange import exporter, importer
+from .formats import FORMATS, resoudre as resoudre_format
 from .notes import commande_note
 from .taches import ajouter_tache, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
@@ -100,7 +101,7 @@ def _args_list(p):
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                              help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     p.add_argument('--sort', choices=['alpha', 'status', 'priority', 'due'], help='Critère de tri')
-    p.add_argument('--format', choices=['table', 'json'], default='table', help='Structure de la sortie textuelle')
+    p.add_argument('--format', choices=FORMATS, default=None, help='Structure de la sortie textuelle')
 
 
 
@@ -120,7 +121,7 @@ def _args_edit(p):
 
 def _args_show(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    p.add_argument('--format', choices=['table', 'json'], default='table',
+    p.add_argument('--format', choices=FORMATS, default=None,
                              help="Format de sortie (json : un objet, comme un élément de `list --format json`, compatible jq)")
 
 
@@ -144,7 +145,7 @@ def _args_import(p):
     mode_import.add_argument('--replace', action='store_true', help="Vide la liste et l'archive avant d'importer (confirmation demandée)")
     p.add_argument('--dry-run', action='store_true', help="Indique ce qui serait importé, sans rien modifier")
     p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation (avec --replace)")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format du bilan (json : compatible jq)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format du bilan (json : compatible jq)")
 
 
 
@@ -185,7 +186,7 @@ def _args_agenda(p):
                                help="Premier jour affiché (défaut : aujourd'hui ; mêmes formats que --due)")
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                                help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
+    p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie')
 
 
 def _args_next(p):
@@ -193,7 +194,7 @@ def _args_next(p):
                              help='Nombre de tâches affichées (défaut : 1, ou [next] count)')
     p.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
     p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne considérer que cette priorité')
-    p.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
+    p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie')
 
 
 def _args_remind(p):
@@ -209,7 +210,7 @@ def _args_remind(p):
     action.add_argument('--disable', action='store_true', help='Désactive les rappels (remind et --write-status deviennent muets)')
     action.add_argument('--enable', action='store_true', help='Réactive les rappels')
     action.add_argument('--status', action='store_true', help='Indique si les rappels sont activés')
-    p.add_argument('--format', choices=['table', 'json'], default='table',
+    p.add_argument('--format', choices=FORMATS, default=None,
                                help="Format de sortie : json émet toujours un document (même sans rien à signaler), "
                                     "sans limite de tâches ; avec --enable, --disable ou --status, il décrit l'état des rappels")
 
@@ -226,7 +227,7 @@ def _args_archive(p):
     p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                                 help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie de --list")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie de --list")
 
 
 def _args_unarchive(p):
@@ -235,6 +236,7 @@ def _args_unarchive(p):
 
 def _args_stats(p):
     p.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
+    p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (voir `todo --help`)')
 
 
 def _args_reset(p):
@@ -251,7 +253,7 @@ def _args_config(p):
                    help="show (ou list) : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
                         "init : crée un fichier modèle commenté")
     p.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie (json : compatible jq, pour show, path et init)')
+    p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (json : compatible jq, pour show, path et init)')
 
 
 # --- Groupes ``note``, ``archive`` et ``reminder`` : une feuille par action -------------------------------------
@@ -261,7 +263,7 @@ def _args_note_ajouter(p):
 
 def _args_note_lister(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 def _args_note_modifier(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
@@ -281,7 +283,7 @@ def _args_archive_lister(p):
     p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags)")
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                    help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie")
 
 def _args_archive_purger(p):
     p.add_argument('ids', nargs='*', help="Identifiants (ou préfixes) à supprimer de l'archive ; sans identifiant : toute l'archive (ou --older-than)")
@@ -290,7 +292,7 @@ def _args_archive_purger(p):
     p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation")
 
 def _args_format(p):
-    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 
 def _args_note_ancien(p):
@@ -299,11 +301,11 @@ def _args_note_ancien(p):
     groupe_note = p.add_mutually_exclusive_group()
     groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
     groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note ID`)")
-    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
-_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, yes=False, pager=None, format='table')
+_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, yes=False, pager=None, format=None)
 
 # (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
 _GROUPES = [
@@ -319,10 +321,10 @@ _GROUPES = [
         ('next', 'next', _args_next, 'Afficher la ou les prochaines tâches à traiter', {}),
     ]),
     ('note', "Notes attachées aux tâches", [
-        ('add', 'note', _args_note_ajouter, 'Ajouter une note à une tâche', dict(edit=None, delete=None, format='table')),
+        ('add', 'note', _args_note_ajouter, 'Ajouter une note à une tâche', dict(edit=None, delete=None, format=None)),
         ('list', 'note', _args_note_lister, "Lister les notes d'une tâche", dict(texte=[], edit=None, delete=None)),
-        ('edit', 'note', _args_note_modifier, "Remplacer le texte d'une note", dict(delete=None, format='table')),
-        ('delete', 'note', _args_note_supprimer, 'Supprimer une note', dict(texte=[], edit=None, format='table')),
+        ('edit', 'note', _args_note_modifier, "Remplacer le texte d'une note", dict(delete=None, format=None)),
+        ('delete', 'note', _args_note_supprimer, 'Supprimer une note', dict(texte=[], edit=None, format=None)),
     ]),
     ('archive', "Archive des tâches terminées", [
         ('add', 'archive', _args_archive_ajouter, 'Archiver les tâches terminées', _ARCHIVE_DEFAUTS),
@@ -405,7 +407,11 @@ def _commande_visee(mots, ancien):
 
 def _construire(ancien):
     """Construit le parseur : arbre de groupes (défaut) ou syntaxe plate 1.x (dépréciée)."""
-    parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
+    parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.",
+                      epilog="Formats de sortie (--format, réglage [general] format, variable TODO_FORMAT) : "
+                             "text (affichage décoré), table (tableau aligné), plain (une ligne par enregistrement, "
+                             "champs séparés par des tabulations, pour grep/cut/awk), json (compatible jq). "
+                             "Par défaut (auto) : text dans un terminal, plain dans un pipe.")
     parser.add_argument('--version', action='version', version=f"todo {__version__}")
     tous = [parser]
     sub = parser.add_subparsers(dest="groupe", metavar="COMMANDE", help="Groupes de commandes et raccourcis")
@@ -485,6 +491,8 @@ def main():
         args.action = 'show'
     journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
+    if hasattr(args, 'format'):     # option > TODO_FORMAT > fichier > auto ; auto : text dans un terminal, plain sinon
+        args.format = resoudre_format(reglages.obtenir('general', 'format', args.format))
 
     # Moteur d'aiguillage vers l'action requise.
     # `succes` passe à False si un identifiant de done / remove / postpone n'a pas pu être traité :
@@ -622,7 +630,7 @@ def main():
         else:
             afficher_config(args.format)
     elif args.commande == 'stats':
-        afficher_stats(args.with_archive)
+        afficher_stats(args.with_archive, args.format)
     elif args.commande == 'reset':
         reinitialiser_base(args.include_archive)
     else:

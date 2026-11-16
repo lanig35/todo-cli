@@ -12,6 +12,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
 - Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
+- Formats de sortie `text`, `table`, `plain` (pipes) et `json`, choisis automatiquement selon le terminal
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
@@ -155,7 +156,7 @@ Options de `list` :
 | `--overdue-first`, `--no-overdue-first` | regroupe (par défaut) ou non les retards en tête |
 | `--limit N`, `--start N` | tranche de la liste (`--start` commence à 1, comme la numérotation affichée) |
 | `--pager`, `--no-pager` | utilise ou non un pager (par défaut : oui, si l'affichage dépasse l'écran) |
-| `--format table\|json` | format de sortie |
+| `--format auto\|text\|table\|plain\|json` | format de sortie (voir « Formats de sortie ») |
 
 Notes :
 
@@ -427,6 +428,44 @@ sans tâche (« rien de prévu »). Au sein d'un jour, la priorité haute passe 
 - `--days` va de 1 à 366 ; `--from` accepte les mêmes formats que `--due`. Le pager automatique et
   `--no-pager` fonctionnent comme pour `list`.
 
+### Formats de sortie
+
+`--format` choisit la forme de la sortie de `list`, `show`, `next`, `agenda`, `archive list`, `note list` et
+`report stats` :
+
+| Format | Pour | Contenu |
+|---|---|---|
+| `text` | lire dans un terminal | l'affichage décoré (émojis, couleurs, titres, pied de page) |
+| `table` | lire, de façon compacte | un tableau encadré aux colonnes alignées, sans couleur ; la colonne la plus large est tronquée (`…`) pour tenir dans le terminal |
+| `plain` | enchaîner des commandes | une ligne par enregistrement, champs séparés par une **tabulation**, sans couleur, titre ni pied de page ; rien si le résultat est vide |
+| `json` | scripts et `jq` | documents JSON (inchangé) |
+
+**Choix automatique** : sans `--format`, la sortie est en `text` dans un terminal et en `plain` dans un pipe
+ou une redirection. Le défaut se règle par `[general] format` (`auto`, `text`, `table` ou `plain`) ou la
+variable `TODO_FORMAT` ; l'option l'emporte sur les deux.
+
+```bash
+todo list --status todo | grep -i facture                      # pipe : plain automatiquement
+todo list | cut -f1,6                                          # identifiant et titre
+todo list --tag pro | awk -F'\t' '$3 == "high" {print $1}' | xargs todo done
+todo show a1b2c3 | grep '^echeance'
+todo list --format table                                       # tableau dans le terminal
+```
+
+Le format `plain` est un contrat stable (colonnes et ordre ne changent pas) :
+
+- `list`, `next`, `archive list` : `id` (complet), `statut` (`todo`/`done`), `priorite`, `echeance`
+  (vide si aucune), `tags` (séparés par des virgules), `titre`. La description n'y figure pas (voir `json`).
+- `show` : une ligne `clé<TAB>valeur` par champ renseigné (`id`, `titre`, `statut`, `priorite`, `creee`,
+  `echeance`, `terminee`, `repetition`, `suivante`, `tags`, `description`) et une ligne
+  `note<TAB>date<TAB>texte` par note.
+- `agenda` : `quand` (`retard` ou la date), `id`, `priorite`, `titre` ; les jours sans tâche n'apparaissent pas.
+- `note list` : `numéro`, `date`, `texte`. `report stats` : `indicateur<TAB>valeur`.
+- Les tabulations et sauts de ligne contenus dans un titre ou une description sont remplacés par une espace.
+
+Les autres commandes (`config`, `reminder`, `data import`…) n'ont pas de rendu tabulaire : `table` et `plain`
+y donnent le même affichage que `text`, et `json` reste disponible quand elles le prévoient.
+
 ### Archivage
 
 Les tâches terminées peuvent être rangées hors de la liste, sans être supprimées :
@@ -533,6 +572,7 @@ Le fichier est `$TODO_CONFIG` s'il est défini, sinon `$XDG_CONFIG_HOME/todo/con
 ```ini
 [general]
 color = auto            # auto | always | never
+format = auto           # auto | text | table | plain
 pager = true
 
 [list]
@@ -552,6 +592,7 @@ soon = 0
 |---|---|---|---|---|
 | `general` | `db_dir` | `~/.local/share/todo` | `TODO_DB_DIR` | — |
 | `general` | `color` | `auto` | `TODO_COLOR` (puis `NO_COLOR`) | `--color`, `--no-color` |
+| `general` | `format` | `auto` | `TODO_FORMAT` | `--format` |
 | `general` | `pager` | `true` | `TODO_PAGER` | `--pager`, `--no-pager` |
 | `general` | `keep_backups` | `5` (minimum 2) | `TODO_KEEP_BACKUPS` | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
@@ -737,6 +778,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
+| `formats.py` | formats de sortie : text, table, plain, json, choix automatique |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
 | `dates.py` | dates relatives, récurrences, libellés d'échéance |
 | `stockage.py` | lecture de la base DBM, normalisation, résolution des identifiants |
@@ -792,7 +834,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 2.0.0
+todo --version      # todo 2.1.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un

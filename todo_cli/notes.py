@@ -9,6 +9,7 @@ import json
 import sys
 from datetime import datetime
 from .config import DB_NAME
+from .formats import imprimer_plain, tableau
 from . import couleurs, journal
 from .sauvegardes import sauvegarder_base
 from .stockage import _base_existe, _normaliser_tache, _resoudre_id
@@ -61,7 +62,7 @@ def _erreur(raison, message, **champs):
     return False
 
 
-def commande_note(id_recherche, mots, fmt="table", modifier=None, supprimer=None):
+def commande_note(id_recherche, mots, fmt="text", modifier=None, supprimer=None):
     """Ajoute, liste, modifie (`modifier` = numéro) ou supprime (`supprimer` = numéro) les notes d'une tâche.
 
     `todo note ID texte…` ajoute ; `todo note ID` liste ; `--edit N texte…` remplace le texte de la note N
@@ -122,6 +123,10 @@ def commande_note(id_recherche, mots, fmt="table", modifier=None, supprimer=None
                   f"({total} au total).")
     elif fmt == "json":
         print(json.dumps({"id": id_complet, "titre": t['titre'], "notes": t['notes']}, indent=2, ensure_ascii=False))
+    elif fmt == "plain":
+        imprimer_plain((i, n['date'], n['texte']) for i, n in enumerate(t['notes'], start=1))
+    elif fmt == "table" and t['notes']:
+        print(tableau(("N°", "DATE", "NOTE"), [(i, n['date'], n['texte']) for i, n in enumerate(t['notes'], start=1)]))
     elif not t['notes']:
         print(f" {couleurs.CLR_DIM}Aucune note pour '{t['titre']}'. Ajout : todo note {id_complet[:8]} \"texte\"{couleurs.CLR_RESET}")
     else:
