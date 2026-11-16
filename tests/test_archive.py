@@ -303,5 +303,6 @@ def test_pager_archive(garni, tmp_path):
 
 
 def test_commandes_dans_l_aide(todo):
-    sortie = todo("--help").out
-    assert "archive" in sortie and "unarchive" in sortie
+    assert "archive" in todo("--help").out
+    sortie = todo("archive", "--help").out
+    assert "restore" in sortie and "purge" in sortie

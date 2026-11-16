@@ -49,6 +49,46 @@ Dans les exemples ci-dessous, `todo` désigne `./todo.py` ou le lien créé ci-d
 
 ## Utilisation
 
+## Organisation des commandes
+
+Depuis la 2.0, les commandes sont rangées en **groupes** (`todo GROUPE ACTION`, comme `arduino-cli`), et les
+plus courantes ont un **raccourci** de premier niveau.
+
+| Groupe | Actions |
+|---|---|
+| `task` | `add`, `list`, `show`, `edit`, `done`, `undone`, `remove`, `postpone`, `next` |
+| `note` | `add`, `list`, `edit`, `delete` |
+| `archive` | `add`, `list`, `purge`, `restore` |
+| `reminder` | `check`, `enable`, `disable`, `status` |
+| `report` | `stats`, `agenda` |
+| `config` | `show` (ou `list`), `path`, `init` |
+| `admin` | `undo`, `restore`, `reset`, `seed` |
+| `data` | `export`, `import` |
+
+Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo` (= `task add`, `task list`, … `report agenda`,
+`admin undo`). `todo GROUPE --help` détaille un groupe.
+
+### Migration depuis la 1.x
+
+Les anciennes commandes fonctionnent encore, avec un avertissement sur la sortie d'erreur (leur suppression est
+prévue en 3.0). `TODO_NO_DEPRECATION=1` masque l'avertissement, par exemple dans un script ou une crontab.
+
+| 1.x | 2.0 |
+|---|---|
+| `edit`, `undone`, `remove`, `postpone` | `task edit`, `task undone`, `task remove`, `task postpone` |
+| `note ID texte` / `note ID` | `note add ID texte` / `note list ID` |
+| `note ID --edit N texte` / `--delete N` | `note edit ID N texte` / `note delete ID N` |
+| `archive` / `archive --list` / `--search` | `archive add` / `archive list` / `archive list --search` |
+| `archive --purge` | `archive purge` |
+| `unarchive` | `archive restore` |
+| `remind` | `reminder check` |
+| `remind --enable` / `--disable` / `--status` | `reminder enable` / `disable` / `status` |
+| `stats` | `report stats` |
+| `reset`, `restore`, `seed` | `admin reset`, `admin restore`, `admin seed` |
+| `export`, `import` | `data export`, `data import` |
+
+Les sorties (`--format json`), les codes de sortie, les réglages et le vocabulaire du journal sont inchangés.
+
 ### Ajouter une tâche
 
 ```bash
@@ -138,10 +178,10 @@ todo show a1b2c3            # détail complet d'une tâche
 todo show a1b2c3 --format json | jq '.notes[].texte'   # le même, en JSON (un objet, comme dans `list --format json`)
 todo done a1b2c3            # terminer (enregistre la date de complétion)
 todo done a1b2c3 d4e5f6     # ... ou plusieurs tâches d'un coup
-todo undone a1b2c3          # rouvrir
-todo edit a1b2c3 --title "Nouveau titre" --prio low --due +3d --tags "pro,dev"
-todo edit a1b2c3 --due none --tags "" --desc ""    # supprimer échéance, tags et description
-todo remove a1b2c3          # supprimer (un ou plusieurs identifiants)
+todo task undone a1b2c3          # rouvrir
+todo task edit a1b2c3 --title "Nouveau titre" --prio low --due +3d --tags "pro,dev"
+todo task edit a1b2c3 --due none --tags "" --desc ""    # supprimer échéance, tags et description
+todo task remove a1b2c3          # supprimer (un ou plusieurs identifiants)
 ```
 
 #### Plusieurs tâches à la fois
@@ -150,7 +190,7 @@ todo remove a1b2c3          # supprimer (un ou plusieurs identifiants)
 
 ```bash
 todo done a1b2c3 d4e5f6 9a8b7c
-todo remove a1b2c3 d4e5f6
+todo task remove a1b2c3 d4e5f6
 ```
 
 - Tous les préfixes sont résolus **avant** la moindre modification. Un identifiant inconnu ou ambigu
@@ -170,16 +210,16 @@ Une tâche a une `description` (ce qu'il faut faire) et des **notes** : un journ
 seul, de ce qui se passe autour d'elle.
 
 ```bash
-todo note a1b2c3 "appelé le client, rappeler jeudi"   # ajoute une note (500 caractères au plus)
-todo note a1b2c3                                       # liste les notes de la tâche
-todo note a1b2c3 --format json | jq -r '.notes[].texte'
-todo note a1b2c3 --edit 2 "texte corrigé"               # corrige la note n°2 (date conservée)
-todo note a1b2c3 --delete 1                            # supprime la note n°1
+todo note add a1b2c3 "appelé le client, rappeler jeudi"   # ajoute une note (500 caractères au plus)
+todo note list a1b2c3                                       # liste les notes de la tâche
+todo note list a1b2c3 --format json | jq -r '.notes[].texte'
+todo note edit a1b2c3 2 "texte corrigé"               # corrige la note n°2 (date conservée)
+todo note delete a1b2c3 1                            # supprime la note n°1
 todo done a1b2c3 -m "validé par Paul"                  # -m / --note : action + note en une commande
-todo undone a1b2c3 -m "le client a rappelé"
-todo postpone a1b2c3 d4e5f6 --to +3d -m "client absent"
-todo edit a1b2c3 -m "à traiter avec Julie"             # une note seule suffit pour edit
-todo remove a1b2c3 -m "doublon de a9f8e7"
+todo task undone a1b2c3 -m "le client a rappelé"
+todo task postpone a1b2c3 d4e5f6 --to +3d -m "client absent"
+todo task edit a1b2c3 -m "à traiter avec Julie"             # une note seule suffit pour edit
+todo task remove a1b2c3 -m "doublon de a9f8e7"
 ```
 
 - Chaque note enregistre sa date, son texte et l'**action** qui l'a produite (`note`, `done`,
@@ -206,11 +246,11 @@ todo remove a1b2c3 -m "doublon de a9f8e7"
 ### Reporter une échéance
 
 ```bash
-todo postpone a1b2c3                  # +1 jour (valeur par défaut)
-todo postpone a1b2c3 d4e5f6 --to +2d  # plusieurs tâches, de 2 jours
-todo postpone a1b2c3 --to +1w         # une semaine
-todo postpone a1b2c3 --to lundi       # date fixe
-todo postpone a1b2c3 --to 2026-12-01  # date fixe
+todo task postpone a1b2c3                  # +1 jour (valeur par défaut)
+todo task postpone a1b2c3 d4e5f6 --to +2d  # plusieurs tâches, de 2 jours
+todo task postpone a1b2c3 --to +1w         # une semaine
+todo task postpone a1b2c3 --to lundi       # date fixe
+todo task postpone a1b2c3 --to 2026-12-01  # date fixe
 ```
 
 `--to` accepte :
@@ -244,8 +284,8 @@ Les dates relatives vers le passé (`hier`, `-3d`) ne sont pas encore prises en 
 
 ```bash
 todo add "Relever les compteurs" --repeat monthly --due 2026-12-01
-todo edit a1b2c3 --repeat 2w        # modifier la récurrence
-todo edit a1b2c3 --repeat none      # l'arrêter
+todo task edit a1b2c3 --repeat 2w        # modifier la récurrence
+todo task edit a1b2c3 --repeat none      # l'arrêter
 ```
 
 Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`, `1y`.
@@ -267,12 +307,12 @@ Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`
 ### Rappel des tâches en retard
 
 ```bash
-todo remind                 # retards et tâches du jour ; rien d'affiché s'il n'y en a pas
-todo remind --soon 3        # + les échéances des 3 prochains jours
-todo remind --limit 10      # 10 tâches listées au plus (5 par défaut)
-todo remind --once-a-day    # une seule fois par jour
-todo remind --write-status  # n'affiche rien ; met à jour un résumé d'une ligne (pour cron)
-todo remind --disable       # coupe les rappels ; --enable les réactive ; --status indique l'état
+todo reminder check                 # retards et tâches du jour ; rien d'affiché s'il n'y en a pas
+todo reminder check --soon 3        # + les échéances des 3 prochains jours
+todo reminder check --limit 10      # 10 tâches listées au plus (5 par défaut)
+todo reminder check --once-a-day    # une seule fois par jour
+todo reminder check --write-status  # n'affiche rien ; met à jour un résumé d'une ligne (pour cron)
+todo reminder disable       # coupe les rappels ; `reminder enable` les réactive ; `reminder status` indique l'état
 ```
 
 `remind` est **silencieuse quand il n'y a rien à signaler** et ne modifie jamais les tâches (ni
@@ -290,7 +330,7 @@ ou les scripts :
 
 ```bash
 if [[ $- == *i* ]] && command -v todo >/dev/null; then
-    todo remind --once-a-day
+    todo reminder check --once-a-day
 fi
 ```
 
@@ -302,10 +342,10 @@ messagerie n'est installé (cas d'une Debian de base). Deux usages :
 ```cron
 # crontab -e
 # 1. Mise à jour du résumé d'une ligne toutes les 15 minutes (aucune sortie, donc aucun e-mail)
-*/15 * * * *  /home/vous/bin/todo remind --write-status
+*/15 * * * *  /home/vous/bin/todo reminder check --write-status
 
 # 2. Rappel complet par e-mail local, en semaine à 9 h (nécessite un serveur de messagerie local)
-0 9 * * 1-5   /home/vous/bin/todo remind
+0 9 * * 1-5   /home/vous/bin/todo reminder check
 ```
 
 Utilisez le chemin complet de `todo`, `cron` n'ayant pas votre `PATH`. Si vous avez redirigé le stockage
@@ -322,9 +362,9 @@ PS1='$(cat ~/.local/share/todo/remind_status 2>/dev/null)\u@\h:\w\$ '
 
 #### Désactiver les rappels
 
-- `todo remind --disable` coupe les rappels de façon durable : `remind`, `--once-a-day` et
+- `todo reminder disable` coupe les rappels de façon durable : `remind`, `--once-a-day` et
   `--write-status` deviennent muets, et le résumé de l'invite est vidé tout de suite. Les lignes de
-  `~/.bashrc` et de la crontab peuvent rester en place. `todo remind --enable` les remet en route ;
+  `~/.bashrc` et de la crontab peuvent rester en place. `todo reminder enable` les remet en route ;
   `--status` indique l'état.
 - La variable d'environnement `TODO_NO_REMIND` (non vide) coupe les rappels dans une session
   seulement, par exemple `TODO_NO_REMIND=1 bash`. Le réglage `[remind] enabled = false` du fichier de
@@ -336,13 +376,13 @@ hors de la base : ils ne sont ni sauvegardés ni modifiés par `restore` ou `res
 
 #### Sortie JSON (jq)
 
-`todo remind --format json` émet **toujours** un document JSON, même quand il n'y a rien à signaler
+`todo reminder check --format json` émet **toujours** un document JSON, même quand il n'y a rien à signaler
 (le mode texte, lui, reste muet) : un script peut donc l'analyser sans cas particulier. Le nombre de
 tâches n'est pas limité (`--limit` ne s'applique qu'au texte) ; `--soon N` fonctionne comme en texte.
 
 ```bash
-todo remind --format json | jq '.compteurs.retards'
-todo remind --format json --soon 3 | jq -r '.retards[] | "\(.jours_restants)j \(.titre)"'
+todo reminder check --format json | jq '.compteurs.retards'
+todo reminder check --format json --soon 3 | jq -r '.retards[] | "\(.jours_restants)j \(.titre)"'
 ```
 
 Le document contient `date`, `actif`, `desactive_par` (la liste des interrupteurs qui coupent les
@@ -392,14 +432,14 @@ sans tâche (« rien de prévu »). Au sein d'un jour, la priorité haute passe 
 Les tâches terminées peuvent être rangées hors de la liste, sans être supprimées :
 
 ```bash
-todo archive                      # archive toutes les tâches terminées
-todo archive --older-than 30d     # seulement celles terminées depuis au moins 30 jours
-todo archive a1b2c3 d4e5f6        # ou des tâches précises (elles doivent être terminées)
-todo archive --list               # consulter l'archive
-todo archive --search facture     # chercher dans l'archive (titre, description, tags)
-todo unarchive a1b2c3             # remettre une tâche dans la liste
-todo archive --purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce qui date de plus d'un an
-todo stats --with-archive         # statistiques incluant l'historique archivé
+todo archive add                      # archive toutes les tâches terminées
+todo archive add --older-than 30d     # seulement celles terminées depuis au moins 30 jours
+todo archive add a1b2c3 d4e5f6        # ou des tâches précises (elles doivent être terminées)
+todo archive list               # consulter l'archive
+todo archive list --search facture     # chercher dans l'archive (titre, description, tags)
+todo archive restore a1b2c3             # remettre une tâche dans la liste
+todo archive purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce qui date de plus d'un an
+todo report stats --with-archive         # statistiques incluant l'historique archivé
 ```
 
 - Les tâches archivées disparaissent de `list`, `agenda` et `stats` (sauf `--with-archive`).
@@ -414,8 +454,8 @@ todo stats --with-archive         # statistiques incluant l'historique archivé
   un cron) ; la liste courante n'est jamais touchée. Une sauvegarde suit, donc `todo undo` rétablit la
   purge. `--purge` ne se combine pas avec `--list` ni `--search`.
   Cette commande remplace l'ancien `clear-done` (qui supprimait d'un coup toutes les tâches terminées
-  de la liste) : archivez-les d'abord (`todo archive`), puis purgez l'archive selon l'âge voulu ; pour
-  supprimer des tâches précises sans passer par l'archive, `todo remove`.
+  de la liste) : archivez-les d'abord (`todo archive add`), puis purgez l'archive selon l'âge voulu ; pour
+  supprimer des tâches précises sans passer par l'archive, `todo task remove`.
 - Seules les tâches terminées s'archivent. Pour une tâche récurrente, l'occurrence suivante reste
   dans la liste ; rouvrir l'ancienne (`undone`) demande de la récupérer d'abord avec `unarchive`.
 - Archive et liste sont **sauvegardées et restaurées ensemble** : `restore` ramène les deux à l'état
@@ -427,7 +467,7 @@ todo stats --with-archive         # statistiques incluant l'historique archivé
 ### Statistiques
 
 ```bash
-todo stats
+todo report stats
 ```
 
 Progression, charge active par priorité, tags les plus utilisés, retards et échéances du jour,
@@ -466,7 +506,7 @@ Il couvre toutes les commandes qui modifient les tâches (`add`, `done`, `edit`,
 `postpone`, `archive`, `restore`, `reset`…).
 
 - Il ne remonte que d'**un** pas : relancer `undo` revient à l'état de départ au lieu de remonter
-  plus loin. Pour revenir plus en arrière, utilisez `todo restore` (5 sauvegardes conservées).
+  plus loin. Pour revenir plus en arrière, utilisez `todo admin restore` (5 sauvegardes conservées).
 - Il n'y a rien à annuler tant qu'une seule modification a été faite (aucun état antérieur) ;
   la commande renvoie alors le code de sortie `1`.
 - Après un `reset`, `undo` rétablit les tâches vidées.
@@ -539,7 +579,7 @@ soon = 0
 - **Couleurs** : l'ordre est `--color` > `TODO_COLOR` > `NO_COLOR` > fichier > auto. `NO_COLOR` étant
   une variable d'environnement, elle l'emporte sur `color = always` du fichier.
 - **Rappels** : `enabled = false` (ou `TODO_REMIND_ENABLED=false`) coupe les rappels, comme
-  `todo remind --disable` et `TODO_NO_REMIND`. Les interrupteurs se **cumulent** : un seul suffit pour
+  `todo reminder disable` et `TODO_NO_REMIND`. Les interrupteurs se **cumulent** : un seul suffit pour
   couper, sauf que `TODO_REMIND_ENABLED=true` l'emporte sur `enabled = false` du fichier.
 - **Sortie JSON** : `todo config --format json` fonctionne pour `show` (réglages et origines),
   `path` (`{"fichier", "existe"}`) et `init` (`{"fichier", "cree", "ecrase"}` ; en cas d'échec, le
@@ -616,11 +656,11 @@ L'export est un fichier JSON lisible, indépendant du backend DBM : c'est le moy
 tâches d'une machine à l'autre, ou d'en garder une copie hors du dossier de stockage.
 
 ```bash
-todo export sauvegarde.json            # tâches + archive, dans un fichier (refus d'écraser sans --force)
-todo export | jq '.taches[] | .titre'  # sans fichier (ou `-`) : sortie standard
-todo export --no-archive > actives.json
-todo import sauvegarde.json            # ajoute ce qui manque
-todo import sauvegarde.json --dry-run  # montre ce qui serait importé, sans rien modifier
+todo data export sauvegarde.json            # tâches + archive, dans un fichier (refus d'écraser sans --force)
+todo data export | jq '.taches[] | .titre'  # sans fichier (ou `-`) : sortie standard
+todo data export --no-archive > actives.json
+todo data import sauvegarde.json            # ajoute ce qui manque
+todo data import sauvegarde.json --dry-run  # montre ce qui serait importé, sans rien modifier
 ```
 
 Le document contient `format` (`todo-cli`), `version`, `exporte_le`, `compteurs`, et les listes `taches` et
@@ -649,16 +689,16 @@ Le document contient `format` (`todo-cli`), `version`, `exporte_le`, `compteurs`
 Une sauvegarde est créée après chaque modification ; les 5 plus récentes sont conservées.
 
 ```bash
-todo restore             # liste les sauvegardes (1 = la plus récente)
-todo restore 3           # restaure la n°3, après confirmation
-todo restore 3 -y        # sans confirmation
+todo admin restore             # liste les sauvegardes (1 = la plus récente)
+todo admin restore 3           # restaure la n°3, après confirmation
+todo admin restore 3 -y        # sans confirmation
 ```
 
 Avant toute restauration, l'état actuel est lui-même sauvegardé : une restauration peut être
 annulée en restaurant cette sauvegarde (la n°2 juste après).
 
-Autres commandes : `todo reset` (vide la liste, avec confirmation et sauvegarde préalable ; `--include-archive` vide aussi l'archive, la confirmation en indique alors les effectifs, et `undo` rétablit tout) et
-`todo seed [N]` (ajoute N tâches factices, nécessite `faker`).
+Autres commandes : `todo admin reset` (vide la liste, avec confirmation et sauvegarde préalable ; `--include-archive` vide aussi l'archive, la confirmation en indique alors les effectifs, et `undo` rétablit tout) et
+`todo admin seed [N]` (ajoute N tâches factices, nécessite `faker`).
 
 ### Codes de sortie
 
@@ -742,7 +782,7 @@ le stockage vers un autre dossier (utile pour les tests ou pour avoir plusieurs 
 
 > **Portabilité** : le format DBM dépend du backend Python (`gdbm`, `ndbm`, `dumb`). Un fichier créé
 > sur une machine n'est pas toujours lisible sur une autre. Pour transférer vos tâches, vérifiez
-> que les deux machines utilisent le même backend, ou passez par `todo export` / `todo import`, qui ne
+> que les deux machines utilisent le même backend, ou passez par `todo data export` / `todo data import`, qui ne
 > dépendent pas du backend.
 
 Les anciennes entrées (créées avant l'ajout d'un champ, par exemple la date de complétion ou la
@@ -752,7 +792,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 1.0.0
+todo --version      # todo 2.0.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un
