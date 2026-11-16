@@ -656,6 +656,26 @@ annulée en restaurant cette sauvegarde (la n°2 juste après).
 Autres commandes : `todo reset` (vide la liste, avec confirmation et sauvegarde préalable ; `--include-archive` vide aussi l'archive, la confirmation en indique alors les effectifs, et `undo` rétablit tout) et
 `todo seed [N]` (ajoute N tâches factices, nécessite `faker`).
 
+### Codes de sortie
+
+| Code | Signification |
+|---|---|
+| `0` | succès, ou rien à faire (`done` sur une tâche déjà terminée, `undone` sur une tâche déjà à faire, `edit` dont les valeurs sont déjà en place) |
+| `1` | erreur : identifiant introuvable ou ambigu, liste vide, entrée corrompue, valeur invalide, fichier illisible, opération refusée… |
+| `2` | erreur d'usage de la ligne de commande (option inconnue, valeur hors des choix proposés) |
+| `130` | interruption au clavier (Ctrl-C) |
+
+Cela vaut pour **toutes** les commandes, y compris `show`, `edit` et `undone` (qui renvoyaient `0` jusqu'ici,
+même quand l'identifiant n'existait pas). Avec plusieurs identifiants
+(`done`, `remove`, `postpone`, `archive`…), le code est `1` dès qu'un seul pose problème, les autres étant
+quand même traités. Les messages d'erreur sont écrits sur la sortie standard, sauf ceux de l'import et de
+l'export, sur la sortie d'erreur ; avec `--format json`, un script doit donc tester le code de sortie avant
+d'analyser la sortie :
+
+```bash
+if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
+```
+
 ## Organisation du code
 
 `todo.py` n'est plus qu'un lanceur ; la logique est dans le paquet `todo_cli/` :

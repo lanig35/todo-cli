@@ -295,11 +295,11 @@ def main():
                       pager=reglages.obtenir('general', 'pager', args.pager),
                       avant=avant, apres=apres)
     elif args.commande == 'show':
-        afficher_tache(args.id, args.format)
+        succes = afficher_tache(args.id, args.format)
     elif args.commande == 'undone':
-        rouvrir_tache(args.id, args.note)
+        succes = rouvrir_tache(args.id, args.note)
     elif args.commande == 'edit':
-        modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note)
+        succes = modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note)
     elif args.commande == 'note':
         succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
     elif args.commande == 'export':
