@@ -492,7 +492,9 @@ def main():
     journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
     if hasattr(args, 'format'):     # option > TODO_FORMAT > fichier > auto ; auto : text dans un terminal, plain sinon
-        args.format = resoudre_format(reglages.obtenir('general', 'format', args.format))
+        choisi = reglages.obtenir('general', 'format', args.format)
+        # Les rappels (cron, e-mails, invite du shell) restent en text sauf demande explicite de plain ou table
+        args.format = 'text' if (args.commande == 'remind' and choisi == 'auto') else resoudre_format(choisi)
 
     # Moteur d'aiguillage vers l'action requise.
     # `succes` passe à False si un identifiant de done / remove / postpone n'a pas pu être traité :
@@ -649,6 +651,12 @@ def executer():
         print(f"\n {couleurs.CLR_DIM}Interrompu.{couleurs.CLR_RESET}")
         journal.terminer(130)
         sys.exit(130)
+    except BrokenPipeError:
+        # `todo list | head` : le lecteur a fermé le tube, ce n'est pas une erreur ; stdout est redirigé vers
+        # /dev/null pour que l'interpréteur ne signale pas un second échec en vidant sa sortie à l'arrêt.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        journal.terminer(0)
+        sys.exit(0)
     except SystemExit as e:
         journal.terminer(e.code if isinstance(e.code, int) else (0 if e.code is None else 1))
         raise

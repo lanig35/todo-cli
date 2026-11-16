@@ -3,6 +3,7 @@ import json
 import os
 from . import couleurs, journal
 from .config import REMIND_OFF
+from .formats import imprimer_plain, tableau
 from .reglages import REGLAGES, chemin_config, modele_fichier, nom_variable, obtenir_avec_origine
 
 
@@ -30,6 +31,13 @@ def afficher_config(fmt="text"):
                          for cle, valeur, origine, r in lignes],
             "rappels_coupes_par_commande": os.path.exists(REMIND_OFF),
         }, indent=2, ensure_ascii=False))
+        return
+
+    if fmt == "plain":
+        imprimer_plain((cle, _affichage(r, valeur), origine) for cle, valeur, origine, r in lignes)
+        return
+    if fmt == "table":
+        print(tableau(("RÉGLAGE", "VALEUR", "ORIGINE"), [(cle, _affichage(r, valeur), origine) for cle, valeur, origine, r in lignes]))
         return
 
     print(f"\n {couleurs.CLR_CYAN}─── ⚙️  CONFIGURATION ───{couleurs.CLR_RESET}")

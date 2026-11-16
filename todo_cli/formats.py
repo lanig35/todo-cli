@@ -17,8 +17,8 @@ import unicodedata
 FORMATS = ('auto', 'text', 'table', 'plain', 'json')
 
 # Colonnes communes à list, next et archive list (plain : mêmes colonnes, même ordre, depuis toujours)
-COLONNES_TACHES = ('id', 'statut', 'priorite', 'echeance', 'tags', 'titre')
-ENTETES_TACHES = ('ID', 'STATUT', 'PRIO', 'ÉCHÉANCE', 'TAGS', 'TITRE')
+COLONNES_TACHES = ('id', 'statut', 'priorite', 'echeance', 'tags', 'titre', 'notes')
+ENTETES_TACHES = ('ID', 'STATUT', 'PRIO', 'ÉCHÉANCE', 'TAGS', 'TITRE', 'NOTES')
 
 
 def resoudre(fmt, flux=None):
@@ -98,7 +98,7 @@ def ligne_tache(t, court=True):
     """Champs d'une tâche pour les colonnes COLONNES_TACHES (plain : id complet ; table : préfixe de 8)."""
     return (t['id'][:8] if court else t['id'],
             'done' if t['statut'] == "TERMINE" else 'todo',
-            t['priorite'], t['date_echeance'] or "", ",".join(t['tags']), t['titre'])
+            t['priorite'], t['date_echeance'] or "", ",".join(t['tags']), t['titre'], len(t.get('notes') or []))
 
 
 def sortie_taches(fmt, taches):

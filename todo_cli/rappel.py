@@ -12,6 +12,7 @@ from datetime import datetime
 from . import couleurs, reglages, journal
 from .config import PRIORITES, REMIND_LAST, REMIND_OFF, REMIND_STATUS, STATUT_A_FAIRE
 from .dates import _jours_restants, _libelle_echeance
+from .formats import imprimer_plain, tableau
 from .stockage import _lire_taches
 
 
@@ -71,12 +72,28 @@ def _afficher_json(document):
     print(json.dumps(document, indent=2, ensure_ascii=False))
 
 
+def _afficher_etat_tabulaire(fmt):
+    """État des rappels en plain (`clé<TAB>valeur`, une ligne par cause) ou en tableau."""
+    etat = etat_rappels()
+    if fmt == "plain":
+        imprimer_plain([("actif", "true" if etat["actif"] else "false")]
+                       + [("desactive_par", raison) for raison in etat["desactive_par"]]
+                       + ([("dernier_rappel", etat["dernier_rappel"])] if etat["dernier_rappel"] else []))
+    else:
+        print(tableau(("CHAMP", "VALEUR"), [("Actif", "oui" if etat["actif"] else "non"),
+                                           ("Désactivé par", " · ".join(etat["desactive_par"]) or "—"),
+                                           ("Dernier rappel", etat["dernier_rappel"] or "—")]))
+    return True
+
+
 def desactiver_rappels(fmt="text"):
     _ecrire(REMIND_OFF, "")
     journal.noter(modifie=True, state="disabled")
     _ecrire(REMIND_STATUS, "")  # le résumé affiché dans l'invite disparaît tout de suite
     if fmt == "json":
         return _afficher_json(etat_rappels())
+    if fmt in ("plain", "table"):
+        return _afficher_etat_tabulaire(fmt)
     print(f" 🔕 Rappels désactivés. Pour les réactiver : {couleurs.CLR_BOLD}todo remind --enable{couleurs.CLR_RESET}")
 
 
@@ -86,6 +103,8 @@ def activer_rappels(fmt="text"):
     _supprimer(REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
     if fmt == "json":
         return _afficher_json(etat_rappels())
+    if fmt in ("plain", "table"):
+        return _afficher_etat_tabulaire(fmt)
     print(f" 🔔 Rappels activés.")
     if not reglages.obtenir("remind", "enabled"):
         _, origine = reglages.obtenir_avec_origine("remind", "enabled")
@@ -95,6 +114,8 @@ def activer_rappels(fmt="text"):
 def afficher_etat_rappels(fmt="text"):
     if fmt == "json":
         return _afficher_json(etat_rappels())
+    if fmt in ("plain", "table"):
+        return _afficher_etat_tabulaire(fmt)
     if os.path.exists(REMIND_OFF):
         print(f" 🔕 Rappels désactivés (todo remind --enable pour les réactiver).")
     elif not reglages.obtenir("remind", "enabled"):
@@ -207,10 +228,26 @@ def rappel_json(bientot=0):
     }
 
 
+def _afficher_rappel_tabulaire(fmt, bientot):
+    """Rappel en plain ou en tableau : une ligne par tâche, sans limite, rien s'il n'y a rien à signaler."""
+    if not rappels_actifs():
+        return
+    aujourdhui = datetime.now().date()
+    retards, du_jour, a_venir = construire_rappel(_lire_taches(), aujourdhui, bientot)
+    rangees = [(categorie, _jours_restants(t, aujourdhui), t['id'] if fmt == "plain" else t['id'][:8], t['priorite'], t['titre'])
+               for categorie, liste in (("retard", retards), ("aujourdhui", du_jour), ("a_venir", a_venir)) for t in liste]
+    if fmt == "plain":
+        imprimer_plain(rangees)
+    elif rangees:
+        print(tableau(("QUAND", "JOURS", "ID", "PRIO", "TITRE"), rangees))
+
+
 def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False, fmt="text"):
     """Affiche le rappel (ou, avec `ecrire_statut`, met à jour le résumé d'une ligne sans rien afficher)."""
     if fmt == "json":
         return _afficher_json(rappel_json(bientot))
+    if fmt in ("plain", "table") and not (une_fois_par_jour or ecrire_statut):
+        return _afficher_rappel_tabulaire(fmt, bientot)
     if not rappels_actifs():
         if ecrire_statut:
             _ecrire(REMIND_STATUS, "")
