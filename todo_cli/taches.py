@@ -159,22 +159,22 @@ def rouvrir_tache(id_recherche, note=None):
     note = carnet.valider_note(note) if note is not None else None
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à rouvrir.{couleurs.CLR_RESET}")
-        return
+        return False
 
     modifie = False
     with dbm.open(DB_NAME, 'w') as db:
         key = _resoudre_id(db, id_recherche)
         if key is None:
-            return
+            return False
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
             journal.echec("corrupted_entry")
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
-            return
+            return False
         if t['statut'] == STATUT_A_FAIRE:
             print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà à faire.{couleurs.CLR_RESET}")
-            return
+            return True     # rien à faire : pas une erreur
         # Annuler la complétion d'une tâche récurrente annule aussi l'occurrence qu'elle a créée,
         # sinon on aurait deux occurrences actives (tant que celle-ci n'a pas été terminée).
         echeance_supprimee = None
@@ -188,7 +188,7 @@ def rouvrir_tache(id_recherche, note=None):
                 if suivante is not None and suivante['statut'] != STATUT_A_FAIRE:
                     journal.echec("next_occurrence_done")
                     print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Impossible : l'occurrence suivante de '{t['titre']}' est déjà terminée.")
-                    return
+                    return False
                 if suivante is not None:
                     del db[cle_suivante]
                     echeance_supprimee = suivante['date_echeance']
@@ -210,6 +210,7 @@ def rouvrir_tache(id_recherche, note=None):
     # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
     if modifie:
         sauvegarder_base()
+    return True
 
 def modifier_tache(id_recherche, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None, note=None):
     """Modifie les champs fournis d'une tâche (None = champ inchangé).
@@ -222,7 +223,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
     if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter, note)):
         journal.echec("nothing_to_edit")
         print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat, --note.")
-        return
+        return False
     if note is not None:
         note = carnet.valider_note(note)
 
@@ -267,19 +268,19 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
 
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à modifier.{couleurs.CLR_RESET}")
-        return
+        return False
 
     modifications = []
     with dbm.open(DB_NAME, 'w') as db:
         key = _resoudre_id(db, id_recherche)
         if key is None:
-            return
+            return False
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
             journal.echec("corrupted_entry")
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
-            return
+            return False
 
         if titre is not None and titre != t['titre']:
             t['titre'] = titre
@@ -309,7 +310,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
             if date_echeance == "":
                 journal.echec("recurrence_needs_due")
                 print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Une tâche récurrente doit avoir une échéance : supprimez d'abord la répétition (--repeat none).")
-                return
+                return False
             t['date_echeance'] = datetime.now().date().strftime("%Y-%m-%d")
             modifications.append("échéance (aujourd'hui par défaut)")
 
@@ -319,7 +320,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
 
         if not modifications:
             print(f" {couleurs.CLR_DIM}ℹ️  Aucun changement : les valeurs fournies sont déjà celles de la tâche '{t['titre']}'.{couleurs.CLR_RESET}")
-            return
+            return True     # valeurs déjà en place : pas une erreur
 
         db[key] = json.dumps(t)
         journal.noter(ids=[key], titres=[t['titre']], modifie=True, fields=modifications)
@@ -327,6 +328,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
 
     # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
     sauvegarder_base()
+    return True
 
 def supprimer_tache(ids, note=None):
     """Retire définitivement une ou plusieurs entrées de la base de données.

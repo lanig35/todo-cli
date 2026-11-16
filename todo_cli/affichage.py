@@ -19,24 +19,24 @@ def afficher_tache(id_recherche, fmt="table"):
     """Affiche le détail complet d'une tâche (lecture seule). `fmt="json"` : l'objet tel que `list --format json` le décrit."""
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à afficher.{couleurs.CLR_RESET}")
-        return
+        return False
 
     with dbm.open(DB_NAME, 'r') as db:
         key = _resoudre_id(db, id_recherche)
         if key is None:
-            return
+            return False
         try:
             t = _normaliser_tache(db[key])
         except ValueError:
             journal.echec("corrupted_entry")
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être affichée.")
-            return
+            return False
         id_complet = key.decode('utf-8', errors='replace')
 
     if fmt == "json":
         t['id'] = id_complet
         print(json.dumps(t, indent=2, ensure_ascii=False))
-        return
+        return True
 
     maintenant = datetime.now().date()
     a_faire = t['statut'] == STATUT_A_FAIRE
@@ -69,6 +69,7 @@ def afficher_tache(id_recherche, fmt="table"):
         print(f"  {couleurs.CLR_BOLD}Notes ({len(t['notes'])}){couleurs.CLR_RESET}")
         print("\n".join(lignes_notes(t['notes'])))
     print(f" {couleurs.CLR_CYAN}─────────────────────────────{couleurs.CLR_RESET}\n")
+    return True
 
 def _afficher_texte(texte, pager=True):
     """Affiche un texte, via un pager quand il dépasse la hauteur du terminal.
