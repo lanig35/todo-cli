@@ -354,7 +354,7 @@ def test_le_modele_est_valide_et_neutre(todo):
     assert todo("config", "show").err == ""                                       # aucun avertissement
     for r in todo("config", "show", "--format", "json").json()["reglages"]:
         assert r["origine"] in ("défaut", "variable TODO_DB_DIR", "variable TODO_LOG_TARGET",
-                                "variable TODO_LOG_FILE"), r                     # rien n'est modifié par le modèle
+                                "variable TODO_LOG_FILE", "variable TODO_FORMAT"), r                     # rien n'est modifié par le modèle
         assert r["cle"].split(".")[1] in texte and r["variable"] in texte        # chaque réglage est documenté
     assert all(l.startswith("#") or l.startswith("[") or not l.strip() for l in texte.splitlines())
 

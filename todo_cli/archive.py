@@ -12,6 +12,7 @@ from . import couleurs, journal
 from .affichage import _afficher_texte, _texte_recherche
 from .config import ARCHIVE_NAME, DB_NAME, STATUT_TERMINE
 from .dates import _decaler, _parse_date
+from .formats import sortie_taches
 from .sauvegardes import sauvegarder_base
 from .stockage import _afficher_bilan_lot, _archive_existe, _base_existe, _charger_taches, _lire_archive, _normaliser_tache, _resoudre_ids
 
@@ -214,7 +215,7 @@ def desarchiver_taches(ids):
     return echecs == 0
 
 
-def lister_archive(recherche=None, fmt="table", pager=True):
+def lister_archive(recherche=None, fmt="text", pager=True):
     """Affiche l'archive (la plus récemment terminée en premier), éventuellement filtrée par texte."""
     taches = _lire_archive_triee()
     if recherche:
@@ -223,6 +224,9 @@ def lister_archive(recherche=None, fmt="table", pager=True):
 
     if fmt == "json":
         print(json.dumps(taches, indent=2, ensure_ascii=False))
+        return
+    if fmt == "plain" or (fmt == "table" and taches):
+        sortie_taches(fmt, taches)
         return
     if not taches:
         vide = "Aucune tâche archivée ne correspond à votre recherche." if recherche else "L'archive est vide."

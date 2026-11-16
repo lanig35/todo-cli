@@ -28,10 +28,10 @@ def test_show_json_tache_terminee(todo):
     assert d["statut"] != "A FAIRE" and d["date_terminee"]
 
 
-def test_show_table_reste_le_defaut(todo):
+def test_show_text_est_l_affichage_decore(todo):
     todo("add", "Alpha")
     i = todo.id_de("Alpha")
-    assert todo("show", i).out == todo("show", i, "--format", "table").out
+    assert todo("show", i).out == todo("show", i, "--format", "text").out
     assert "DÉTAIL DE LA TÂCHE" in todo("show", i).sortie
 
 

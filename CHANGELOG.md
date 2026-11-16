@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.1.0] - 2026-11-17
+
+### Ajouté
+
+- **Formats de sortie** : `--format auto|text|table|plain|json` pour `list`, `show`, `next`, `agenda`,
+  `archive list`, `note list` et `report stats` (qui gagne aussi `json`).
+  - `table` : vrai tableau aligné, sans couleur.
+  - `plain` : une ligne par enregistrement, champs séparés par des tabulations, colonnes stables, pour
+    `grep`, `cut`, `awk` et `xargs`.
+- **Choix automatique** : sans `--format`, `text` dans un terminal et `plain` dans un pipe ou une redirection.
+  Réglage `[general] format` et variable `TODO_FORMAT`.
+
+### Changé
+
+- L'affichage décoré s'appelle désormais `text` ; `--format table` désigne le nouveau tableau.
+- **Dans un pipe ou une redirection**, la sortie par défaut de ces commandes est maintenant `plain` : un
+  script qui lisait l'ancien affichage décoré doit ajouter `--format text` (ou définir `TODO_FORMAT=text`).
+
 ## [2.0.0] - 2026-11-16
 
 ### Changé
@@ -68,5 +86,6 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.1.0
 [2.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.0.0
 [1.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v1.0.0

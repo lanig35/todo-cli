@@ -14,7 +14,7 @@ def _affichage(r, valeur):
     return str(valeur)
 
 
-def afficher_config(fmt="table"):
+def afficher_config(fmt="text"):
     """Affiche chaque réglage avec sa valeur effective et son origine."""
     chemin = chemin_config()
     existe = os.path.isfile(chemin)
@@ -51,7 +51,7 @@ def afficher_config(fmt="table"):
     print(f"\n  {couleurs.CLR_DIM}Priorité : option > variable d'environnement > fichier > défaut.{couleurs.CLR_RESET}\n")
 
 
-def afficher_chemin(fmt="table"):
+def afficher_chemin(fmt="text"):
     """Écrit le chemin du fichier de configuration (seul, pour pouvoir s'en servir dans un script)."""
     chemin = chemin_config()
     if fmt == "json":
@@ -67,7 +67,7 @@ def _json_init(chemin, cree, erreur=None, detail=None, ecrase=False):
     print(json.dumps(document, indent=2, ensure_ascii=False))
 
 
-def initialiser_config(forcer=False, fmt="table"):
+def initialiser_config(forcer=False, fmt="text"):
     """Crée un fichier de configuration modèle (toutes les valeurs en commentaire). Retourne True si créé.
 
     En JSON, le résultat (créé ou non, et la raison d'un échec) est un document, pour qu'un script
