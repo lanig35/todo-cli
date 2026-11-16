@@ -26,9 +26,9 @@ def champs(sortie):
 # --- plain ---------------------------------------------------------------------------------------------------------
 def test_list_plain_colonnes_stables(base):
     lignes = champs(base("list", "--format", "plain").out)
-    assert len(lignes) == 3 and all(len(l) == 6 for l in lignes)
+    assert len(lignes) == 3 and all(len(l) == 7 for l in lignes)
     paul = next(l for l in lignes if l[5] == "Appeler Paul")
-    assert paul == ["a" * 8 + "-0", "todo", "high", jour(1), "pro,tel", "Appeler Paul"]
+    assert paul == ["a" * 8 + "-0", "todo", "high", jour(1), "pro,tel", "Appeler Paul", "0"]
     assert next(l for l in lignes if l[5] == "Fini")[1] == "done"
 
 
@@ -38,7 +38,7 @@ def test_list_plain_sans_decor_ni_couleur(base):
 
 
 def test_plain_une_tabulation_dans_un_titre_ne_decale_pas_les_colonnes(base):
-    assert all(len(l) == 6 for l in champs(base("list", "--format", "plain").out))
+    assert all(len(l) == 7 for l in champs(base("list", "--format", "plain").out))
 
 
 def test_plain_vide_n_affiche_rien(todo):
@@ -173,8 +173,10 @@ def test_format_du_fichier_invalide_est_signale(base):
     assert r.code == 0 and "format" in r.err
 
 
-def test_commandes_sans_rendu_tabulaire_restent_en_text(base):
-    assert "Rappels" in base("reminder", "status", "--format", "plain").sortie
+def test_commandes_sans_rendu_tabulaire_restent_en_text(base, tmp_path):
+    fichier = tmp_path / "e.json"
+    base("data", "export", str(fichier))
+    assert "\t" not in base("data", "import", str(fichier), "--dry-run", "--format", "plain").out
     r = base("config", "path", env=AUTO)
     assert r.out.strip() == str(base.fichier_config)
     assert base("add", "Zed", env=AUTO).code == 0
@@ -184,3 +186,117 @@ def test_stdout_pipe_reel(base):
     sortie = base("list", env=AUTO).out
     n = subprocess.run(["wc", "-l"], input=sortie, capture_output=True, text=True).stdout.strip()
     assert n == "3"
+
+
+# --- colonne des notes -----------------------------------------------------------------------------------------------
+def test_colonne_notes_plain_et_table(base):
+    base("note", "add", "a" * 8, "une")
+    base("note", "add", "a" * 8, "deux")
+    lignes = champs(base("list", "--format", "plain").out)
+    assert {l[5]: l[6] for l in lignes} == {"Appeler Paul": "2", "日本語 avec tabulation": "0", "Fini": "0"}
+    assert "NOTES" in base("list", "--format", "table").out.splitlines()[1]
+    assert champs(base("next", "--format", "plain").out)[0][6] == "2"
+
+
+def test_colonne_notes_archive(base):
+    base("note", "add", "c" * 8, "x")
+    base("archive", "add")
+    assert champs(base("archive", "list", "--format", "plain").out)[0][6] == "1"
+
+
+# --- config ---------------------------------------------------------------------------------------------------------
+def test_config_show_plain(todo):
+    todo.config("[list]\nlimit = 3\n")
+    lignes = {l[0]: l[1:] for l in champs(todo("config", "show", "--format", "plain").out)}
+    assert lignes["list.limit"] == ["3", "fichier"]
+    assert lignes["general.color"] == ["auto", "défaut"]
+    assert lignes["general.pager"][0] == "true"
+    assert all(len(l) == 2 for l in lignes.values())
+
+
+def test_config_show_table(todo):
+    sortie = todo("config", "show", "--format", "table").out
+    assert sortie.startswith("┌") and "RÉGLAGE" in sortie and "ORIGINE" in sortie and "general.format" in sortie
+
+
+def test_config_show_auto_plain_dans_un_pipe(todo):
+    assert champs(todo("config", "show", env=AUTO).out)[0][0].startswith("general.")
+    assert "CONFIGURATION" in todo.pty("config", "show", env=AUTO).texte
+
+
+def test_config_path_et_init_restent_en_text(todo):
+    assert todo("config", "path", "--format", "plain").out.strip() == str(todo.fichier_config)
+    assert todo("config", "init", "--format", "table").code == 0
+
+
+# --- reminder -------------------------------------------------------------------------------------------------------
+@pytest.fixture
+def rappels(todo):
+    todo.seed(
+        {"cle": "a" * 8 + "-0", "titre": "retard", "echeance": jour(-3), "priorite": "high"},
+        {"cle": "b" * 8 + "-0", "titre": "ajd", "echeance": jour(0)},
+        {"cle": "c" * 8 + "-0", "titre": "bientot", "echeance": jour(2)},
+        {"cle": "d" * 8 + "-0", "titre": "loin", "echeance": jour(30)},
+    )
+    return todo
+
+
+def test_reminder_check_plain(rappels):
+    lignes = champs(rappels("reminder", "check", "--format", "plain").out)
+    assert lignes == [["retard", "-3", "a" * 8 + "-0", "high", "retard"],
+                      ["aujourdhui", "0", "b" * 8 + "-0", "medium", "ajd"]]
+    plus = champs(rappels("reminder", "check", "--format", "plain", "--soon", "3").out)
+    assert [l[0] for l in plus] == ["retard", "aujourdhui", "a_venir"]
+
+
+def test_reminder_check_plain_sans_limite(todo):
+    todo.seed(*[{"cle": f"{i:08d}-0", "titre": f"t{i}", "echeance": jour(-1)} for i in range(8)])
+    assert len(champs(todo("reminder", "check", "--format", "plain", "--limit", "2").out)) == 8
+
+
+def test_reminder_check_table(rappels):
+    sortie = rappels("reminder", "check", "--format", "table").out
+    assert sortie.startswith("┌") and "QUAND" in sortie and "retard" in sortie and "aaaaaaaa" in sortie
+    assert "aaaaaaaa-0" not in sortie
+
+
+def test_reminder_check_vide_ou_desactive_reste_muet(todo, rappels):
+    todo("reminder", "disable")
+    assert todo("reminder", "check", "--format", "plain").out == ""
+    assert todo("reminder", "check", "--format", "table").out == ""
+    todo("reminder", "enable")
+    assert todo("reminder", "check", "--format", "plain").out != ""
+
+
+def test_reminder_auto_reste_en_text_dans_un_pipe(rappels):
+    sortie = rappels("reminder", "check", env=AUTO).sortie
+    assert "en retard" in sortie and "\t" not in sortie                        # cron : e-mail lisible
+
+
+def test_reminder_reglage_plain_applique_aux_rappels_explicites(rappels):
+    rappels.config("[general]\nformat = plain\n")
+    assert "\t" in rappels("reminder", "check", env=AUTO).out
+
+
+def test_reminder_once_a_day_et_write_status_ignorent_plain(rappels):
+    r = rappels("reminder", "check", "--once-a-day", "--format", "plain")
+    assert r.code == 0 and "en retard" in r.sortie
+    assert rappels("reminder", "check", "--write-status", "--format", "table").code == 0
+    assert rappels("reminder", "check", "--write-status", "--format", "json").code == 1   # json : toujours refusé
+
+
+def test_reminder_etat_plain_et_table(todo):
+    assert champs(todo("reminder", "status", "--format", "plain").out) == [["actif", "true"]]
+    assert champs(todo("reminder", "disable", "--format", "plain").out) == [["actif", "false"], ["desactive_par", "commande remind --disable"]]
+    sortie = todo("reminder", "status", "--format", "table").out
+    assert "Actif" in sortie and "non" in sortie and "commande remind --disable" in sortie
+    assert champs(todo("reminder", "enable", "--format", "plain").out) == [["actif", "true"]]
+
+
+# --- tube fermé --------------------------------------------------------------------------------------------------------
+def test_tube_ferme_sans_trace(base):
+    from outils import SCRIPT
+    import sys
+    p = subprocess.run(f"{sys.executable} -B {SCRIPT} list --format plain | head -1", shell=True, capture_output=True,
+                       text=True, env=base._env(None), cwd=base.dossier)
+    assert p.stderr == "" and len(p.stdout.splitlines()) == 1

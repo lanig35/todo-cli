@@ -430,8 +430,8 @@ sans tâche (« rien de prévu »). Au sein d'un jour, la priorité haute passe 
 
 ### Formats de sortie
 
-`--format` choisit la forme de la sortie de `list`, `show`, `next`, `agenda`, `archive list`, `note list` et
-`report stats` :
+`--format` choisit la forme de la sortie de `list`, `show`, `next`, `agenda`, `archive list`, `note list`,
+`report stats`, `config show` et `reminder` :
 
 | Format | Pour | Contenu |
 |---|---|---|
@@ -455,16 +455,31 @@ todo list --format table                                       # tableau dans le
 Le format `plain` est un contrat stable (colonnes et ordre ne changent pas) :
 
 - `list`, `next`, `archive list` : `id` (complet), `statut` (`todo`/`done`), `priorite`, `echeance`
-  (vide si aucune), `tags` (séparés par des virgules), `titre`. La description n'y figure pas (voir `json`).
+  (vide si aucune), `tags` (séparés par des virgules), `titre`, `notes` (nombre de notes). La description
+  n'y figure pas (voir `json`). Les nouvelles colonnes sont toujours ajoutées à la fin.
 - `show` : une ligne `clé<TAB>valeur` par champ renseigné (`id`, `titre`, `statut`, `priorite`, `creee`,
   `echeance`, `terminee`, `repetition`, `suivante`, `tags`, `description`) et une ligne
   `note<TAB>date<TAB>texte` par note.
 - `agenda` : `quand` (`retard` ou la date), `id`, `priorite`, `titre` ; les jours sans tâche n'apparaissent pas.
 - `note list` : `numéro`, `date`, `texte`. `report stats` : `indicateur<TAB>valeur`.
+- `config show` : `réglage`, `valeur`, `origine` (`défaut`, `fichier`, `variable X` ou `option`) ; par exemple
+  `todo config show | awk -F'\t' '$3 != "défaut"'` liste ce qui a été modifié.
+- `reminder check` : `catégorie` (`retard`, `aujourdhui` ou `a_venir`), `jours_restants`, `id`, `priorite`,
+  `titre`, sans limite de nombre (comme `json`) et sans rien d'affiché quand il n'y a rien à signaler.
+  `reminder status`, `enable` et `disable` : `actif<TAB>true|false`, puis une ligne `desactive_par<TAB>cause`
+  par cause et `dernier_rappel<TAB>date` s'il y en a un.
 - Les tabulations et sauts de ligne contenus dans un titre ou une description sont remplacés par une espace.
 
-Les autres commandes (`config`, `reminder`, `data import`…) n'ont pas de rendu tabulaire : `table` et `plain`
-y donnent le même affichage que `text`, et `json` reste disponible quand elles le prévoient.
+**Exceptions du choix automatique** : les rappels (`reminder`) restent en `text` quand rien n'est demandé,
+même dans un pipe, pour que les e-mails de cron et l'invite du shell restent lisibles ; `plain` ou `table`
+doivent être demandés (option, `TODO_FORMAT` ou fichier). `--once-a-day` et `--write-status` ne produisent que
+du texte : ils ignorent `table` et `plain` (et refusent `json`).
+
+Les autres commandes (`config path`, `config init`, `data export` et `import`, actions comme `add` ou `done`…)
+n'ont pas de rendu tabulaire : `table` et `plain` y donnent le même affichage que `text`, et `json` reste
+disponible quand elles le prévoient.
+
+Quand le lecteur d'un pipe se ferme avant la fin (`todo list | head`), `todo` s'arrête sans message d'erreur.
 
 ### Archivage
 
@@ -834,7 +849,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 2.1.0
+todo --version      # todo 2.2.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un

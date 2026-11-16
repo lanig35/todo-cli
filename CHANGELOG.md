@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.2.0] - 2026-11-17
+
+### Ajouté
+
+- `--format table` et `--format plain` pour `config show` (réglage, valeur, origine) et pour `reminder`
+  (`check` : une ligne par tâche, sans limite ; `status`, `enable`, `disable` : l'état des rappels).
+- Colonne `notes` (nombre de notes), ajoutée à la fin, dans les formats `table` et `plain` de `list`, `next`
+  et `archive list`.
+
+### Changé
+
+- `config show` en `auto` donne `plain` dans un pipe (comme `list`). Les rappels restent en `text` sans
+  demande explicite, pour garder des e-mails de cron lisibles.
+
+### Corrigé
+
+- `todo ... | head` (lecteur du tube fermé) ne provoque plus de trace d'erreur.
+
 ## [2.1.0] - 2026-11-17
 
 ### Ajouté
@@ -86,6 +104,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.2.0
 [2.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.1.0
 [2.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.0.0
 [1.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v1.0.0
