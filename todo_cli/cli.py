@@ -1,5 +1,6 @@
 """Définition de la ligne de commande (argparse) et aiguillage vers les commandes."""
 import argparse
+import os
 import sys
 from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
@@ -61,181 +62,411 @@ def _ajouter_options_couleur(p):
     p.add_argument('--log-level', choices=['off', 'error', 'warning', 'info', 'debug'], dest='niveau_log',
                    default=argparse.SUPPRESS, help="Niveau du journal pour cette commande (défaut : info, ou [log] level)")
 
-def main():
-    journal.initialiser()
-    parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
-    parser.add_argument('--version', action='version', version=f"todo {__version__}")
-    subparsers = parser.add_subparsers(dest="commande", help="Commandes système disponibles")
 
-    # Commande 'add'
-    parser_add = subparsers.add_parser('add', help='Créer et insérer une nouvelle tâche')
-    parser_add.add_argument('titre', type=str,
+def _args_add(p):
+    p.add_argument('titre', type=str,
                             help="Titre ; saisie rapide : 'Appeler Paul demain !high #pro ~weekly' (voir --literal)")
-    parser_add.add_argument('--desc', type=str, default="", help='Notes explicatives complémentaires')
-    parser_add.add_argument('--prio', choices=list(PRIORITES), default=None, help='Gravité / Priorité (défaut : medium, ou [add] priority)')
-    parser_add.add_argument('--due', type=str, default=None,
+    p.add_argument('--desc', type=str, default="", help='Notes explicatives complémentaires')
+    p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Gravité / Priorité (défaut : medium, ou [add] priority)')
+    p.add_argument('--due', type=str, default=None,
                             help="Échéance : AAAA-MM-JJ, aujourd'hui, demain, apres-demain, +3d/+2w/+1m/+1y ou un jour (lundi...)")
-    parser_add.add_argument('--tags', type=str, default=None, help='Tags catégoriels indexés (ex: pro,dev)')
-    parser_add.add_argument('--repeat', type=str, default=None,
+    p.add_argument('--tags', type=str, default=None, help='Tags catégoriels indexés (ex: pro,dev)')
+    p.add_argument('--repeat', type=str, default=None,
                             help="Tâche récurrente : daily, weekly, monthly, yearly ou 3d/2w/1m/1y (échéance = aujourd'hui si --due absent)")
 
-    parser_add.add_argument('--literal', action='store_true',
+    p.add_argument('--literal', action='store_true',
                             help="Garde le titre tel quel : désactive la saisie rapide (dates, !priorité, #tags, ~récurrence)")
 
-    # Commande 'list'
-    parser_list = subparsers.add_parser('list', help='Afficher et filtrer les entrées de la base')
-    parser_list.add_argument('--status', choices=['todo', 'done'], help="Filtrer selon l'avancement")
-    parser_list.add_argument('--search', type=str, help='Recherche plein texte (Titre & Description)')
-    parser_list.add_argument('--tag', type=str, default=None, help='Extraction par étiquette exclusive')
-    parser_list.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne montrer que cette priorité')
-    parser_list.add_argument('--overdue', action='store_true', help="Tâches à faire dont l'échéance est dépassée")
-    parser_list.add_argument('--today', action='store_true', help="Tâches à faire dont l'échéance est aujourd'hui (avec --overdue : l'un ou l'autre)")
-    parser_list.add_argument('--overdue-first', action=argparse.BooleanOptionalAction, default=None,
+
+def _args_list(p):
+    p.add_argument('--status', choices=['todo', 'done'], help="Filtrer selon l'avancement")
+    p.add_argument('--search', type=str, help='Recherche plein texte (Titre & Description)')
+    p.add_argument('--tag', type=str, default=None, help='Extraction par étiquette exclusive')
+    p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne montrer que cette priorité')
+    p.add_argument('--overdue', action='store_true', help="Tâches à faire dont l'échéance est dépassée")
+    p.add_argument('--today', action='store_true', help="Tâches à faire dont l'échéance est aujourd'hui (avec --overdue : l'un ou l'autre)")
+    p.add_argument('--overdue-first', action=argparse.BooleanOptionalAction, default=None,
                              help="Place (--overdue-first, défaut) ou non (--no-overdue-first) les tâches en retard en premier ; "
                                   "sans, l'ordre de --sort s'applique à toute la liste. Réglage : [list] overdue_first")
-    parser_list.add_argument('--due-before', type=str, default=None, metavar='DATE',
+    p.add_argument('--due-before', type=str, default=None, metavar='DATE',
                              help="Échéance au plus tard à cette date, incluse (AAAA-MM-JJ, demain, +7d, vendredi...). "
                                   "Exclut les tâches sans échéance et les terminées (sauf avec --status done)")
-    parser_list.add_argument('--due-after', type=str, default=None, metavar='DATE',
+    p.add_argument('--due-after', type=str, default=None, metavar='DATE',
                              help="Échéance à partir de cette date, incluse (mêmes formats que --due-before)")
-    parser_list.add_argument('--limit', type=_entier_positif, default=None, metavar='N',
+    p.add_argument('--limit', type=_entier_positif, default=None, metavar='N',
                              help="N'afficher que N tâches (après filtres et tris). Réglage : [list] limit")
-    parser_list.add_argument('--start', type=_entier_positif, default=None, metavar='N',
+    p.add_argument('--start', type=_entier_positif, default=None, metavar='N',
                              help="Commencer à la tâche n°N de la liste (la numérotation affichée commence à 1)")
-    parser_list.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+    p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                              help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    parser_list.add_argument('--sort', choices=['alpha', 'status', 'priority', 'due'], help='Critère de tri')
-    parser_list.add_argument('--format', choices=['table', 'json'], default='table', help='Structure de la sortie textuelle')
+    p.add_argument('--sort', choices=['alpha', 'status', 'priority', 'due'], help='Critère de tri')
+    p.add_argument('--format', choices=['table', 'json'], default='table', help='Structure de la sortie textuelle')
 
-    # Commande 'edit'
-    parser_edit = subparsers.add_parser('edit', help="Modifier une tâche existante")
-    parser_edit.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    parser_edit.add_argument('--title', type=str, default=None, help='Nouveau titre')
-    parser_edit.add_argument('--desc', type=str, default=None, help='Nouvelle description (chaîne vide pour effacer)')
-    parser_edit.add_argument('--prio', choices=list(PRIORITES), default=None, help='Nouvelle priorité')
-    parser_edit.add_argument('--due', type=str, default=None,
+
+
+def _args_edit(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('--title', type=str, default=None, help='Nouveau titre')
+    p.add_argument('--desc', type=str, default=None, help='Nouvelle description (chaîne vide pour effacer)')
+    p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Nouvelle priorité')
+    p.add_argument('--due', type=str, default=None,
                              help="Nouvelle échéance : AAAA-MM-JJ, demain, +3d, lundi... ('none' pour la supprimer)")
-    parser_edit.add_argument('--tags', type=str, default=None, help="Nouveaux tags, remplace les anciens (chaîne vide pour tout effacer)")
-    parser_edit.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
-    parser_edit.add_argument('--repeat', type=str, default=None,
+    p.add_argument('--tags', type=str, default=None, help="Nouveaux tags, remplace les anciens (chaîne vide pour tout effacer)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
+    p.add_argument('--repeat', type=str, default=None,
                              help="Nouvelle répétition : daily, weekly, monthly, yearly, 3d/2w/1m/1y ('none' pour la supprimer)")
 
-    # Commandes 'show' et 'undone'
-    parser_show = subparsers.add_parser('show', help="Afficher le détail complet d'une tâche")
-    parser_show.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    parser_show.add_argument('--format', choices=['table', 'json'], default='table',
-                             help="Format de sortie (json : un objet, comme un élément de `list --format json`, compatible jq)")
-    parser_undone = subparsers.add_parser('undone', help='Rouvrir une tâche terminée')
-    parser_undone.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    parser_undone.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
-    parser_note = subparsers.add_parser('note', help="Ajouter une note à une tâche, ou lister ses notes")
-    parser_note.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    parser_note.add_argument('texte', nargs='*', help="Texte de la note (500 caractères au plus) ; sans texte : liste les notes de la tâche")
-    groupe_note = parser_note.add_mutually_exclusive_group()
-    groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
-    groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note ID`)")
-    parser_note.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
 
-    # Commandes 'export' et 'import'
-    parser_export = subparsers.add_parser('export', help="Exporter les tâches (et l'archive) en JSON")
-    parser_export.add_argument('fichier', nargs='?', default=None,
+
+def _args_show(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('--format', choices=['table', 'json'], default='table',
+                             help="Format de sortie (json : un objet, comme un élément de `list --format json`, compatible jq)")
+
+
+def _args_undone(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
+
+
+def _args_export(p):
+    p.add_argument('fichier', nargs='?', default=None,
                                help="Fichier à écrire ; sans argument ou `-` : sortie standard (pour jq ou une redirection)")
-    parser_export.add_argument('--no-archive', action='store_true', help="Ne pas exporter l'archive")
-    parser_export.add_argument('--force', action='store_true', help="Remplacer le fichier s'il existe déjà")
-    parser_import = subparsers.add_parser('import', help="Importer des tâches depuis un fichier JSON (export todo-cli ou `list --format json`)")
-    parser_import.add_argument('fichier', help="Fichier JSON à lire ; `-` : entrée standard")
-    mode_import = parser_import.add_mutually_exclusive_group()
+    p.add_argument('--no-archive', action='store_true', help="Ne pas exporter l'archive")
+    p.add_argument('--force', action='store_true', help="Remplacer le fichier s'il existe déjà")
+
+
+def _args_import(p):
+    p.add_argument('fichier', help="Fichier JSON à lire ; `-` : entrée standard")
+    mode_import = p.add_mutually_exclusive_group()
     mode_import.add_argument('--update', action='store_true',
                              help="Si l'identifiant existe déjà, le contenu du fichier remplace la tâche (défaut : elle est ignorée)")
     mode_import.add_argument('--replace', action='store_true', help="Vide la liste et l'archive avant d'importer (confirmation demandée)")
-    parser_import.add_argument('--dry-run', action='store_true', help="Indique ce qui serait importé, sans rien modifier")
-    parser_import.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation (avec --replace)")
-    parser_import.add_argument('--format', choices=['table', 'json'], default='table', help="Format du bilan (json : compatible jq)")
+    p.add_argument('--dry-run', action='store_true', help="Indique ce qui serait importé, sans rien modifier")
+    p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation (avec --replace)")
+    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format du bilan (json : compatible jq)")
 
-    # Commande 'restore'
-    parser_restore = subparsers.add_parser('restore', help='Lister les sauvegardes ou restaurer l\'une d\'elles')
-    parser_restore.add_argument('backup', type=str, nargs='?', default=None,
+
+
+def _args_restore(p):
+    p.add_argument('backup', type=str, nargs='?', default=None,
                                 help="Numéro (1 = la plus récente) ou préfixe d'horodatage ; sans argument : liste les sauvegardes")
-    parser_restore.add_argument('-y', '--yes', action='store_true', help='Ne pas demander de confirmation')
+    p.add_argument('-y', '--yes', action='store_true', help='Ne pas demander de confirmation')
 
-    # Commandes utilitaires
-    parser_done = subparsers.add_parser('done', help='Clôturer une ou plusieurs tâches')
-    parser_done.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
-    parser_done.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche clôturée")
-    parser_remove = subparsers.add_parser('remove', help='Supprimer une ou plusieurs tâches de la base')
-    parser_remove.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
-    parser_remove.add_argument('-m', '--note', type=str, default=None,
+
+
+def _args_done(p):
+    p.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche clôturée")
+
+
+def _args_remove(p):
+    p.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    p.add_argument('-m', '--note', type=str, default=None,
                                help="Motif de la suppression : la tâche disparaît, il est écrit au journal (avec le titre)")
-    parser_postpone = subparsers.add_parser('postpone', help="Reporter l'échéance d'une ou plusieurs tâches")
-    parser_postpone.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
-    parser_postpone.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche reportée")
-    parser_postpone.add_argument('--to', type=str, default='+1d', metavar='DATE',
+
+
+def _args_postpone(p):
+    p.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche reportée")
+    p.add_argument('--to', type=str, default='+1d', metavar='DATE',
                                  help="Nouvelle échéance (défaut : +1d). +2d / +1w / +1m / +1y : décalage depuis l'échéance actuelle, "
                                       "ou depuis aujourd'hui si elle est dépassée ou absente ; ou date fixe : AAAA-MM-JJ, demain, lundi...")
-    parser_seed = subparsers.add_parser('seed', help='Remplir la base avec des faux enregistrements')
-    parser_seed.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
-    parser_agenda = subparsers.add_parser('agenda', help='Voir les tâches à faire jour par jour')
-    parser_agenda.add_argument('--days', type=_entier_positif, default=None, metavar='N',
+
+
+def _args_seed(p):
+    p.add_argument('count', type=int, nargs='?', default=5, help='Quantité')
+
+
+def _args_agenda(p):
+    p.add_argument('--days', type=_entier_positif, default=None, metavar='N',
                                help='Nombre de jours affichés (défaut : 7, ou [agenda] days)')
-    parser_agenda.add_argument('--from', dest='depuis', type=str, default=None, metavar='DATE',
+    p.add_argument('--from', dest='depuis', type=str, default=None, metavar='DATE',
                                help="Premier jour affiché (défaut : aujourd'hui ; mêmes formats que --due)")
-    parser_agenda.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+    p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                                help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    parser_agenda.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
-    subparsers.add_parser('undo', help="Annuler la dernière modification (un second 'undo' la rétablit)")
-    parser_next = subparsers.add_parser('next', help='Afficher la ou les prochaines tâches à traiter')
-    parser_next.add_argument('-n', '--count', type=_entier_positif, default=None, metavar='N',
+    p.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
+
+
+def _args_next(p):
+    p.add_argument('-n', '--count', type=_entier_positif, default=None, metavar='N',
                              help='Nombre de tâches affichées (défaut : 1, ou [next] count)')
-    parser_next.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
-    parser_next.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne considérer que cette priorité')
-    parser_next.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
-    parser_remind = subparsers.add_parser('remind', help="Rappeler les tâches en retard (silencieux s'il n'y en a pas)")
-    parser_remind.add_argument('--limit', type=_entier_positif, default=None, metavar='N',
+    p.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
+    p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne considérer que cette priorité')
+    p.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie')
+
+
+def _args_remind(p):
+    p.add_argument('--limit', type=_entier_positif, default=None, metavar='N',
                                help='Nombre maximal de tâches listées (défaut : 5, ou [remind] limit)')
-    parser_remind.add_argument('--soon', type=_entier_positif, default=None, metavar='N',
+    p.add_argument('--soon', type=_entier_positif, default=None, metavar='N',
                                help="Signale aussi les échéances des N prochains jours (défaut : retards et aujourd'hui seulement, ou [remind] soon)")
-    parser_remind.add_argument('--once-a-day', action='store_true',
+    p.add_argument('--once-a-day', action='store_true',
                                help="N'affiche le rappel qu'une fois par jour (le premier terminal de la journée)")
-    action = parser_remind.add_mutually_exclusive_group()
+    action = p.add_mutually_exclusive_group()
     action.add_argument('--write-status', action='store_true',
                         help="N'affiche rien : met à jour le résumé d'une ligne lu par l'invite du shell (pour cron)")
     action.add_argument('--disable', action='store_true', help='Désactive les rappels (remind et --write-status deviennent muets)')
     action.add_argument('--enable', action='store_true', help='Réactive les rappels')
     action.add_argument('--status', action='store_true', help='Indique si les rappels sont activés')
-    parser_remind.add_argument('--format', choices=['table', 'json'], default='table',
+    p.add_argument('--format', choices=['table', 'json'], default='table',
                                help="Format de sortie : json émet toujours un document (même sans rien à signaler), "
                                     "sans limite de tâches ; avec --enable, --disable ou --status, il décrit l'état des rappels")
-    parser_archive = subparsers.add_parser('archive', help='Archiver les tâches terminées (ou consulter l\'archive)')
-    parser_archive.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
-    parser_archive.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+
+
+def _args_archive(p):
+    p.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
+    p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
                                 help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
-    parser_archive.add_argument('--purge', action='store_true',
+    p.add_argument('--purge', action='store_true',
                                 help="Supprime DÉFINITIVEMENT des tâches de l'archive (identifiants, ou --older-than, ou toute l'archive) ; "
                                      "confirmation demandée, annulable avec undo")
-    parser_archive.add_argument('-y', '--yes', action='store_true', help="Avec --purge : ne pas demander de confirmation")
-    parser_archive.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
-    parser_archive.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
-    parser_archive.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+    p.add_argument('-y', '--yes', action='store_true', help="Avec --purge : ne pas demander de confirmation")
+    p.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
+    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
+    p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                                 help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    parser_archive.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie de --list")
-    parser_unarchive = subparsers.add_parser('unarchive', help="Remettre des tâches archivées dans la liste")
-    parser_unarchive.add_argument('ids', nargs='+', help="Identifiants (ou préfixes) des tâches archivées à récupérer")
-    parser_config = subparsers.add_parser('config', help='Voir les réglages effectifs ou créer un fichier de configuration')
-    parser_config.add_argument('action', nargs='?', choices=['show', 'path', 'init'], default='show',
-                               help="show : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
-                                    "init : crée un fichier modèle commenté")
-    parser_config.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
-    parser_config.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie (json : compatible jq, pour show, path et init)')
-    parser_stats = subparsers.add_parser('stats', help='Calculer et afficher le tableau de bord des indicateurs')
-    parser_stats.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
-    parser_reset = subparsers.add_parser('reset', help='Détruire intégralement le contenu de la base')
-    parser_reset.add_argument('--include-archive', action='store_true',
+    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie de --list")
+
+
+def _args_unarchive(p):
+    p.add_argument('ids', nargs='+', help="Identifiants (ou préfixes) des tâches archivées à récupérer")
+
+
+def _args_stats(p):
+    p.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
+
+
+def _args_reset(p):
+    p.add_argument('--include-archive', action='store_true',
                               help="Vide aussi l'archive (par défaut, reset ne touche qu'à la liste)")
 
-    # Options de couleur : au niveau principal et sur chaque sous-commande
-    _ajouter_options_couleur(parser)
-    for sous_parseur in subparsers.choices.values():
-        _ajouter_options_couleur(sous_parseur)
+
+def _args_undo(p):
+    pass
+
+
+def _args_config(p):
+    p.add_argument('action', nargs='?', choices=['show', 'list', 'path', 'init'], default='show',
+                   help="show (ou list) : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
+                        "init : crée un fichier modèle commenté")
+    p.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
+    p.add_argument('--format', choices=['table', 'json'], default='table', help='Format de sortie (json : compatible jq, pour show, path et init)')
+
+
+# --- Groupes ``note``, ``archive`` et ``reminder`` : une feuille par action -------------------------------------
+def _args_note_ajouter(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('texte', nargs='+', help="Texte de la note (500 caractères au plus)")
+
+def _args_note_lister(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+
+def _args_note_modifier(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('edit', type=int, metavar='N', help="Numéro de la note (voir `todo note list ID`)")
+    p.add_argument('texte', nargs='+', help="Nouveau texte (la date de la note est conservée)")
+
+def _args_note_supprimer(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('delete', type=int, metavar='N', help="Numéro de la note à supprimer (numérotées de 1, la plus ancienne)")
+
+def _args_archive_ajouter(p):
+    p.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
+    p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+                   help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
+
+def _args_archive_lister(p):
+    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags)")
+    p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+                   help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
+    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie")
+
+def _args_archive_purger(p):
+    p.add_argument('ids', nargs='*', help="Identifiants (ou préfixes) à supprimer de l'archive ; sans identifiant : toute l'archive (ou --older-than)")
+    p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+                   help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
+    p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation")
+
+def _args_format(p):
+    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+
+
+def _args_note_ancien(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('texte', nargs='*', help="Texte de la note (500 caractères au plus) ; sans texte : liste les notes de la tâche")
+    groupe_note = p.add_mutually_exclusive_group()
+    groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
+    groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note ID`)")
+    p.add_argument('--format', choices=['table', 'json'], default='table', help="Format de sortie (json : compatible jq)")
+
+
+_RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
+_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, yes=False, pager=None, format='table')
+
+# (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
+_GROUPES = [
+    ('task', "Créer, consulter et faire avancer les tâches", [
+        ('add', 'add', _args_add, 'Créer une nouvelle tâche', {}),
+        ('list', 'list', _args_list, 'Afficher et filtrer les tâches', {}),
+        ('show', 'show', _args_show, "Afficher le détail complet d'une tâche", {}),
+        ('edit', 'edit', _args_edit, 'Modifier une tâche', {}),
+        ('done', 'done', _args_done, 'Clôturer une ou plusieurs tâches', {}),
+        ('undone', 'undone', _args_undone, 'Rouvrir une tâche terminée', {}),
+        ('remove', 'remove', _args_remove, 'Supprimer une ou plusieurs tâches', {}),
+        ('postpone', 'postpone', _args_postpone, "Reporter l'échéance d'une ou plusieurs tâches", {}),
+        ('next', 'next', _args_next, 'Afficher la ou les prochaines tâches à traiter', {}),
+    ]),
+    ('note', "Notes attachées aux tâches", [
+        ('add', 'note', _args_note_ajouter, 'Ajouter une note à une tâche', dict(edit=None, delete=None, format='table')),
+        ('list', 'note', _args_note_lister, "Lister les notes d'une tâche", dict(texte=[], edit=None, delete=None)),
+        ('edit', 'note', _args_note_modifier, "Remplacer le texte d'une note", dict(delete=None, format='table')),
+        ('delete', 'note', _args_note_supprimer, 'Supprimer une note', dict(texte=[], edit=None, format='table')),
+    ]),
+    ('archive', "Archive des tâches terminées", [
+        ('add', 'archive', _args_archive_ajouter, 'Archiver les tâches terminées', _ARCHIVE_DEFAUTS),
+        ('list', 'archive', _args_archive_lister, "Consulter l'archive", {**_ARCHIVE_DEFAUTS, 'lister': True}),
+        ('purge', 'archive', _args_archive_purger, "Supprimer DÉFINITIVEMENT des tâches de l'archive", {**_ARCHIVE_DEFAUTS, 'purge': True}),
+        ('restore', 'unarchive', _args_unarchive, "Remettre des tâches archivées dans la liste", {}),
+    ]),
+    ('reminder', "Rappels des tâches en retard (invite du shell, cron)", [
+        ('check', 'remind', _args_remind, "Rappeler les tâches en retard (silencieux s'il n'y en a pas)", {}),
+        ('enable', 'remind', _args_format, 'Réactiver les rappels', {**_RAPPEL_DEFAUTS, 'enable': True}),
+        ('disable', 'remind', _args_format, 'Désactiver les rappels', {**_RAPPEL_DEFAUTS, 'disable': True}),
+        ('status', 'remind', _args_format, 'Indiquer si les rappels sont activés', {**_RAPPEL_DEFAUTS, 'status': True}),
+    ]),
+    ('report', "Vues d'ensemble", [
+        ('stats', 'stats', _args_stats, 'Tableau de bord des indicateurs', {}),
+        ('agenda', 'agenda', _args_agenda, 'Tâches à faire jour par jour', {}),
+    ]),
+    ('admin', "Maintenance de la base", [
+        ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
+        ('restore', 'restore', _args_restore, "Lister les sauvegardes ou restaurer l'une d'elles", {}),
+        ('reset', 'reset', _args_reset, 'Détruire le contenu de la base', {}),
+        ('seed', 'seed', _args_seed, 'Remplir la base avec de faux enregistrements', {}),
+    ]),
+    ('data', "Échange de données JSON", [
+        ('export', 'export', _args_export, 'Exporter les tâches (et l\'archive) en JSON', {}),
+        ('import', 'import', _args_import, 'Importer des tâches depuis un fichier JSON', {}),
+    ]),
+]
+# Raccourcis de premier niveau (même syntaxe que dans le groupe) : nom -> (groupe, verbe)
+_RACCOURCIS = {'add': 'task', 'list': 'task', 'show': 'task', 'done': 'task', 'next': 'task',
+               'agenda': 'report', 'undo': 'admin'}
+# Anciennes commandes (syntaxe 1.x, dépréciées) : nom -> constructeur d'arguments
+_ANCIENNES = {
+    'edit': _args_edit, 'undone': _args_undone, 'remove': _args_remove, 'postpone': _args_postpone,
+    'note': _args_note_ancien, 'archive': _args_archive, 'unarchive': _args_unarchive, 'remind': _args_remind,
+    'stats': _args_stats, 'reset': _args_reset, 'restore': _args_restore, 'seed': _args_seed,
+    'export': _args_export, 'import': _args_import,
+}
+_VERBES = {g: {v[0] for v in verbes} for g, _, verbes in _GROUPES}
+_OPTIONS_A_VALEUR = {'--color', '--log-level'}
+
+
+def _mots(argv):
+    """Mots de la commande (options globales ignorées) : ['archive', 'list', ...]."""
+    mots, saute = [], False
+    for a in argv:
+        if saute:
+            saute = False
+        elif a in _OPTIONS_A_VALEUR:
+            saute = True
+        elif not a.startswith('-'):
+            mots.append(a)
+    return mots
+
+
+def _syntaxe_ancienne(mots):
+    """Vrai si la ligne de commande utilise la syntaxe 1.x (plate) plutôt que les groupes."""
+    if not mots:
+        return False
+    if mots[0] == 'archive':
+        return len(mots) == 1 or mots[1] not in _VERBES['archive']
+    if mots[0] == 'note':
+        return len(mots) > 1 and mots[1] not in _VERBES['note']
+    return mots[0] in _ANCIENNES
+
+
+def _commande_visee(mots, ancien):
+    """Nom de commande (vocabulaire du journal) deviné avant l'analyse, pour tracer aussi les erreurs d'usage."""
+    if not mots:
+        return None
+    if ancien:
+        return mots[0] if mots[0] in _ANCIENNES else None
+    if mots[0] in _RACCOURCIS:
+        return mots[0]
+    for groupe, _, verbes in _GROUPES:
+        if mots[0] == groupe and len(mots) > 1:
+            return next((v[1] for v in verbes if v[0] == mots[1]), None)
+    return mots[0] if mots[0] == 'config' else None
+
+
+def _construire(ancien):
+    """Construit le parseur : arbre de groupes (défaut) ou syntaxe plate 1.x (dépréciée)."""
+    parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
+    parser.add_argument('--version', action='version', version=f"todo {__version__}")
+    tous = [parser]
+    sub = parser.add_subparsers(dest="groupe", metavar="COMMANDE", help="Groupes de commandes et raccourcis")
+
+    def feuille(parent, nom, constructeur, canon, aide, defauts=None):
+        p = parent.add_parser(nom, help=aide, description=aide if aide != argparse.SUPPRESS else None)
+        constructeur(p)
+        p.set_defaults(canon=canon, **(defauts or {}))
+        tous.append(p)
+        return p
+
+    if ancien:
+        for nom, constructeur in _ANCIENNES.items():
+            feuille(sub, nom, constructeur, nom, argparse.SUPPRESS)
+        for nom, groupe in _RACCOURCIS.items():
+            ligne = next(v for g, _, vs in _GROUPES if g == groupe for v in vs if v[0] == nom)
+            feuille(sub, nom, ligne[2], ligne[1], ligne[3], ligne[4])
+        feuille(sub, 'config', _args_config, 'config', argparse.SUPPRESS)
+    else:
+        for groupe, aide, verbes in _GROUPES:
+            g = sub.add_parser(groupe, help=aide, description=aide)
+            tous.append(g)
+            sg = g.add_subparsers(dest="verbe", metavar="ACTION", required=True)
+            for verbe, canon, constructeur, aide_v, defauts in verbes:
+                feuille(sg, verbe, constructeur, canon, aide_v, defauts)
+        for nom, groupe in _RACCOURCIS.items():
+            ligne = next(v for g, _, vs in _GROUPES if g == groupe for v in vs if v[0] == nom)
+            feuille(sub, nom, ligne[2], ligne[1], f"Raccourci de `{groupe} {nom}` : {ligne[3]}", ligne[4])
+        feuille(sub, 'config', _args_config, 'config', 'Voir les réglages effectifs ou créer un fichier de configuration')
+    for p in tous:
+        _ajouter_options_couleur(p)
+    return parser
+
+
+def _remplacement(args):
+    """Syntaxe actuelle équivalente à une commande 1.x (pour le message de dépréciation)."""
+    c = args.canon
+    if c == 'archive':
+        return "archive purge" if args.purge else ("archive list" if (args.lister or args.search is not None) else "archive add")
+    if c == 'remind':
+        return "reminder " + ("disable" if args.disable else "enable" if args.enable else "status" if args.status else "check")
+    if c == 'note':
+        return "note " + ("edit" if args.edit is not None else "delete" if args.delete is not None else "add" if args.texte else "list")
+    return {'edit': 'task edit', 'undone': 'task undone', 'remove': 'task remove', 'postpone': 'task postpone',
+            'unarchive': 'archive restore', 'stats': 'report stats', 'reset': 'admin reset', 'restore': 'admin restore',
+            'seed': 'admin seed', 'export': 'data export', 'import': 'data import'}[c]
+
+
+def _avertir_depreciation(args):
+    if os.environ.get('TODO_NO_DEPRECATION'):
+        return
+    print(f"todo : la syntaxe `todo {args.groupe}` est dépréciée, utilisez `todo {_remplacement(args)}` "
+          f"(supprimée en 3.0 ; TODO_NO_DEPRECATION=1 masque ce message).", file=sys.stderr)
+
+
+def main():
+    journal.initialiser()
+    mots = _mots(sys.argv[1:])
+    # `todo archive --help` décrit le groupe, pas l'ancienne commande
+    ancien = _syntaxe_ancienne(mots) and not (mots == ['archive'] and {'-h', '--help'} & set(sys.argv[1:]))
+    parser = _construire(ancien)
 
     # Enregistrement dynamique du parseur auprès du démon d'auto-complétion argcomplete
     try:
@@ -245,8 +476,13 @@ def main():
         pass
 
     # La commande est connue du journal avant l'analyse, pour tracer aussi les erreurs d'usage
-    journal.definir_commande(next((a for a in sys.argv[1:] if a in subparsers.choices), None))
+    journal.definir_commande(_commande_visee(mots, ancien))
     args = parser.parse_args()
+    if ancien and getattr(args, 'canon', None) in _ANCIENNES:
+        _avertir_depreciation(args)
+    args.commande = getattr(args, 'canon', None)
+    if args.commande == 'config' and args.action == 'list':
+        args.action = 'show'
     journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
 

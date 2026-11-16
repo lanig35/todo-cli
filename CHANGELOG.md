@@ -3,6 +3,25 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.0.0] - 2026-11-16
+
+### Changé
+
+- **Commandes en groupes** (`todo GROUPE ACTION`) : `task`, `note`, `archive`, `reminder`, `report`, `config`,
+  `admin`, `data`. Raccourcis de premier niveau : `add`, `list`, `show`, `done`, `next`, `agenda`, `undo`.
+- Nouvelles actions : `note add|list|edit|delete`, `archive add|list|purge|restore`,
+  `reminder check|enable|disable|status`, `config list` (synonyme de `show`).
+
+### Déprécié
+
+- Les commandes 1.x (`edit`, `undone`, `remove`, `postpone`, `note ID`, `archive` avec options, `unarchive`,
+  `remind`, `stats`, `reset`, `restore`, `seed`, `export`, `import`) restent acceptées avec un avertissement
+  sur la sortie d'erreur ; suppression prévue en 3.0. `TODO_NO_DEPRECATION=1` masque l'avertissement.
+
+### Inchangé
+
+- Sorties `--format json`, codes de sortie, réglages, format d'export et vocabulaire du journal.
+
 ## [1.0.0] - 2026-11-16
 
 Première version stable. Les commandes, les sorties `--format json`, les codes de sortie et le format de
@@ -49,4 +68,5 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.0.0
 [1.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v1.0.0

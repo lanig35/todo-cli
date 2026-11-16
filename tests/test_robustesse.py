@@ -32,8 +32,12 @@ def test_commande_inconnue_et_sans_commande(todo):
 def test_aide(todo):
     r = todo("--help")
     assert r.code == 0 and "usage" in r.out.lower()
-    for sous in ("add", "list", "done", "undone", "show", "edit", "remove", "postpone", "restore"):
+    for sous in ("add", "list", "done", "show", "task", "note", "archive", "reminder", "report", "admin", "data", "config"):
         assert sous in r.out
+    sortie = todo("task", "--help").out
+    for sous in ("undone", "edit", "remove", "postpone"):
+        assert sous in sortie
+    assert "restore" in todo("admin", "--help").out
 
 
 def test_titre_avec_caracteres_speciaux(todo):
