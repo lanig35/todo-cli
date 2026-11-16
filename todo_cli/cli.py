@@ -5,7 +5,7 @@ from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
-from . import couleurs, reglages, journal
+from . import __version__, couleurs, reglages, journal
 from .configuration import afficher_chemin, afficher_config, initialiser_config
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .saisie import analyser_titre
@@ -64,6 +64,7 @@ def _ajouter_options_couleur(p):
 def main():
     journal.initialiser()
     parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.")
+    parser.add_argument('--version', action='version', version=f"todo {__version__}")
     subparsers = parser.add_subparsers(dest="commande", help="Commandes système disponibles")
 
     # Commande 'add'
