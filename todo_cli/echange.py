@@ -15,6 +15,7 @@ import sys
 import tempfile
 import uuid
 from datetime import datetime
+from . import __version__
 from .config import ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs, journal
 from .dates import _parser_recurrence
@@ -53,7 +54,7 @@ def construire_export(avec_archive=True):
     taches = sorted(_lire_taches(), key=lambda t: (t.get('date_creation') or "", t['id']))
     archivees = sorted(_lire_archive(), key=lambda t: (t.get('date_creation') or "", t['id'])) if avec_archive else []
     return {
-        "format": FORMAT, "version": VERSION, "exporte_le": _maintenant(),
+        "format": FORMAT, "version": VERSION, "genere_par": f"todo {__version__}", "exporte_le": _maintenant(),
         "compteurs": {"taches": len(taches), "archive": len(archivees)},
         "taches": [_exportable(t) for t in taches],
         "archive": [_exportable(t, archive=True) for t in archivees],

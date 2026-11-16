@@ -749,6 +749,20 @@ Les anciennes entrées (créées avant l'ajout d'un champ, par exemple la date d
 récurrence) restent lisibles : les champs manquants prennent une valeur par défaut. Une entrée
 illisible est ignorée avec un avertissement au lieu de faire échouer la commande.
 
+## Versions et compatibilité
+
+```bash
+todo --version      # todo 1.0.0
+```
+
+Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un
+défaut, `1.1.0` ajoute une fonctionnalité sans rien casser, `2.0.0` casse la compatibilité. Le
+[journal des changements](CHANGELOG.md) décrit chaque version.
+
+Sont considérés comme stables à partir de la 1.0 : les commandes et options décrites dans ce README, les
+champs des sorties `--format json`, les codes de sortie, le format de l'export JSON (`format`, `version`) et
+la lisibilité des bases existantes (les champs ajoutés par les versions suivantes sont facultatifs à la lecture).
+
 ## Licence
 
 [MIT](LICENSE)
