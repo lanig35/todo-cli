@@ -1,7 +1,7 @@
 """Notes des tâches : un journal daté, en ajout seul, distinct de la description.
 
 Chaque note est `{"date", "texte", "action"}` ; `action` dit ce qui l'a produite (`note`, `done`,
-`undone`, `postpone`, `edit`). Une note corrigée par `note --edit` garde sa date et reçoit `modifiee`. Les notes vivent dans la tâche : elles suivent l'archivage, les
+`undone`, `postpone`, `edit`). Une note corrigée par `note edit` garde sa date et reçoit `modifiee`. Les notes vivent dans la tâche : elles suivent l'archivage, les
 sauvegardes et `undo`. `remove` supprime la tâche : sa note (le motif) va au journal système.
 """
 import dbm
@@ -65,8 +65,8 @@ def _erreur(raison, message, **champs):
 def commande_note(id_recherche, mots, fmt="text", modifier=None, supprimer=None):
     """Ajoute, liste, modifie (`modifier` = numéro) ou supprime (`supprimer` = numéro) les notes d'une tâche.
 
-    `todo note ID texte…` ajoute ; `todo note ID` liste ; `--edit N texte…` remplace le texte de la note N
-    (sa date est conservée) ; `--delete N` la supprime. Retourne False en cas d'échec.
+    `todo note add ID texte…` ajoute ; `todo note list ID` liste ; `note edit ID N texte…` remplace le texte de la note N
+    (sa date est conservée) ; `note delete ID N` la supprime. Retourne False en cas d'échec.
     """
     if modifier is not None and supprimer is not None:
         return _erreur("invalid_combination", "--edit et --delete ne se combinent pas.")
@@ -128,7 +128,7 @@ def commande_note(id_recherche, mots, fmt="text", modifier=None, supprimer=None)
     elif fmt == "table" and t['notes']:
         print(tableau(("N°", "DATE", "NOTE"), [(i, n['date'], n['texte']) for i, n in enumerate(t['notes'], start=1)]))
     elif not t['notes']:
-        print(f" {couleurs.CLR_DIM}Aucune note pour '{t['titre']}'. Ajout : todo note {id_complet[:8]} \"texte\"{couleurs.CLR_RESET}")
+        print(f" {couleurs.CLR_DIM}Aucune note pour '{t['titre']}'. Ajout : todo note add {id_complet[:8]} \"texte\"{couleurs.CLR_RESET}")
     else:
         print(f"\n {couleurs.CLR_CYAN}─── 📝 NOTES : {t['titre']} ───{couleurs.CLR_RESET}")
         print("\n".join(lignes_notes(t['notes'], "  ")))

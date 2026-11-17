@@ -23,6 +23,9 @@ import sys
 from typing import NamedTuple, Optional, Tuple
 
 
+COMPLETION = bool(os.environ.get("_ARGCOMPLETE"))   # le shell complète une ligne : rien ne doit s'afficher
+
+
 class Reglage(NamedTuple):
     section: str
     cle: str
@@ -59,7 +62,7 @@ REGLAGES = (
     Reglage("next", "count", "int", 1,
             "Nombre de tâches affichées par next.", minimum=1),
     Reglage("remind", "enabled", "bool", True,
-            "Activer les rappels (remind). Désactivés aussi par `todo remind --disable` ou TODO_NO_REMIND."),
+            "Activer les rappels (remind). Désactivés aussi par `todo reminder disable` ou TODO_NO_REMIND."),
     Reglage("remind", "limit", "int", 5,
             "Nombre maximal de tâches listées par remind.", minimum=1),
     Reglage("remind", "soon", "int", 0,
@@ -105,7 +108,18 @@ def _option_config(argv):
     return None
 
 
-FICHIER_OPTION = _option_config(sys.argv[1:])    # fichier imposé par --config (prioritaire sur TODO_CONFIG)
+def _arguments():
+    """Arguments de la commande ; pendant une complétion du shell, ceux de la ligne en cours de saisie."""
+    if COMPLETION:
+        try:
+            import shlex
+            return shlex.split(os.environ.get("COMP_LINE", ""))[1:]
+        except ValueError:
+            return []
+    return sys.argv[1:]
+
+
+FICHIER_OPTION = _option_config(_arguments())    # fichier imposé par --config (prioritaire sur TODO_CONFIG)
 
 
 def definir_fichier(chemin):
@@ -135,7 +149,8 @@ AVERTISSEMENTS = []   # messages déjà affichés, relus par `journal` une fois 
 
 def _avertir(message):
     AVERTISSEMENTS.append(message)
-    print(f" ⚠️  {message}", file=sys.stderr)
+    if not COMPLETION:
+        print(f" ⚠️  {message}", file=sys.stderr)
 
 
 def convertir(reglage, texte):

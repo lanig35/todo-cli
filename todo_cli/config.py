@@ -12,8 +12,9 @@ DB_DIR = reglages.obtenir("general", "db_dir")
 BACKUP_DIR = os.path.join(DB_DIR, "backups")
 
 # Création récursive des répertoires s'ils n'existent pas encore
-os.makedirs(DB_DIR, exist_ok=True)
-os.makedirs(BACKUP_DIR, exist_ok=True)
+if not reglages.COMPLETION:        # compléter une ligne de commande ne doit rien créer ni échouer
+    os.makedirs(DB_DIR, exist_ok=True)
+    os.makedirs(BACKUP_DIR, exist_ok=True)
 
 # Chemin absolu de base pour le moteur DBM
 DB_NAME = os.path.join(DB_DIR, "todo_db")

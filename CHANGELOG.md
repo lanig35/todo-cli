@@ -3,6 +3,23 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.5.0] - 2026-11-18
+
+### Ajouté
+
+- **Complétion du shell** des clés de réglage (`config get|set|unset`) et des valeurs possibles d'un réglage
+  (choix, `true`/`false`, fichiers pour un chemin) ; `config unset` propose les clés écrites dans le fichier ;
+  `--config` est pris en compte pendant la complétion.
+
+### Corrigé
+
+- **Appuyer sur Tab ne produit plus ni erreur ni entrée dans le journal** : une exception pendant la
+  complétion (par exemple un `argcomplete` incompatible) était écrite sur le terminal et journalisée en
+  CRITICAL. Désormais la complétion est silencieuse (rien dans les logs, aucun dossier créé, pas
+  d'avertissement de configuration) ; `_ARC_DEBUG=1` affiche la trace.
+- Les messages d'aide ne citent plus les anciennes commandes : `todo reminder enable` (au lieu de `todo remind
+  --enable`), `todo archive restore`, `todo admin restore`, `todo note add`.
+
 ## [2.4.0] - 2026-11-18
 
 ### Ajouté
@@ -135,6 +152,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.5.0
 [2.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.4.0
 [2.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.3.0
 [2.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.2.0

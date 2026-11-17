@@ -172,7 +172,7 @@ def test_write_status_sur_base_vide(todo):
 def test_disable_enable(garni):
     garni("remind", "--write-status")
     r = garni("remind", "--disable")
-    assert r.code == 0 and "désactivés" in r.texte and "todo remind --enable" in r.texte
+    assert r.code == 0 and "désactivés" in r.texte and "todo reminder enable" in r.texte
     assert garni("remind").out == "" and garni("remind", "--once-a-day").out == ""
     assert lire(garni, "remind_status") == ""                      # le résumé de l'invite disparaît tout de suite
     garni("remind", "--write-status")

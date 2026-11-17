@@ -251,13 +251,43 @@ def _args_undo(p):
     pass
 
 
+def _completer_cles(prefix, parsed_args, **kwargs):
+    """Complétion de `config get|set|unset CLE` : toutes les clés ; pour unset, celles écrites dans le fichier."""
+    action = getattr(parsed_args, 'action', None)
+    if action in ('get', 'set'):
+        return reglages.cles()
+    if action == 'unset':
+        ecrits = reglages._charger_fichier()
+        return [f"{s}.{c}" for (s, c) in ecrits]
+    return []
+
+
+def _completer_valeurs(prefix, parsed_args, **kwargs):
+    """Complétion de `config set CLE VALEUR` : les choix du réglage, true/false, ou des fichiers pour un chemin."""
+    if getattr(parsed_args, 'action', None) != 'set' or not getattr(parsed_args, 'cle', None):
+        return []
+    try:
+        r = reglages.trouver(parsed_args.cle)
+    except ValueError:
+        return []
+    if r.type == 'choix':
+        return list(r.choix)
+    if r.type == 'bool':
+        return ['true', 'false']
+    if r.type == 'chemin':
+        from argcomplete.completers import FilesCompleter
+        return FilesCompleter()(prefix=prefix, **kwargs)
+    return []
+
+
 def _args_config(p):
     p.add_argument('action', nargs='?', choices=['show', 'list', 'path', 'init', 'get', 'set', 'unset'], default='show',
                    help="show (ou list) : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
                         "init : crée un fichier modèle commenté ; get CLE : valeur effective d'un réglage ; "
                         "set CLE VALEUR : l'écrit dans le fichier ; unset CLE : le retire du fichier")
-    p.add_argument('cle', nargs='?', default=None, metavar='CLE', help="get, set, unset : réglage, sous la forme section.clé (list.limit)")
-    p.add_argument('valeur', nargs='?', default=None, metavar='VALEUR', help="set : nouvelle valeur")
+    p.add_argument('cle', nargs='?', default=None, metavar='CLE',
+                   help="get, set, unset : réglage, sous la forme section.clé (list.limit)").completer = _completer_cles
+    p.add_argument('valeur', nargs='?', default=None, metavar='VALEUR', help="set : nouvelle valeur").completer = _completer_valeurs
     p.add_argument('--file', action='store_true', help="get : valeur écrite dans le fichier de configuration, sans tenir compte de l'environnement ni des défauts")
     p.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
     p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (json : compatible jq, pour show, path et init)')
@@ -307,7 +337,7 @@ def _args_note_ancien(p):
     p.add_argument('texte', nargs='*', help="Texte de la note (500 caractères au plus) ; sans texte : liste les notes de la tâche")
     groupe_note = p.add_mutually_exclusive_group()
     groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
-    groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note ID`)")
+    groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note list ID`)")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 
@@ -509,19 +539,43 @@ def _avertir_depreciation(args):
           f"(supprimée en 3.0 ; TODO_NO_DEPRECATION=1 masque ce message).", file=sys.stderr)
 
 
+def _completer_ligne():
+    """Réponse à une demande de complétion du shell (variable `_ARGCOMPLETE`, posée par argcomplete).
+
+    Appuyer sur Tab ne doit jamais produire d'erreur ni de trace, ni écrire dans le journal ou les logs :
+    le journal est coupé, les avertissements de configuration sont tus (voir `reglages`), et toute exception
+    est avalée (la complétion est alors simplement vide). `_ARC_DEBUG=1` affiche la trace pour comprendre.
+    """
+    journal.desactiver()
+    try:
+        import argcomplete
+        import shlex
+        ligne = os.environ.get('COMP_LINE', '')
+        try:
+            mots = shlex.split(ligne)[1:]
+        except ValueError:                       # guillemet non fermé : on complète avec la syntaxe courante
+            mots = []
+        if mots and not ligne.endswith(' '):     # le dernier mot est en cours de saisie : il ne choisit pas la syntaxe
+            mots = mots[:-1]
+        mots = _mots(mots)
+        # `todo archive <Tab>` propose les actions du groupe (seule l'exécution de `todo archive` seul garde l'ancien sens)
+        saisie_ancienne = ligne.split()[-1:] and ligne.split()[-1].startswith('-') and not ligne.endswith(' ')
+        argcomplete.autocomplete(_construire(_syntaxe_ancienne(mots) and (mots != ['archive'] or saisie_ancienne)))
+    except BaseException:
+        if os.environ.get('_ARC_DEBUG'):
+            import traceback
+            traceback.print_exc()
+    sys.exit(0)
+
+
 def main():
+    if os.environ.get('_ARGCOMPLETE'):
+        _completer_ligne()
     journal.initialiser()
     mots = _mots(sys.argv[1:])
     # `todo archive --help` décrit le groupe, pas l'ancienne commande
     ancien = _syntaxe_ancienne(mots) and not (mots == ['archive'] and {'-h', '--help'} & set(sys.argv[1:]))
     parser = _construire(ancien)
-
-    # Enregistrement dynamique du parseur auprès du démon d'auto-complétion argcomplete
-    try:
-        import argcomplete
-        argcomplete.autocomplete(parser)
-    except ImportError:
-        pass
 
     # La commande est connue du journal avant l'analyse, pour tracer aussi les erreurs d'usage
     journal.definir_commande(_commande_visee(mots, ancien))

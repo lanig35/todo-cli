@@ -35,7 +35,7 @@ Python 3.11 ou plus est requis (développé avec Python 3.13). Aucune dépendanc
 
 ```bash
 pipx install git+https://github.com/lanig35/todo-cli          # dernière version de main
-pipx install git+https://github.com/lanig35/todo-cli@v2.4.0   # une version précise (tag)
+pipx install git+https://github.com/lanig35/todo-cli@v2.5.0   # une version précise (tag)
 pipx upgrade todo-cli                                          # mise à jour ; pipx uninstall todo-cli pour retirer
 ```
 
@@ -689,6 +689,24 @@ soon = 0
 - `db_dir` et `keep_backups` sont lus au démarrage : il n'y a pas d'option de ligne de commande
   équivalente, mais `TODO_DB_DIR=/autre/dossier todo list` fonctionne pour un usage ponctuel.
 
+### Complétion du shell
+
+La touche Tab complète les groupes, les actions, les options et les valeurs d'`--format`, ainsi que, pour
+`config`, les clés (`todo config get list.<Tab>`) et les valeurs possibles d'un réglage (`todo config set
+general.color <Tab>` propose `auto always never`, un booléen propose `true false`, `config unset` propose les
+clés écrites dans le fichier). `--config FICHIER` est pris en compte.
+
+```bash
+pipx inject todo-cli argcomplete                 # ou : pipx install "todo-cli[completion] @ git+https://github.com/lanig35/todo-cli"
+echo 'eval "$(register-python-argcomplete todo)"' >> ~/.bashrc        # bash
+register-python-argcomplete --shell fish todo > ~/.config/fish/completions/todo.fish   # fish
+```
+
+Appuyer sur Tab ne produit **jamais** d'erreur ni de trace, n'écrit rien dans le journal ni dans les logs, et ne
+crée aucun dossier : en cas de problème, la complétion est simplement vide. `_ARC_DEBUG=1 todo <Tab>` affiche
+alors la raison. Une version récente d'`argcomplete` est nécessaire : les 3.1.x livrées avec certaines
+distributions ne fonctionnent pas avec Python 3.13 (la 3.7 a été vérifiée).
+
 ### Journal
 
 Les actions et les erreurs sont tracées dans le journal système, **en plus** des messages affichés
@@ -899,7 +917,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 2.4.0
+todo --version      # todo 2.5.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un
