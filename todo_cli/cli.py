@@ -405,6 +405,41 @@ def _commande_visee(mots, ancien):
     return mots[0] if mots[0] == 'config' else None
 
 
+def _options_note_en_tete(argv):
+    """Syntaxe 1.x `note ID --edit N texte` : place les options de `note` avant les positionnels.
+
+    Avec un positionnel `nargs='*'` suivi d'une option, argparse (Python < 3.12) range le texte hors du
+    positionnel et refuse la ligne ; mettre `--edit N`, `--delete N` et `--format F` juste après `note` suffit.
+    """
+    sortie, deplaces, saute, trouve = [], [], False, False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if saute:
+            saute = False
+        elif a in _OPTIONS_A_VALEUR and not trouve:
+            saute = True
+        elif not trouve and not a.startswith('-'):
+            trouve = True
+            sortie.append(a)
+            i += 1
+            continue
+        elif trouve and a in ('--edit', '--delete', '--format') and i + 1 < len(argv):
+            deplaces += [a, argv[i + 1]]
+            i += 2
+            continue
+        elif trouve and a.startswith(('--edit=', '--delete=', '--format=')):
+            deplaces.append(a)
+            i += 1
+            continue
+        sortie.append(a)
+        i += 1
+    if not trouve:
+        return argv
+    k = next(j for j, a in enumerate(sortie) if not a.startswith('-') and (j == 0 or sortie[j - 1] not in _OPTIONS_A_VALEUR))
+    return sortie[:k + 1] + deplaces + sortie[k + 1:]
+
+
 def _construire(ancien):
     """Construit le parseur : arbre de groupes (défaut) ou syntaxe plate 1.x (dépréciée)."""
     parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.",
@@ -483,7 +518,8 @@ def main():
 
     # La commande est connue du journal avant l'analyse, pour tracer aussi les erreurs d'usage
     journal.definir_commande(_commande_visee(mots, ancien))
-    args = parser.parse_args()
+    argv = _options_note_en_tete(sys.argv[1:]) if ancien and mots[:1] == ['note'] else None
+    args = parser.parse_args(argv)
     if ancien and getattr(args, 'canon', None) in _ANCIENNES:
         _avertir_depreciation(args)
     args.commande = getattr(args, 'canon', None)

@@ -29,12 +29,25 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 
 ## Installation
 
-Python 3 est requis (développé et testé avec Python 3.13).
+Python 3.11 ou plus est requis (développé avec Python 3.13). Aucune dépendance obligatoire.
+
+**Avec pipx (recommandé)** : la commande `todo` est installée dans un environnement isolé.
+
+```bash
+pipx install git+https://github.com/lanig35/todo-cli          # dernière version de main
+pipx install git+https://github.com/lanig35/todo-cli@v2.3.0   # une version précise (tag)
+pipx upgrade todo-cli                                          # mise à jour ; pipx uninstall todo-cli pour retirer
+```
+
+Depuis un clone (`pipx install .`), ou pour tester une branche :
+`pipx install git+https://github.com/lanig35/todo-cli@nom-de-branche`. Les extras facultatifs
+s'ajoutent avec `pipx install "todo-cli[seed,completion] @ git+https://github.com/lanig35/todo-cli"`.
+
+**Sans installation** : le lanceur `todo.py` fonctionne depuis un clone.
 
 ```bash
 git clone https://github.com/lanig35/todo-cli.git
 cd todo-cli
-chmod +x todo.py
 ln -s "$PWD/todo.py" ~/.local/bin/todo     # optionnel : disposer de la commande `todo`
 ```
 
@@ -42,11 +55,11 @@ Dépendances optionnelles :
 
 | Paquet | Usage |
 |---|---|
-| `faker` | commande `seed` (génération de tâches factices) |
-| `argcomplete` | autocomplétion du shell (`register-python-argcomplete todo`) |
+| `faker` | commande `admin seed` (génération de tâches factices) ; extra `seed` |
+| `argcomplete` | autocomplétion du shell (`register-python-argcomplete todo`) ; extra `completion` |
 | `less` | pager pour les longues listes (présent sur la plupart des systèmes) |
 
-Dans les exemples ci-dessous, `todo` désigne `./todo.py` ou le lien créé ci-dessus.
+Dans les exemples ci-dessous, `todo` désigne la commande installée, ou `./todo.py` / le lien créé ci-dessus.
 
 ## Utilisation
 
@@ -813,9 +826,14 @@ La suite `pytest` pilote le programme de l'extérieur (sous-processus, base temp
 interne du code.
 
 ```bash
-pip install -r requirements-dev.txt   # pytest et faker
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"               # installe todo en mode éditable, avec pytest et faker
 python -m pytest
 ```
+
+Le fichier `pyproject.toml` décrit le paquet (nom, extras, commande `todo`) et la configuration de pytest.
+La version n'y est écrite nulle part : elle est lue dans `todo_cli/__init__.py`, comme `todo --version` et
+le CHANGELOG.
 
 ### Intégration continue
 
@@ -849,7 +867,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 2.2.0
+todo --version      # todo 2.3.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un
