@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "todo-cli"
+description = "Gestionnaire de tâches en ligne de commande, persistant et sans dépendance"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+dependencies = []
+dynamic = ["version"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/lanig35/todo-cli"
+Changelog = "https://github.com/lanig35/todo-cli/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# seed : données factices (un test du journal le vérifie, ignoré sans faker)
+seed = ["faker"]
+# autocomplétion du shell : register-python-argcomplete todo
+completion = ["argcomplete"]
+dev = ["pytest", "faker"]
+
+[project.scripts]
+todo = "todo_cli.cli:executer"
+
+# La version vit à un seul endroit : todo_cli/__init__.py (`todo --version`, CHANGELOG et paquet concordent)
+[tool.setuptools.dynamic]
+version = { attr = "todo_cli.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["todo_cli*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

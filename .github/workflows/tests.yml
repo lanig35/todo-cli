@@ -30,10 +30,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: pyproject.toml
 
-      - name: Installer les dépendances de test
-        run: python -m pip install -r requirements-dev.txt
+      - name: Installer le paquet et les dépendances de test
+        run: python -m pip install -e ".[dev]"
 
       # jq : quelques tests vérifient que les sorties JSON sont lisibles par jq (ignorés s'il manque)
       - name: Installer jq
@@ -41,3 +41,7 @@ jobs:
 
       - name: Tests
         run: python -m pytest -q
+
+      # Le paquet installé doit fournir la commande `todo`
+      - name: Commande installée
+        run: todo --version

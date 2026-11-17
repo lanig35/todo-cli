@@ -3,6 +3,23 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.3.0] - 2026-11-17
+
+### Ajouté
+
+- **`pyproject.toml`** : `todo` s'installe comme un paquet (`pipx install git+https://github.com/lanig35/todo-cli`)
+  et fournit la commande `todo`. Extras facultatifs : `seed` (faker), `completion` (argcomplete) et `dev`
+  (pytest, faker). Python 3.11 ou plus. Le lanceur `todo.py` reste utilisable depuis un clone.
+
+### Changé
+
+- `requirements-dev.txt` et `pytest.ini` sont remplacés par `pyproject.toml` (`pip install -e ".[dev]"`) ; la
+  CI s'y conforme et vérifie que la commande installée répond.
+
+### Corrigé
+
+- Python 3.11 : l'ancienne syntaxe `note ID --edit N texte` (dépréciée) était refusée par `argparse`.
+
 ## [2.2.0] - 2026-11-17
 
 ### Ajouté
@@ -104,6 +121,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.3.0
 [2.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.2.0
 [2.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.1.0
 [2.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.0.0

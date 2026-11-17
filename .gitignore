@@ -10,3 +10,7 @@ venv/
 # (elles vivent normalement dans ~/.local/share/todo, mais TODO_DB_DIR peut les rediriger ici)
 todo_db*
 backups/
+
+# Installation et construction du paquet (pipx, pip install -e, python -m build)
+build/
+dist/
