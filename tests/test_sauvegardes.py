@@ -9,7 +9,7 @@ def test_liste_des_sauvegardes(todo):
     r = todo("restore")
     assert r.code == 0
     assert "1." in r.texte and "2." in r.texte and "2 tâche(s)" in r.texte and "1 tâche(s)" in r.texte
-    assert "Restaurer : todo restore" in r.texte
+    assert "Restaurer : todo admin restore" in r.texte
 
 
 def test_restore_sans_sauvegarde(todo):

@@ -135,7 +135,7 @@ def lister_sauvegardes():
         detail = f"{nb} tâche(s)" if nb is not None else f"{couleurs.CLR_DEL}illisible{couleurs.CLR_RESET}"
         print(f"  {couleurs.CLR_BOLD}{i}{couleurs.CLR_RESET}. {date_txt}  {couleurs.CLR_DIM}({detail}){couleurs.CLR_RESET}")
     print(f" {couleurs.CLR_CYAN}──────────────────────────────────{couleurs.CLR_RESET}")
-    print(f" {couleurs.CLR_DIM}Restaurer : todo restore <numéro>   (1 = la plus récente){couleurs.CLR_RESET}\n")
+    print(f" {couleurs.CLR_DIM}Restaurer : todo admin restore <numéro>   (1 = la plus récente){couleurs.CLR_RESET}\n")
 
 def restaurer_base(reference=None, confirmer=True):
     """Liste les sauvegardes (sans argument) ou restaure celle désignée.

@@ -247,7 +247,7 @@ def lister_archive(recherche=None, fmt="text", pager=True):
         if t['description']:
             lignes.append(f"      {couleurs.CLR_DIM}↳ {t['description']}{couleurs.CLR_RESET}")
     lignes.append(f" {couleurs.CLR_CYAN}──────────────────────────────────────{couleurs.CLR_RESET}")
-    lignes.append(f" {couleurs.CLR_DIM}{len(taches)} tâche(s) archivée(s) · récupérer : todo unarchive <id>{couleurs.CLR_RESET}\n")
+    lignes.append(f" {couleurs.CLR_DIM}{len(taches)} tâche(s) archivée(s) · récupérer : todo archive restore <id>{couleurs.CLR_RESET}\n")
     _afficher_texte("\n".join(lignes), pager)
 
 

@@ -317,7 +317,7 @@ def test_config_show_json(todo):
     assert d["rappels_coupes_par_commande"] is False
     todo("remind", "--disable")
     assert todo("config", "show", "--format", "json").json()["rappels_coupes_par_commande"] is True
-    assert "remind --disable" in todo("config", "show").texte
+    assert "reminder disable" in todo("config", "show").texte
 
 
 def test_config_path(todo, tmp_path):

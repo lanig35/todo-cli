@@ -61,7 +61,7 @@ def afficher_config(fmt="text"):
         print(f"  {cle:<{largeur_cle}}  {style}{texte:<{largeur_val}}{couleurs.CLR_RESET}  "
               f"{couleurs.CLR_DIM}{origine}{couleurs.CLR_RESET}")
     if os.path.exists(REMIND_OFF):
-        print(f"\n  {couleurs.CLR_DIM}Rappels coupés par « todo remind --disable » (todo remind --enable pour les réactiver).{couleurs.CLR_RESET}")
+        print(f"\n  {couleurs.CLR_DIM}Rappels coupés par « todo reminder disable » (todo reminder enable pour les réactiver).{couleurs.CLR_RESET}")
     print(f"\n  {couleurs.CLR_DIM}Priorité : option > variable d'environnement > fichier > défaut.{couleurs.CLR_RESET}\n")
 
 

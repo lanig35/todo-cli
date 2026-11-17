@@ -94,7 +94,7 @@ def desactiver_rappels(fmt="text"):
         return _afficher_json(etat_rappels())
     if fmt in ("plain", "table"):
         return _afficher_etat_tabulaire(fmt)
-    print(f" 🔕 Rappels désactivés. Pour les réactiver : {couleurs.CLR_BOLD}todo remind --enable{couleurs.CLR_RESET}")
+    print(f" 🔕 Rappels désactivés. Pour les réactiver : {couleurs.CLR_BOLD}todo reminder enable{couleurs.CLR_RESET}")
 
 
 def activer_rappels(fmt="text"):
@@ -117,7 +117,7 @@ def afficher_etat_rappels(fmt="text"):
     if fmt in ("plain", "table"):
         return _afficher_etat_tabulaire(fmt)
     if os.path.exists(REMIND_OFF):
-        print(f" 🔕 Rappels désactivés (todo remind --enable pour les réactiver).")
+        print(f" 🔕 Rappels désactivés (todo reminder enable pour les réactiver).")
     elif not reglages.obtenir("remind", "enabled"):
         _, origine = reglages.obtenir_avec_origine("remind", "enabled")
         print(f" 🔕 Rappels coupés par le réglage [remind] enabled ({origine}).")

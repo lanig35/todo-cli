@@ -45,6 +45,12 @@ def initialiser():
     _etat["titres_actifs"] = reglages.obtenir("log", "titles")
 
 
+def desactiver():
+    """Coupe tout le journal (complétion du shell : appuyer sur Tab ne doit rien écrire dans les logs)."""
+    _etat["niveau"] = "off"
+    _etat["avertissements_emis"] = True
+
+
 def regler_niveau(niveau_cli):
     """Applique --log-level (priorité sur la variable d'environnement et le fichier)."""
     if niveau_cli is not None:
