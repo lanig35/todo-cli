@@ -35,7 +35,7 @@ Python 3.11 ou plus est requis (développé avec Python 3.13). Aucune dépendanc
 
 ```bash
 pipx install git+https://github.com/lanig35/todo-cli          # dernière version de main
-pipx install git+https://github.com/lanig35/todo-cli@v2.3.0   # une version précise (tag)
+pipx install git+https://github.com/lanig35/todo-cli@v2.4.0   # une version précise (tag)
 pipx upgrade todo-cli                                          # mise à jour ; pipx uninstall todo-cli pour retirer
 ```
 
@@ -594,8 +594,40 @@ todo config show     # valeurs effectives et leur origine (option, variable, fic
 todo config path     # chemin du fichier
 ```
 
-Le fichier est `$TODO_CONFIG` s'il est défini, sinon `$XDG_CONFIG_HOME/todo/config.ini`, sinon
-`~/.config/todo/config.ini`. Un fichier absent n'est pas une erreur. Exemple :
+Le fichier est, par ordre de priorité : celui de l'option **`--config FICHIER`**, `$TODO_CONFIG` s'il est
+défini, `$XDG_CONFIG_HOME/todo/config.ini`, puis `~/.config/todo/config.ini`. Un fichier absent n'est pas une
+erreur, sauf s'il est désigné par `--config` : `todo` s'arrête alors avec le code 1 (`config set`, `config
+init` et `config path` peuvent le créer ou l'afficher). `config show` indique d'où vient le chemin.
+
+#### Lire et modifier un réglage
+
+Les réglages se désignent par `section.clé`, comme dans `config show` (`list.limit`, `general.format`…).
+
+```bash
+todo config get list.limit                # valeur effective, seule sur une ligne : utilisable dans un script
+todo config get list.limit --format json  # {"cle", "valeur", "origine", "variable"}
+todo config get list.limit --file         # valeur écrite dans le fichier, sans environnement ni défaut (code 1 si absente)
+todo config set list.limit 20             # vérifie la valeur et l'écrit dans le fichier (créé au besoin)
+todo config unset list.limit              # retire la ligne : retour à la valeur par défaut
+```
+
+- `set` applique les règles du fichier (type, minimum, choix) : une valeur invalide est refusée et le fichier
+  n'est pas touché. Les booléens (`yes`, `on`, `1`…) sont écrits `true` ou `false`.
+- Seule la ligne du réglage est modifiée : commentaires, ordre et autres clés restent tels quels. Avec un
+  fichier issu de `config init`, la valeur s'écrit juste sous sa valeur par défaut commentée. Un fichier
+  qui n'existe pas est d'abord créé à partir du modèle commenté ; un fichier illisible n'est jamais modifié.
+- Si une variable d'environnement (`TODO_LIST_LIMIT`…) définit déjà le réglage, `set` et `unset` le signalent
+  sur stderr : elle l'emporte sur le fichier.
+- `set` et `unset` acceptent `--format json` ; le journal garde la clé modifiée, jamais la valeur.
+
+```bash
+todo --config ~/essai.ini config set general.db_dir /tmp/essai-todo   # un environnement d'essai complet
+todo --config ~/essai.ini add "Tester"
+```
+
+`--config` s'écrit en toutes lettres (pas d'abréviation) et peut se placer avant ou après la commande.
+
+Exemple de fichier :
 
 ```ini
 [general]
@@ -867,7 +899,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 2.3.0
+todo --version      # todo 2.4.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un

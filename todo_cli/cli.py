@@ -7,7 +7,7 @@ from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches,
 from .affichage import afficher_stats, afficher_tache, lister_taches
 from .config import PRIORITES
 from . import __version__, couleurs, reglages, journal
-from .configuration import afficher_chemin, afficher_config, initialiser_config
+from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
@@ -62,6 +62,9 @@ def _ajouter_options_couleur(p):
                    help="Désactive les couleurs (équivaut à --color never)")
     p.add_argument('--log-level', choices=['off', 'error', 'warning', 'info', 'debug'], dest='niveau_log',
                    default=argparse.SUPPRESS, help="Niveau du journal pour cette commande (défaut : info, ou [log] level)")
+    p.add_argument('--config', dest='fichier_config', metavar='FICHIER', default=argparse.SUPPRESS,
+                   help="Fichier de configuration à utiliser à la place de celui par défaut (prioritaire sur TODO_CONFIG) ; "
+                        "à écrire en toutes lettres")
 
 
 def _args_add(p):
@@ -249,9 +252,13 @@ def _args_undo(p):
 
 
 def _args_config(p):
-    p.add_argument('action', nargs='?', choices=['show', 'list', 'path', 'init'], default='show',
+    p.add_argument('action', nargs='?', choices=['show', 'list', 'path', 'init', 'get', 'set', 'unset'], default='show',
                    help="show (ou list) : valeurs effectives et leur origine (défaut) ; path : chemin du fichier ; "
-                        "init : crée un fichier modèle commenté")
+                        "init : crée un fichier modèle commenté ; get CLE : valeur effective d'un réglage ; "
+                        "set CLE VALEUR : l'écrit dans le fichier ; unset CLE : le retire du fichier")
+    p.add_argument('cle', nargs='?', default=None, metavar='CLE', help="get, set, unset : réglage, sous la forme section.clé (list.limit)")
+    p.add_argument('valeur', nargs='?', default=None, metavar='VALEUR', help="set : nouvelle valeur")
+    p.add_argument('--file', action='store_true', help="get : valeur écrite dans le fichier de configuration, sans tenir compte de l'environnement ni des défauts")
     p.add_argument('--force', action='store_true', help="init : remplace un fichier existant")
     p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (json : compatible jq, pour show, path et init)')
 
@@ -364,7 +371,7 @@ _ANCIENNES = {
     'export': _args_export, 'import': _args_import,
 }
 _VERBES = {g: {v[0] for v in verbes} for g, _, verbes in _GROUPES}
-_OPTIONS_A_VALEUR = {'--color', '--log-level'}
+_OPTIONS_A_VALEUR = {'--color', '--log-level', '--config'}
 
 
 def _mots(argv):
@@ -525,6 +532,23 @@ def main():
     args.commande = getattr(args, 'canon', None)
     if args.commande == 'config' and args.action == 'list':
         args.action = 'show'
+    if args.commande == 'config':
+        attendus = {'get': 1, 'unset': 1, 'set': 2}.get(args.action, 0)
+        donnes = sum(v is not None for v in (args.cle, args.valeur))
+        if donnes != attendus:
+            parser.error({'get': "config get attend un réglage : todo config get section.clé",
+                          'unset': "config unset attend un réglage : todo config unset section.clé",
+                          'set': "config set attend un réglage et une valeur : todo config set section.clé valeur"}
+                         .get(args.action, f"config {args.action} n'accepte pas d'argument supplémentaire"))
+    explicite = getattr(args, 'fichier_config', None)
+    if explicite is not None:
+        reglages.definir_fichier(explicite)
+        if (not os.path.isfile(reglages.chemin_config())
+                and not (args.commande == 'config' and args.action in ('set', 'init', 'path'))):
+            journal.echec("config_not_found", file=reglages.chemin_config())
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} fichier de configuration introuvable : "
+                  f"{reglages.chemin_config()} (option --config). `todo --config FICHIER config init` le crée.", file=sys.stderr)
+            sys.exit(1)
     journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
     if hasattr(args, 'format'):     # option > TODO_FORMAT > fichier > auto ; auto : text dans un terminal, plain sinon
@@ -665,6 +689,12 @@ def main():
             afficher_chemin(args.format)
         elif args.action == 'init':
             succes = initialiser_config(args.force, args.format)
+        elif args.action == 'get':
+            succes = lire_reglage(args.cle, args.format, args.file)
+        elif args.action == 'set':
+            succes = ecrire_reglage(args.cle, args.valeur, args.format)
+        elif args.action == 'unset':
+            succes = retirer_reglage(args.cle, args.format)
         else:
             afficher_config(args.format)
     elif args.commande == 'stats':
