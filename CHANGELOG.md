@@ -3,6 +3,20 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.4.0] - 2026-11-18
+
+### Ajouté
+
+- **`config get CLE`** : valeur effective d'un réglage (`section.clé`), seule sur une ligne ; `--format json`
+  donne aussi l'origine ; `--file` donne la valeur écrite dans le fichier.
+- **`config set CLE VALEUR`** : valide la valeur et l'écrit dans le fichier de configuration (créé au besoin
+  à partir du modèle commenté), en ne touchant qu'à la ligne du réglage. Avertit si une variable
+  d'environnement l'emporte.
+- **`config unset CLE`** : retire le réglage du fichier.
+- **Option générale `--config FICHIER`** : utilise un autre fichier de configuration (prioritaire sur
+  `TODO_CONFIG`), y compris pour trouver le stockage. Un fichier introuvable désigné ainsi est une erreur.
+- `config show` indique l'origine du chemin du fichier (`fichier_origine` en JSON).
+
 ## [2.3.0] - 2026-11-17
 
 ### Ajouté
@@ -121,6 +135,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.4.0
 [2.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.3.0
 [2.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.2.0
 [2.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.1.0
