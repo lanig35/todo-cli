@@ -4,7 +4,7 @@ import os
 import sys
 from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
-from .affichage import afficher_stats, afficher_tache, lister_taches
+from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches
 from .config import PRIORITES
 from . import __version__, couleurs, reglages, journal
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
@@ -31,6 +31,26 @@ def _date_filtre(valeur, option):
               f"Formats acceptés : {couleurs.CLR_BOLD}{MSG_FORMATS_DATE}{couleurs.CLR_RESET}.")
         sys.exit(1)
     return date_obj
+
+def _champs_recherche(valeur):
+    """Type argparse de --search-in : un ou plusieurs champs séparés par des virgules."""
+    try:
+        return champs_recherche(valeur)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+
+_AIDE_SEARCH_IN = ("Limite --search à ces champs, séparés par des virgules : title, description, tags, notes "
+                   "(défaut : all). Ex. : --search-in notes")
+
+
+def _exiger_search(args):
+    """--search-in n'a de sens qu'avec --search."""
+    if args.search_in is not None and args.search is None:
+        journal.echec("invalid_combination")
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --search-in s'utilise avec --search.")
+        sys.exit(1)
+
 
 def _entier_positif(valeur):
     """Type argparse : entier >= 1."""
@@ -84,7 +104,8 @@ def _args_add(p):
 
 def _args_list(p):
     p.add_argument('--status', choices=['todo', 'done'], help="Filtrer selon l'avancement")
-    p.add_argument('--search', type=str, help='Recherche plein texte (Titre & Description)')
+    p.add_argument('--search', type=str, help='Recherche plein texte (titre, description, tags, notes), sans tenir compte des accents ni de la casse')
+    p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
     p.add_argument('--tag', type=str, default=None, help='Extraction par étiquette exclusive')
     p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne montrer que cette priorité')
     p.add_argument('--overdue', action='store_true', help="Tâches à faire dont l'échéance est dépassée")
@@ -227,7 +248,8 @@ def _args_archive(p):
                                      "confirmation demandée, annulable avec undo")
     p.add_argument('-y', '--yes', action='store_true', help="Avec --purge : ne pas demander de confirmation")
     p.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
-    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags) ; implique --list")
+    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags, notes), sans accents ni casse ; implique --list")
+    p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                                 help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie de --list")
@@ -317,7 +339,8 @@ def _args_archive_ajouter(p):
                    help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
 
 def _args_archive_lister(p):
-    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags)")
+    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags, notes), sans accents ni casse")
+    p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                    help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie")
@@ -342,7 +365,7 @@ def _args_note_ancien(p):
 
 
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
-_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, yes=False, pager=None, format=None)
+_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None)
 
 # (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
 _GROUPES = [
@@ -643,6 +666,7 @@ def main():
                 compris.append(f"répétition {analyse['repeat']}")
             print(f"    {couleurs.CLR_DIM}⚡ Compris dans le titre : {' · '.join(compris)}{couleurs.CLR_RESET}")
     elif args.commande == 'list':
+        _exiger_search(args)
         avant = _date_filtre(args.due_before, '--due-before')
         apres = _date_filtre(args.due_after, '--due-after')
         if avant is not None and apres is not None and apres > avant:
@@ -653,7 +677,7 @@ def main():
                       prio_filtre=args.prio, retard=args.overdue, aujourdhui=args.today,
                       retards_en_premier=reglages.obtenir('list', 'overdue_first', args.overdue_first),
                       limite=reglages.obtenir('list', 'limit', args.limit) or None, debut=args.start,
-                      pager=reglages.obtenir('general', 'pager', args.pager),
+                      pager=reglages.obtenir('general', 'pager', args.pager), champs=args.search_in or CHAMPS_RECHERCHE,
                       avant=avant, apres=apres)
     elif args.commande == 'show':
         succes = afficher_tache(args.id, args.format)
@@ -714,11 +738,13 @@ def main():
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --purge ne se combine pas avec --list ni --search.")
             sys.exit(1)
         if args.lister or args.search is not None:
+            _exiger_search(args)
             if args.ids or args.anciennete:
                 journal.echec("invalid_combination")
                 print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --list / --search ne se combinent pas avec des identifiants ni avec --older-than.")
                 sys.exit(1)
-            lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+            lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager),
+                           champs=args.search_in or CHAMPS_RECHERCHE)
         else:
             if args.ids and args.anciennete:
                 journal.echec("invalid_combination")

@@ -10,7 +10,7 @@ from collections import Counter
 from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs, journal
-from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date
+from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date, _sans_accents
 from .formats import imprimer_plain, sortie_taches, tableau
 from .notes import lignes_notes
 from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
@@ -135,13 +135,39 @@ def _afficher_texte(texte, pager=True):
                 pass  # pager inutilisable : repli sur l'affichage direct
     print(texte)
 
-def _texte_recherche(t):
-    """Texte parcouru par --search : titre, description, tags et notes."""
-    return (t['titre'] + " " + t['description'] + " " + " ".join(t['tags']) + " " + " ".join(n['texte'] for n in t['notes'])).lower()
+CHAMPS_RECHERCHE = ("title", "description", "tags", "notes")
+
+
+def normaliser_recherche(texte):
+    """Texte comparable pour --search : sans accents ni majuscules ('Réunion' et 'reunion' se correspondent)."""
+    return _sans_accents(texte).casefold()
+
+
+def champs_recherche(valeur):
+    """Champs désignés par --search-in (liste séparée par des virgules, ou `all`) ; ValueError si l'un est inconnu."""
+    noms = [n.strip().lower() for n in str(valeur).split(",") if n.strip()]
+    if not noms or "all" in noms:
+        return CHAMPS_RECHERCHE
+    inconnus = [n for n in noms if n not in CHAMPS_RECHERCHE]
+    if inconnus:
+        raise ValueError(f"champ inconnu : {', '.join(inconnus)} (attendus : {', '.join(CHAMPS_RECHERCHE)}, all)")
+    return tuple(n for n in CHAMPS_RECHERCHE if n in noms)
+
+
+def _texte_recherche(t, champs=CHAMPS_RECHERCHE):
+    """Texte parcouru par --search (normalisé) : titre, description, tags et notes, ou seulement `champs`."""
+    parties = {"title": t['titre'], "description": t['description'], "tags": " ".join(t['tags']),
+               "notes": " ".join(n['texte'] for n in t['notes'])}
+    return normaliser_recherche("\n".join(parties[c] for c in CHAMPS_RECHERCHE if c in champs))
+
+
+def correspond_recherche(t, recherche, champs=CHAMPS_RECHERCHE):
+    """Vrai si la tâche contient `recherche` (sans tenir compte des accents ni de la casse) dans `champs`."""
+    return normaliser_recherche(recherche) in _texte_recherche(t, champs)
 
 def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text", tag_filtre=None,
                   prio_filtre=None, retard=False, aujourdhui=False, retards_en_premier=True,
-                  limite=None, debut=None, pager=True, avant=None, apres=None):
+                  limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE):
     """Extrait, filtre, trie et met en forme l'ensemble des enregistrements actifs.
 
     retard / aujourdhui ne retiennent que les tâches À FAIRE dont l'échéance est
@@ -180,7 +206,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
             jours = _jours_restants(t, maintenant)
             if t['statut'] != STATUT_A_FAIRE or jours is None: continue
             if not ((retard and jours < 0) or (aujourdhui and jours == 0)): continue
-        if recherche_filtre and recherche_filtre.lower() not in _texte_recherche(t): continue
+        if recherche_filtre and not correspond_recherche(t, recherche_filtre, champs): continue
         liste_taches.append(t)
 
     if not liste_taches:

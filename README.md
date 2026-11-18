@@ -145,7 +145,8 @@ todo add "Sauvegarde du serveur ~weekly #admin"
 todo list                                  # tout, les retards en premier
 todo list --status todo --prio high        # à faire, priorité haute
 todo list --tag pro --sort alpha           # par tag, tri alphabétique
-todo list --search rapport                 # recherche dans titre, description et tags
+todo list --search reunion                 # titre, description, tags et notes ; « Réunion » est trouvée sans accent
+todo list --search appel --search-in notes # uniquement dans les notes
 todo list --overdue --today                # en retard ou pour aujourd'hui
 todo list --due-after demain --due-before +7d    # la semaine à venir
 todo list --limit 15                       # 15 premières tâches
@@ -158,7 +159,8 @@ Options de `list` :
 | Option | Effet |
 |---|---|
 | `--status todo\|done` | filtre sur l'avancement |
-| `--search TEXTE` | recherche dans le titre, la description et les tags |
+| `--search TEXTE` | recherche dans le titre, la description, les tags et les notes, sans tenir compte des accents ni de la casse |
+| `--search-in CHAMPS` | limite `--search` à `title`, `description`, `tags`, `notes` (séparés par des virgules ; défaut `all`) |
 | `--tag TAG` | tâches portant ce tag |
 | `--prio low\|medium\|high` | filtre sur la priorité |
 | `--overdue` | tâches à faire dont l'échéance est dépassée |
@@ -503,7 +505,7 @@ todo archive add                      # archive toutes les tâches terminées
 todo archive add --older-than 30d     # seulement celles terminées depuis au moins 30 jours
 todo archive add a1b2c3 d4e5f6        # ou des tâches précises (elles doivent être terminées)
 todo archive list               # consulter l'archive
-todo archive list --search facture     # chercher dans l'archive (titre, description, tags)
+todo archive list --search facture     # chercher dans l'archive (mêmes règles ; `--search-in` disponible)
 todo archive restore a1b2c3             # remettre une tâche dans la liste
 todo archive purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce qui date de plus d'un an
 todo report stats --with-archive         # statistiques incluant l'historique archivé

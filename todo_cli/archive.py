@@ -9,7 +9,7 @@ import json
 import re
 from datetime import datetime
 from . import couleurs, journal
-from .affichage import _afficher_texte, _texte_recherche
+from .affichage import CHAMPS_RECHERCHE, _afficher_texte, correspond_recherche
 from .config import ARCHIVE_NAME, DB_NAME, STATUT_TERMINE
 from .dates import _decaler, _parse_date
 from .formats import sortie_taches
@@ -215,12 +215,11 @@ def desarchiver_taches(ids):
     return echecs == 0
 
 
-def lister_archive(recherche=None, fmt="text", pager=True):
+def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERCHE):
     """Affiche l'archive (la plus récemment terminée en premier), éventuellement filtrée par texte."""
     taches = _lire_archive_triee()
     if recherche:
-        motif = recherche.lower()
-        taches = [t for t in taches if motif in _texte_recherche(t)]
+        taches = [t for t in taches if correspond_recherche(t, recherche, champs)]
 
     if fmt == "json":
         print(json.dumps(taches, indent=2, ensure_ascii=False))
