@@ -11,6 +11,7 @@ from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import couleurs, journal
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date, _sans_accents
+from .filtres import garder
 from .formats import imprimer_plain, sortie_taches, tableau
 from .notes import lignes_notes
 from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
@@ -167,7 +168,7 @@ def correspond_recherche(t, recherche, champs=CHAMPS_RECHERCHE):
 
 def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text", tag_filtre=None,
                   prio_filtre=None, retard=False, aujourdhui=False, retards_en_premier=True,
-                  limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE):
+                  limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE, filtres=None):
     """Extrait, filtre, trie et met en forme l'ensemble des enregistrements actifs.
 
     retard / aujourdhui ne retiennent que les tâches À FAIRE dont l'échéance est
@@ -175,6 +176,8 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
 
     avant / apres (objets date) bornent l'échéance, bornes INCLUSES. Une tâche sans échéance
     valide est exclue, et les tâches terminées aussi, sauf si statut_filtre vaut "done".
+
+    filtres : dict d'options de `filtres.garder` (sans_echeance, notes, fini_apres, fini_avant).
 
     limite / debut : n'affichent qu'une tranche de la liste triée (debut commence à 1,
     comme la numérotation affichée). pager : autorise l'usage d'un pager en mode table.
@@ -207,6 +210,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
             if t['statut'] != STATUT_A_FAIRE or jours is None: continue
             if not ((retard and jours < 0) or (aujourdhui and jours == 0)): continue
         if recherche_filtre and not correspond_recherche(t, recherche_filtre, champs): continue
+        if filtres and not garder(t, **filtres): continue
         liste_taches.append(t)
 
     if not liste_taches:

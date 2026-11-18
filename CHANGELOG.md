@@ -3,6 +3,22 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.9.0] - 2026-11-18
+
+### Ajouté
+
+- **`list`** : `--no-due` (tâches sans échéance), `--has-notes` / `--no-notes`, `--done-after` /
+  `--done-before` (date de fin ; `AAAA-MM-JJ`, `aujourd'hui`, `hier` ou durée écoulée `7d`, `2w`, `1m`, `1y`).
+- **`archive list`** (et `archive --list`) : `--tag`, `--prio`, `--has-notes` / `--no-notes`,
+  `--done-after` / `--done-before`, `--archived-after` / `--archived-before`, `--older-than`,
+  `--sort done|archived|alpha|priority` et `--limit` / `--start`. Un filtre sans `--list` suffit avec
+  l'ancienne syntaxe.
+
+### Modifié
+
+- `archive --list --older-than DUREE` n'est plus refusé : l'option filtre alors la liste. Il reste
+  incompatible avec des identifiants. `archive --purge` refuse les nouveaux filtres.
+
 ## [2.8.0] - 2026-11-18
 
 ### Ajouté
@@ -184,6 +200,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.9.0
 [2.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.8.0
 [2.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.7.0
 [2.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.6.0

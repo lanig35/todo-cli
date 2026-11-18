@@ -9,8 +9,9 @@ import json
 import re
 from datetime import datetime
 from . import couleurs, journal
+from .filtres import garder
 from .affichage import CHAMPS_RECHERCHE, _afficher_texte, correspond_recherche
-from .config import ARCHIVE_NAME, DB_NAME, STATUT_TERMINE
+from .config import ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_TERMINE
 from .dates import _decaler, _parse_date
 from .formats import sortie_taches
 from .sauvegardes import sauvegarder_base
@@ -215,11 +216,33 @@ def desarchiver_taches(ids):
     return echecs == 0
 
 
-def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERCHE):
-    """Affiche l'archive (la plus récemment terminée en premier), éventuellement filtrée par texte."""
+def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERCHE, filtres=None,
+                   tag=None, prio=None, tri=None, limite=None, debut=None):
+    """Affiche l'archive (la plus récemment terminée en premier), éventuellement filtrée.
+
+    recherche / champs : texte cherché ; tag, prio : étiquette et priorité ; filtres : options de
+    `filtres.garder` ; tri : done (défaut), archived, alpha ou priority ; limite / debut : tranche
+    (debut commence à 1), appliquée après filtres et tri.
+    """
     taches = _lire_archive_triee()
+    filtre = bool(recherche or tag or prio or filtres or limite or debut)
     if recherche:
         taches = [t for t in taches if correspond_recherche(t, recherche, champs)]
+    if tag:
+        taches = [t for t in taches if tag.lower() in t['tags']]
+    if prio:
+        taches = [t for t in taches if t['priorite'] == prio]
+    if filtres:
+        taches = [t for t in taches if garder(t, **filtres)]
+    if tri == "archived":
+        taches.sort(key=lambda t: t.get('date_archivage') or "", reverse=True)
+    elif tri == "alpha":
+        taches.sort(key=lambda t: t['titre'].lower())
+    elif tri == "priority":
+        taches.sort(key=lambda t: -PRIORITES.index(t['priorite']))
+    total = len(taches)
+    if limite or debut:
+        taches = taches[(debut or 1) - 1:][:limite or None]
 
     if fmt == "json":
         print(json.dumps(taches, indent=2, ensure_ascii=False))
@@ -228,7 +251,7 @@ def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERC
         sortie_taches(fmt, taches)
         return
     if not taches:
-        vide = "Aucune tâche archivée ne correspond à votre recherche." if recherche else "L'archive est vide."
+        vide = "Aucune tâche archivée ne correspond à vos critères." if filtre else "L'archive est vide."
         print(f" 📦 {couleurs.CLR_DIM}{vide}{couleurs.CLR_RESET}")
         return
 
@@ -246,7 +269,8 @@ def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERC
         if t['description']:
             lignes.append(f"      {couleurs.CLR_DIM}↳ {t['description']}{couleurs.CLR_RESET}")
     lignes.append(f" {couleurs.CLR_CYAN}──────────────────────────────────────{couleurs.CLR_RESET}")
-    lignes.append(f" {couleurs.CLR_DIM}{len(taches)} tâche(s) archivée(s) · récupérer : todo archive restore <id>{couleurs.CLR_RESET}\n")
+    tranche = f" sur {total}" if len(taches) < total else ""
+    lignes.append(f" {couleurs.CLR_DIM}{len(taches)}{tranche} tâche(s) archivée(s) · récupérer : todo archive restore <id>{couleurs.CLR_RESET}\n")
     _afficher_texte("\n".join(lignes), pager)
 
 
