@@ -3,6 +3,19 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.6.0] - 2026-11-18
+
+### Ajouté
+
+- **`--search-in CHAMPS`** (`list`, `archive list`) : limite `--search` à certains champs parmi `title`,
+  `description`, `tags`, `notes` (séparés par des virgules ; `all` par défaut). `--search-in notes` ne
+  cherche que dans les notes. Sans `--search`, l'option est refusée.
+
+### Modifié
+
+- **La recherche ignore les accents et la casse** : `--search reunion` trouve « Réunion » et
+  `--search ÉTÉ` trouve « ete ». S'applique à `list --search` et `archive --search`.
+
 ## [2.5.0] - 2026-11-18
 
 ### Ajouté
@@ -152,6 +165,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.6.0
 [2.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.5.0
 [2.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.4.0
 [2.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.3.0
