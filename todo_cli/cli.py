@@ -643,7 +643,8 @@ def main():
         if not args.literal:
             # Une option explicite est prioritaire : le marqueur équivalent reste alors dans le titre
             analyse = analyser_titre(args.titre, due=args.due is None, prio=args.prio is None,
-                                     tags=args.tags is None, repeat=args.repeat is None)
+                                     tags=args.tags is None, repeat=args.repeat is None,
+                                     prefixe_obligatoire=reglages.obtenir('add', 'date_prefix') == 'required')
             if analyse["trouve"]:
                 titre = analyse["titre"]
                 due = analyse["due"] or due

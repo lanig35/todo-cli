@@ -4,7 +4,8 @@
 
 Marqueurs reconnus (un mot isolé, séparé par des espaces) :
   - date         : aujourd'hui, demain, après-demain, +3d / +2w / +1m / +1y, un jour de la semaine
-                   ou AAAA-MM-JJ, avec ou sans « @ » (`@lundi`) ;
+                   ou AAAA-MM-JJ, avec ou sans « @ » (`@lundi`) ; avec `prefixe_obligatoire`, seule la
+                   forme `@lundi` est une date, et `lundi` reste dans le titre ;
   - priorité     : `!high` `!medium` `!low` (ou `!haute` `!moyenne` `!basse`, `!h` `!m` `!l`) ;
   - tag          : `#pro` (commence par une lettre : `#42` reste dans le titre) ;
   - récurrence   : `~weekly`, `~2w`, `~mensuel`…
@@ -20,12 +21,13 @@ _PRIORITES = {"high": "high", "haute": "high", "h": "high",
 _TAG = re.compile(r"#([^\W\d_][\w-]*)")
 
 
-def analyser_titre(texte, due=True, prio=True, tags=True, repeat=True):
+def analyser_titre(texte, due=True, prio=True, tags=True, repeat=True, prefixe_obligatoire=False):
     """Analyse un titre de saisie rapide.
 
     Les paramètres due / prio / tags / repeat désactivent l'extraction du marqueur correspondant
     (utile quand l'option explicite équivalente est fournie : elle est prioritaire et le mot reste
-    alors dans le titre).
+    alors dans le titre). prefixe_obligatoire : une date n'est reconnue que précédée de « @ »
+    (réglage [add] date_prefix = required), pour qu'un « demain » du titre n'en soit pas une.
 
     Retourne un dict : titre (nettoyé), due (texte de date), prio, tags (liste), repeat — None ou
     liste vide pour ce qui n'a pas été trouvé — et `trouve` (vrai si quelque chose a été extrait).
@@ -42,7 +44,7 @@ def analyser_titre(texte, due=True, prio=True, tags=True, repeat=True):
                 res["tags"].append(tag)
         elif repeat and mot.startswith("~") and _parser_recurrence(mot[1:]) is not None:
             res["repeat"] = mot[1:]
-        elif due and _resoudre_date(mot.lstrip("@") if mot.startswith("@") else mot) is not None:
+        elif due and (not prefixe_obligatoire or mot.startswith("@")) and _resoudre_date(mot.lstrip("@") if mot.startswith("@") else mot) is not None:
             res["due"] = mot.lstrip("@") if mot.startswith("@") else mot
         else:
             restants.append(mot)

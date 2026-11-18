@@ -182,3 +182,44 @@ def test_une_sauvegarde_et_pas_de_couleur_dans_un_pipe(todo):
 def test_aide_documente_la_saisie_rapide(todo):
     sortie = todo("add", "--help").out
     assert "--literal" in sortie and "demain" in sortie
+
+
+# ------------------------------------------------------------------ [add] date_prefix = required
+OBLIGATOIRE = {"TODO_ADD_DATE_PREFIX": "required"}
+
+
+def test_prefixe_obligatoire_laisse_la_date_sans_arobase_dans_le_titre(todo):
+    r = todo("add", "Appeler Paul demain", env=OBLIGATOIRE)
+    assert r.code == 0
+    t = tache(todo)
+    assert t["titre"] == "Appeler Paul demain" and t["date_echeance"] is None
+
+
+@pytest.mark.parametrize("mot, attendu", [("@demain", jour(1)), ("@+3d", jour(3)), ("@2030-05-17", "2030-05-17")])
+def test_prefixe_obligatoire_reconnait_la_date_avec_arobase(todo, mot, attendu):
+    todo("add", f"Réunion {mot} !high", env=OBLIGATOIRE)
+    t = tache(todo)
+    assert (t["titre"], t["date_echeance"], t["priorite"]) == ("Réunion", attendu, "high")
+
+
+def test_prefixe_obligatoire_garde_les_autres_marqueurs(todo):
+    todo("add", "Facture lundi @vendredi #compta ~weekly", env=OBLIGATOIRE)
+    t = tache(todo)
+    assert t["titre"] == "Facture lundi" and t["date_echeance"] == prochain(4).isoformat() and t["tags"] == ["compta"]
+
+
+def test_prefixe_facultatif_par_defaut(todo):
+    todo("add", "Appeler Paul demain")
+    assert tache(todo)["date_echeance"] == jour(1)
+
+
+def test_prefixe_obligatoire_par_le_fichier_de_configuration(todo):
+    todo.config("[add]\ndate_prefix = required\n")
+    todo("add", "Appeler Paul demain")
+    t = tache(todo)
+    assert t["titre"] == "Appeler Paul demain" and t["date_echeance"] is None
+
+
+def test_prefixe_valeur_invalide_est_signalee(todo):
+    r = todo("add", "Appeler Paul demain", env={"TODO_ADD_DATE_PREFIX": "jamais"})
+    assert "TODO_ADD_DATE_PREFIX" in r.texte and tache(todo)["date_echeance"] == jour(1)   # valeur ignorée : défaut
