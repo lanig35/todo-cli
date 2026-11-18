@@ -6,7 +6,7 @@ from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
 from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches
 from .config import PRIORITES
-from . import __version__, couleurs, reglages, journal
+from . import __version__, couleurs, reglages, journal, verrou
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .saisie import analyser_titre
@@ -591,6 +591,22 @@ def _completer_ligne():
     sys.exit(0)
 
 
+def _mode_verrou(args):
+    """Verrou à prendre sur la base : None (rien), PARTAGE (lecture) ou EXCLUSIF (écriture)."""
+    c = args.commande
+    if c == 'config':
+        return None
+    if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind'):
+        return verrou.PARTAGE
+    if c == 'archive' and (args.lister or args.search is not None):
+        return verrou.PARTAGE
+    if c == 'note' and not args.texte and args.edit is None and args.delete is None:
+        return verrou.PARTAGE
+    if c == 'import' and args.dry_run:
+        return verrou.PARTAGE
+    return verrou.EXCLUSIF
+
+
 def main():
     if os.environ.get('_ARGCOMPLETE'):
         _completer_ligne()
@@ -632,6 +648,10 @@ def main():
         choisi = reglages.obtenir('general', 'format', args.format)
         # Les rappels (cron, e-mails, invite du shell) restent en text sauf demande explicite de plain ou table
         args.format = 'text' if (args.commande == 'remind' and choisi == 'auto') else resoudre_format(choisi)
+
+    mode_verrou = _mode_verrou(args)
+    if mode_verrou:
+        verrou.prendre(mode_verrou, reglages.obtenir('general', 'lock_timeout'))
 
     # Moteur d'aiguillage vers l'action requise.
     # `succes` passe à False si un identifiant de done / remove / postpone n'a pas pu être traité :

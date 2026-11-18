@@ -640,6 +640,7 @@ Exemple de fichier :
 color = auto            # auto | always | never
 format = auto           # auto | text | table | plain
 pager = true
+lock_timeout = 10       # secondes d'attente si la base est utilisée par une autre instance
 
 [list]
 limit = 30              # 0 = pas de limite
@@ -662,6 +663,7 @@ soon = 0
 | `general` | `format` | `auto` | `TODO_FORMAT` | `--format` |
 | `general` | `pager` | `true` | `TODO_PAGER` | `--pager`, `--no-pager` |
 | `general` | `keep_backups` | `5` (minimum 2) | `TODO_KEEP_BACKUPS` | — |
+| `general` | `lock_timeout` | `10` (secondes, 0 = pas d'attente) | `TODO_LOCK_TIMEOUT` | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
 | `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
@@ -861,6 +863,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
 | `configuration.py` | commande `config` (show, path, init) |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
+| `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
@@ -912,6 +915,24 @@ status checks to pass* (cocher `pytest (Python`3.13`).
 
 La variable d'environnement `TODO_DB_DIR` (ou `db_dir` dans le fichier de configuration) redirige tout
 le stockage vers un autre dossier (utile pour les tests ou pour avoir plusieurs listes séparées).
+
+### Accès concurrent
+
+Chaque commande qui touche à la base prend un verrou (`flock`) sur le fichier `todo.lock` du dossier de
+stockage : **partagé** pour les lectures (`list`, `show`, `next`, `agenda`, `stats`, `export`, `note ID`,
+`archive list`, `reminder`…), qui peuvent donc s'exécuter ensemble, et **exclusif** pour les écritures, qui
+attendent la fin des autres commandes. Deux `todo` lancés en même temps (cron, deux terminaux, un outil de
+synchronisation) ne peuvent plus s'écraser.
+
+- L'attente est limitée par `general.lock_timeout` (10 s par défaut). Au-delà, la commande échoue avec le
+  code `1` et un message ; `0` échoue immédiatement.
+- Le verrou est rendu par le système à la fin du processus, même après un plantage ou Ctrl-C : il n'y a
+  jamais de verrou périmé à supprimer. Le fichier `todo.lock` peut rester sur le disque, sans contenu.
+- Les commandes `config` n'en prennent pas. Les confirmations interactives (`reset`, `import`,
+  `archive purge`…) gardent le verrou pendant que la question est posée : répondez ou annulez.
+- Le verrou est local à la machine. Il ne protège pas un dossier partagé par le réseau dont le système
+  de fichiers ne gère pas `flock`, ni deux machines qui se synchronisent un même dossier de stockage.
+- Sans le module `fcntl` (Windows), le programme fonctionne sans verrou.
 
 > **Portabilité** : le format DBM dépend du backend Python (`gdbm`, `ndbm`, `dumb`). Un fichier créé
 > sur une machine n'est pas toujours lisible sur une autre. Pour transférer vos tâches, vérifiez
