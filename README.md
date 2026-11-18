@@ -123,7 +123,7 @@ todo add "Sauvegarde du serveur ~weekly #admin"
 
 | Marqueur | Effet | Exemples |
 |---|---|---|
-| Date (avec ou sans `@`) | échéance | `demain`, `@lundi`, `+3d`, `2026-12-25` (mêmes formats que `--due`) |
+| Date (avec ou sans `@`, voir `date_prefix`) | échéance | `demain`, `@lundi`, `+3d`, `2026-12-25` (mêmes formats que `--due`) |
 | `!priorité` | priorité | `!high` `!medium` `!low`, `!haute` `!moyenne` `!basse`, `!h` `!m` `!l` |
 | `#tag` | tag (minuscules) | `#pro #urgent` : un tag commence par une lettre, `#42` reste dans le titre |
 | `~répétition` | tâche récurrente | `~weekly`, `~2w`, `~mensuel` |
@@ -136,6 +136,10 @@ todo add "Sauvegarde du serveur ~weekly #admin"
 - Une **option explicite** (`--due`, `--prio`, `--tags`, `--repeat`) est prioritaire sur le
   marqueur équivalent, qui reste alors dans le titre. `--desc` n'est pas concerné.
 - `--literal` désactive entièrement la saisie rapide (`todo add --literal "Réunion demain"`).
+- **Exiger le `@` pour les dates** : avec `todo config set add.date_prefix required` (ou
+  `TODO_ADD_DATE_PREFIX=required`), seule `@demain` est une échéance ; `demain` reste dans le titre
+  (`todo add "Réunion lundi @vendredi"` → titre « Réunion lundi », échéance vendredi). Par défaut
+  (`optional`), `demain` et `@demain` comptent tous deux comme des dates.
 - Dans un shell, mettez le titre entre guillemets : `#` commence un commentaire et `!` déclenche
   l'historique de bash.
 
@@ -643,6 +647,7 @@ overdue_first = true
 
 [add]
 priority = medium
+date_prefix = optional  # required : une date doit s'écrire @demain dans le titre
 
 [remind]
 enabled = true
@@ -660,6 +665,7 @@ soon = 0
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
 | `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
+| `add` | `date_prefix` | `optional` (ou `required`) | `TODO_ADD_DATE_PREFIX` | — |
 | `agenda` | `days` | `7` (1 à 366) | `TODO_AGENDA_DAYS` | `--days` |
 | `next` | `count` | `1` | `TODO_NEXT_COUNT` | `-n`, `--count` |
 | `remind` | `enabled` | `true` | `TODO_REMIND_ENABLED` | — (voir ci-dessous) |

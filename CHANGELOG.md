@@ -3,6 +3,14 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.7.0] - 2026-11-18
+
+### Ajouté
+
+- **Réglage `[add] date_prefix`** (`optional` par défaut, `required`) : avec `required`, la saisie rapide
+  ne reconnaît une date que précédée de `@` (`@demain`, `@+3d`, `@2026-12-25`) ; `demain` reste alors
+  dans le titre. Variable `TODO_ADD_DATE_PREFIX`. Le comportement par défaut est inchangé.
+
 ## [2.6.0] - 2026-11-18
 
 ### Ajouté
@@ -165,6 +173,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.7.0
 [2.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.6.0
 [2.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.5.0
 [2.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.4.0
