@@ -165,7 +165,7 @@ def test_search_implique_list(garni):
 
 def test_list_incompatible_avec_ids(garni):
     assert garni("archive", "--list", "arch0001").code == 1
-    assert garni("archive", "--list", "--older-than", "1d").code == 1
+    assert garni("archive", "--list", "--older-than", "1d").code == 0   # --older-than filtre aussi la liste
 
 
 def test_lister_ne_cree_pas_de_sauvegarde(garni):

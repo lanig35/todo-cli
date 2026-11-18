@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+from datetime import datetime
 from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
 from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches
@@ -9,6 +10,8 @@ from .config import PRIORITES
 from . import __version__, couleurs, reglages, journal, verrou
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
+from .dates import _decaler
+from .filtres import MSG_FORMATS_DATE_PASSEE, resoudre_date_passee
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
 from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
@@ -42,6 +45,89 @@ def _champs_recherche(valeur):
 
 _AIDE_SEARCH_IN = ("Limite --search à ces champs, séparés par des virgules : title, description, tags, notes "
                    "(défaut : all). Ex. : --search-in notes")
+
+
+def _args_filtres_notes(p):
+    g = p.add_mutually_exclusive_group()
+    g.add_argument('--has-notes', action='store_true', help="Seulement les tâches qui ont au moins une note")
+    g.add_argument('--no-notes', action='store_true', help="Seulement les tâches sans note")
+
+
+def _args_filtres_fin(p, archive=False):
+    aide = "Terminées à partir de cette date, incluse (AAAA-MM-JJ, hier, ou durée écoulée : 7d, 2w, 1m, 1y)"
+    p.add_argument('--done-after', type=str, default=None, metavar='DATE', help=aide)
+    p.add_argument('--done-before', type=str, default=None, metavar='DATE',
+                   help="Terminées au plus tard à cette date, incluse (mêmes formats que --done-after)")
+    if archive:
+        p.add_argument('--archived-after', type=str, default=None, metavar='DATE',
+                       help="Archivées à partir de cette date, incluse (mêmes formats que --done-after)")
+        p.add_argument('--archived-before', type=str, default=None, metavar='DATE',
+                       help="Archivées au plus tard à cette date, incluse (mêmes formats que --done-after)")
+
+
+def _date_passee(valeur, option):
+    """Date d'une option sur le passé (--done-after…), ou erreur et sortie."""
+    if valeur is None:
+        return None
+    date_obj = resoudre_date_passee(valeur)
+    if date_obj is None:
+        journal.echec("invalid_date")
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Date non reconnue pour {couleurs.CLR_BOLD}{option}{couleurs.CLR_RESET} : '{valeur}'. "
+              f"Formats acceptés : {couleurs.CLR_BOLD}{MSG_FORMATS_DATE_PASSEE}{couleurs.CLR_RESET}.")
+        sys.exit(1)
+    return date_obj
+
+
+def _plage_vide(apres, avant, option_apres, option_avant):
+    if apres is not None and avant is not None and apres > avant:
+        journal.echec("empty_range")
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Plage vide : {option_apres} ({apres}) est postérieure à {option_avant} ({avant}).")
+        sys.exit(1)
+
+
+def _filtres_communs(args, archive=False):
+    """Dict d'options pour `filtres.garder`, d'après les options de la ligne de commande (erreur si incohérentes)."""
+    f = {}
+    if getattr(args, 'no_due', False):
+        f['sans_echeance'] = True
+    if args.has_notes or args.no_notes:
+        f['notes'] = bool(args.has_notes)
+    f['fini_apres'] = _date_passee(args.done_after, '--done-after')
+    f['fini_avant'] = _date_passee(args.done_before, '--done-before')
+    _plage_vide(f['fini_apres'], f['fini_avant'], '--done-after', '--done-before')
+    if archive:
+        f['archive_apres'] = _date_passee(args.archived_after, '--archived-after')
+        f['archive_avant'] = _date_passee(args.archived_before, '--archived-before')
+        _plage_vide(f['archive_apres'], f['archive_avant'], '--archived-after', '--archived-before')
+        if args.anciennete is not None:
+            anciennete = _parser_anciennete(args.anciennete)
+            if anciennete is None:
+                journal.echec("invalid_duration")
+                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Durée non reconnue pour --older-than : '{args.anciennete}'. "
+                      f"Format : {MSG_FORMAT_ANCIENNETE}.")
+                sys.exit(1)
+            f['anciennete'] = _decaler(datetime.now().date(), -anciennete[0], anciennete[1])
+    return {k: v for k, v in f.items() if v is not None}
+
+
+def _args_archive_filtres(p, ancien=False):
+    """Filtres, tri et tranche de `archive list` (et de `archive --list`)."""
+    p.add_argument('--tag', type=str, default=None, help="Seulement les tâches portant ce tag")
+    p.add_argument('--prio', choices=list(PRIORITES), default=None, help="Seulement cette priorité")
+    _args_filtres_notes(p)
+    _args_filtres_fin(p, archive=True)
+    if not ancien:
+        p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+                       help="Seulement les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)")
+    p.add_argument('--sort', choices=['done', 'archived', 'alpha', 'priority'], default=None,
+                   help="Critère de tri : done (défaut, la plus récemment terminée d'abord), archived, alpha, priority")
+    p.add_argument('--limit', type=_entier_positif, default=None, metavar='N', help="N'afficher que N tâches (après filtres et tri)")
+    p.add_argument('--start', type=_entier_positif, default=None, metavar='N', help="Commencer à la tâche n°N de la liste")
+
+
+def _filtres_archive_actifs(args):
+    return any([args.tag, args.prio, args.has_notes, args.no_notes, args.done_after, args.done_before,
+                args.archived_after, args.archived_before, args.sort, args.limit, args.start])
 
 
 def _exiger_search(args):
@@ -108,6 +194,9 @@ def _args_list(p):
     p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
     p.add_argument('--tag', type=str, default=None, help='Extraction par étiquette exclusive')
     p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne montrer que cette priorité')
+    p.add_argument('--no-due', action='store_true', help="Seulement les tâches sans échéance")
+    _args_filtres_notes(p)
+    _args_filtres_fin(p)
     p.add_argument('--overdue', action='store_true', help="Tâches à faire dont l'échéance est dépassée")
     p.add_argument('--today', action='store_true', help="Tâches à faire dont l'échéance est aujourd'hui (avec --overdue : l'un ou l'autre)")
     p.add_argument('--overdue-first', action=argparse.BooleanOptionalAction, default=None,
@@ -253,6 +342,7 @@ def _args_archive(p):
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                                 help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie de --list")
+    _args_archive_filtres(p, ancien=True)   # filtres de --list (--older-than existe déjà ci-dessus)
 
 
 def _args_unarchive(p):
@@ -341,6 +431,7 @@ def _args_archive_ajouter(p):
 def _args_archive_lister(p):
     p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags, notes), sans accents ni casse")
     p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
+    _args_archive_filtres(p)
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                    help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie")
@@ -365,7 +456,9 @@ def _args_note_ancien(p):
 
 
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
-_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None)
+_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
+                     tag=None, prio=None, has_notes=False, no_notes=False, done_after=None, done_before=None,
+                     archived_after=None, archived_before=None, sort=None, limit=None, start=None)
 
 # (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
 _GROUPES = [
@@ -688,6 +781,11 @@ def main():
             print(f"    {couleurs.CLR_DIM}⚡ Compris dans le titre : {' · '.join(compris)}{couleurs.CLR_RESET}")
     elif args.commande == 'list':
         _exiger_search(args)
+        if args.no_due and (args.due_before or args.due_after):
+            journal.echec("invalid_combination")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --no-due ne se combine pas avec --due-before ni --due-after.")
+            sys.exit(1)
+        filtres = _filtres_communs(args)
         avant = _date_filtre(args.due_before, '--due-before')
         apres = _date_filtre(args.due_after, '--due-after')
         if avant is not None and apres is not None and apres > avant:
@@ -699,7 +797,7 @@ def main():
                       retards_en_premier=reglages.obtenir('list', 'overdue_first', args.overdue_first),
                       limite=reglages.obtenir('list', 'limit', args.limit) or None, debut=args.start,
                       pager=reglages.obtenir('general', 'pager', args.pager), champs=args.search_in or CHAMPS_RECHERCHE,
-                      avant=avant, apres=apres)
+                      avant=avant, apres=apres, filtres=filtres)
     elif args.commande == 'show':
         succes = afficher_tache(args.id, args.format)
     elif args.commande == 'undone':
@@ -754,18 +852,20 @@ def main():
             rappeler(reglages.obtenir('remind', 'limit', args.limit), reglages.obtenir('remind', 'soon', args.soon),
                      args.once_a_day, args.write_status, args.format)
     elif args.commande == 'archive':
-        if args.purge and (args.lister or args.search is not None):
+        liste = args.lister or args.search is not None or _filtres_archive_actifs(args)
+        if args.purge and liste:
             journal.echec("invalid_combination")
-            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --purge ne se combine pas avec --list ni --search.")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --purge ne se combine pas avec --list, --search ni les filtres de liste.")
             sys.exit(1)
-        if args.lister or args.search is not None:
+        if liste:
             _exiger_search(args)
-            if args.ids or args.anciennete:
+            if args.ids:
                 journal.echec("invalid_combination")
-                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --list / --search ne se combinent pas avec des identifiants ni avec --older-than.")
+                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --list / --search ne se combinent pas avec des identifiants.")
                 sys.exit(1)
             lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager),
-                           champs=args.search_in or CHAMPS_RECHERCHE)
+                           champs=args.search_in or CHAMPS_RECHERCHE, filtres=_filtres_communs(args, archive=True),
+                           tag=args.tag, prio=args.prio, tri=args.sort, limite=args.limit, debut=args.start)
         else:
             if args.ids and args.anciennete:
                 journal.echec("invalid_combination")

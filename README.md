@@ -171,6 +171,9 @@ Options de `list` :
 | `--today` | tâches à faire dont l'échéance est aujourd'hui (avec `--overdue` : l'un ou l'autre) |
 | `--due-before DATE` | échéance au plus tard à cette date, **incluse** |
 | `--due-after DATE` | échéance à partir de cette date, **incluse** |
+| `--no-due` | tâches sans échéance (ne se combine pas avec `--due-before` / `--due-after`) |
+| `--has-notes`, `--no-notes` | tâches qui ont au moins une note, ou aucune |
+| `--done-after DATE`, `--done-before DATE` | terminées à partir de / au plus tard à cette date, **incluse** (voir ci-dessous) |
 | `--sort alpha\|status\|priority\|due` | critère de tri |
 | `--overdue-first`, `--no-overdue-first` | regroupe (par défaut) ou non les retards en tête |
 | `--limit N`, `--start N` | tranche de la liste (`--start` commence à 1, comme la numérotation affichée) |
@@ -181,6 +184,9 @@ Notes :
 
 - Les filtres `--due-before` et `--due-after` excluent les tâches sans échéance et les tâches
   terminées, sauf avec `--status done`.
+- `--done-after` / `--done-before` portent sur la date de fin : `AAAA-MM-JJ`, `aujourd'hui`, `hier`,
+  ou une durée écoulée (`7d`, `2w`, `1m`, `1y` = il y a 7 jours, 2 semaines…). Les dates futures sont
+  refusées. Les tâches sans date de fin (anciennes tâches terminées) sont exclues.
 - Sans `--sort`, l'ordre est déterministe : tâches à faire avant terminées, puis échéance, puis
   priorité (haute d'abord), puis date de création.
 - La numérotation affichée est la position dans la liste filtrée, **pas** un identifiant : pour
@@ -510,11 +516,20 @@ todo archive add --older-than 30d     # seulement celles terminées depuis au mo
 todo archive add a1b2c3 d4e5f6        # ou des tâches précises (elles doivent être terminées)
 todo archive list               # consulter l'archive
 todo archive list --search facture     # chercher dans l'archive (mêmes règles ; `--search-in` disponible)
+todo archive list --tag pro --prio high         # filtrer par tag et priorité
+todo archive list --done-after 2w --has-notes   # terminées depuis 2 semaines, avec notes
+todo archive list --older-than 6m --sort alpha  # terminées depuis au moins 6 mois, par titre
 todo archive restore a1b2c3             # remettre une tâche dans la liste
 todo archive purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce qui date de plus d'un an
 todo report stats --with-archive         # statistiques incluant l'historique archivé
 ```
 
+- **Filtres de `archive list`** (et de `archive --list`) : `--search` / `--search-in`, `--tag`, `--prio`,
+  `--has-notes` / `--no-notes`, `--done-after` / `--done-before` (date de fin), `--archived-after` /
+  `--archived-before` (date d'archivage, mêmes formats), `--older-than` (terminées depuis au moins cette
+  durée, comme pour `archive add`), `--sort done|archived|alpha|priority` (défaut `done`, la plus récemment
+  terminée d'abord) et `--limit` / `--start`. Ils se combinent (ET) ; sans `--list`, l'ancienne syntaxe en
+  déduit la consultation. `--purge` les refuse.
 - Les tâches archivées disparaissent de `list`, `agenda` et `stats` (sauf `--with-archive`).
 - `--older-than` accepte `30d`, `2w`, `6m`, `1y` et se base sur la date de complétion. Une ancienne
   tâche terminée sans date de complétion est ignorée (son âge est inconnu) : archivez-la par
@@ -525,7 +540,7 @@ todo report stats --with-archive         # statistiques incluant l'historique ar
   identifiant, celles terminées depuis au moins `--older-than`, ou toute l'archive. Les cibles sont
   affichées (titres, au plus 5) et une confirmation est demandée (`-y` pour la passer, par exemple dans
   un cron) ; la liste courante n'est jamais touchée. Une sauvegarde suit, donc `todo undo` rétablit la
-  purge. `--purge` ne se combine pas avec `--list` ni `--search`.
+  purge. `--purge` ne se combine pas avec `--list`, `--search` ni les filtres de liste.
   Cette commande remplace l'ancien `clear-done` (qui supprimait d'un coup toutes les tâches terminées
   de la liste) : archivez-les d'abord (`todo archive add`), puis purgez l'archive selon l'âge voulu ; pour
   supprimer des tâches précises sans passer par l'archive, `todo task remove`.
@@ -863,6 +878,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
 | `configuration.py` | commande `config` (show, path, init) |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
+| `filtres.py` | filtres communs à `list` et `archive list` (sans échéance, notes, dates de fin et d'archivage) |
 | `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
