@@ -3,6 +3,17 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.8.0] - 2026-11-18
+
+### Ajouté
+
+- **Verrou de la base** (`flock` sur `todo.lock`, dans le dossier de stockage) : les commandes de lecture
+  prennent un verrou partagé, les autres un verrou exclusif. Deux instances lancées en même temps ne
+  s'écrasent plus. Libéré par le système à la fin du processus (jamais de verrou périmé).
+- **Réglage `[general] lock_timeout`** (10 s par défaut, `TODO_LOCK_TIMEOUT`) : durée maximale d'attente ;
+  ensuite la commande échoue avec le code 1 et un message. `0` échoue immédiatement.
+- Les commandes `config` ne prennent aucun verrou ; la complétion non plus.
+
 ## [2.7.0] - 2026-11-18
 
 ### Ajouté
@@ -173,6 +184,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.8.0
 [2.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.7.0
 [2.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.6.0
 [2.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.5.0
