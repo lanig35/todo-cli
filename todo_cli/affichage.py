@@ -168,7 +168,7 @@ def correspond_recherche(t, recherche, champs=CHAMPS_RECHERCHE):
 
 def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text", tag_filtre=None,
                   prio_filtre=None, retard=False, aujourdhui=False, retards_en_premier=True,
-                  limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE, filtres=None):
+                  limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE, filtres=None, colonnes=None):
     """Extrait, filtre, trie et met en forme l'ensemble des enregistrements actifs.
 
     retard / aujourdhui ne retiennent que les tâches À FAIRE dont l'échéance est
@@ -272,7 +272,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
         return
 
     # --- plain (une ligne par tâche, pour les pipes) et table (tableau aligné, sans couleur) ---
-    if sortie_taches(fmt, page):
+    if sortie_taches(fmt, page, colonnes):
         return
 
     # --- MODE AFFICHAGE TEXTE (ANSI, STYLISÉ) ---

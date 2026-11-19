@@ -26,9 +26,9 @@ def champs(sortie):
 # --- plain ---------------------------------------------------------------------------------------------------------
 def test_list_plain_colonnes_stables(base):
     lignes = champs(base("list", "--format", "plain").out)
-    assert len(lignes) == 3 and all(len(l) == 7 for l in lignes)
+    assert len(lignes) == 3 and all(len(l) == 8 for l in lignes)
     paul = next(l for l in lignes if l[5] == "Appeler Paul")
-    assert paul == ["a" * 8 + "-0", "todo", "high", jour(1), "pro,tel", "Appeler Paul", "0"]
+    assert paul == ["a" * 8 + "-0", "todo", "high", jour(1), "pro,tel", "Appeler Paul", "0", "2026-01-01"]   # la création, en dernier
     assert next(l for l in lignes if l[5] == "Fini")[1] == "done"
 
 
@@ -38,7 +38,7 @@ def test_list_plain_sans_decor_ni_couleur(base):
 
 
 def test_plain_une_tabulation_dans_un_titre_ne_decale_pas_les_colonnes(base):
-    assert all(len(l) == 7 for l in champs(base("list", "--format", "plain").out))
+    assert all(len(l) == 8 for l in champs(base("list", "--format", "plain").out))
 
 
 def test_plain_vide_n_affiche_rien(todo):

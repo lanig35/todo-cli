@@ -217,7 +217,7 @@ def desarchiver_taches(ids):
 
 
 def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERCHE, filtres=None,
-                   tag=None, prio=None, tri=None, limite=None, debut=None):
+                   tag=None, prio=None, tri=None, limite=None, debut=None, colonnes=None):
     """Affiche l'archive (la plus récemment terminée en premier), éventuellement filtrée.
 
     recherche / champs : texte cherché ; tag, prio : étiquette et priorité ; filtres : options de
@@ -248,7 +248,7 @@ def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERC
         print(json.dumps(taches, indent=2, ensure_ascii=False))
         return
     if fmt == "plain" or (fmt == "table" and taches):
-        sortie_taches(fmt, taches)
+        sortie_taches(fmt, taches, colonnes)
         return
     if not taches:
         vide = "Aucune tâche archivée ne correspond à vos critères." if filtre else "L'archive est vide."

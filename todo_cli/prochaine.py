@@ -25,7 +25,7 @@ def choisir_prochaines(taches, nombre, aujourdhui, tag=None, prio=None):
     return candidates[:nombre], len(candidates)
 
 
-def afficher_prochaines(nombre=1, tag=None, prio=None, fmt="text"):
+def afficher_prochaines(nombre=1, tag=None, prio=None, fmt="text", colonnes=None):
     """Affiche les prochaines tâches à traiter."""
     aujourdhui = datetime.now().date()
     choisies, total = choisir_prochaines(_lire_taches(), nombre, aujourdhui, tag, prio)
@@ -34,7 +34,7 @@ def afficher_prochaines(nombre=1, tag=None, prio=None, fmt="text"):
         print(json.dumps(choisies, indent=2, ensure_ascii=False))
         return
     if fmt == "plain" or (fmt == "table" and choisies):
-        sortie_taches(fmt, choisies)
+        sortie_taches(fmt, choisies, colonnes)
         return
     if not choisies:
         filtre = " correspondant à ces critères" if (tag or prio) else ""
