@@ -475,13 +475,24 @@ todo list | cut -f1,6                                          # identifiant et 
 todo list --tag pro | awk -F'\t' '$3 == "high" {print $1}' | xargs todo done
 todo show a1b2c3 | grep '^echeance'
 todo list --format table                                       # tableau dans le terminal
+todo list --columns id,created,title                           # choisir les colonnes (tableau, ou plain dans un pipe)
+todo list --format plain --columns id,title | grep -i budget
 ```
+
+**Choisir les colonnes** (`--columns`, sur `list`, `next` et `archive list`, pour `table` et `plain`) : noms
+séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponibles : `id`, `status`, `prio`,
+`due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description` (les trois
+dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
+manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
+avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs). Avec `archive
+--columns…`, l'ancienne syntaxe en déduit la consultation de l'archive.
 
 Le format `plain` est un contrat stable (colonnes et ordre ne changent pas) :
 
 - `list`, `next`, `archive list` : `id` (complet), `statut` (`todo`/`done`), `priorite`, `echeance`
-  (vide si aucune), `tags` (séparés par des virgules), `titre`, `notes` (nombre de notes). La description
-  n'y figure pas (voir `json`). Les nouvelles colonnes sont toujours ajoutées à la fin.
+  (vide si aucune), `tags` (séparés par des virgules), `titre`, `notes` (nombre de notes), `creee` (date de
+  création, `AAAA-MM-JJ`). Sans `--columns`, les colonnes par défaut sont celles-ci (mêmes que `table`, qui
+  réduit l'id à 8 caractères) ; les nouvelles colonnes par défaut sont toujours ajoutées à la fin.
 - `show` : une ligne `clé<TAB>valeur` par champ renseigné (`id`, `titre`, `statut`, `priorite`, `creee`,
   `echeance`, `terminee`, `repetition`, `suivante`, `tags`, `description`) et une ligne
   `note<TAB>date<TAB>texte` par note.
@@ -883,7 +894,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
-| `formats.py` | formats de sortie : text, table, plain, json, choix automatique |
+| `formats.py` | formats de sortie (text, table, plain, json, choix automatique) et catalogue des colonnes `--columns` |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
 | `dates.py` | dates relatives, récurrences, libellés d'échéance |
 | `stockage.py` | lecture de la base DBM, normalisation, résolution des identifiants |

@@ -16,9 +16,43 @@ import unicodedata
 
 FORMATS = ('auto', 'text', 'table', 'plain', 'json')
 
-# Colonnes communes à list, next et archive list (plain : mêmes colonnes, même ordre, depuis toujours)
-COLONNES_TACHES = ('id', 'statut', 'priorite', 'echeance', 'tags', 'titre', 'notes')
-ENTETES_TACHES = ('ID', 'STATUT', 'PRIO', 'ÉCHÉANCE', 'TAGS', 'TITRE', 'NOTES')
+# Champs disponibles pour les listes de tâches (list, next, archive list) : nom -> (en-tête de table, valeur).
+# La valeur reçoit la tâche et `court` (table : id réduit à 8 caractères ; plain : id complet).
+CHAMPS_TACHES = {
+    'id': ('ID', lambda t, court: t['id'][:8] if court else t['id']),
+    'status': ('STATUT', lambda t, court: 'done' if t['statut'] == "TERMINE" else 'todo'),
+    'prio': ('PRIO', lambda t, court: t['priorite']),
+    'due': ('ÉCHÉANCE', lambda t, court: t['date_echeance'] or ""),
+    'tags': ('TAGS', lambda t, court: ",".join(t['tags'])),
+    'title': ('TITRE', lambda t, court: t['titre']),
+    'notes': ('NOTES', lambda t, court: len(t.get('notes') or [])),
+    'created': ('CRÉÉE', lambda t, court: (t.get('date_creation') or "")[:10]),
+    'done': ('TERMINÉE', lambda t, court: (t.get('date_terminee') or "")[:10]),
+    'archived': ('ARCHIVÉE', lambda t, court: (t.get('date_archivage') or "")[:10]),
+    'recurrence': ('RÉPÉTITION', lambda t, court: t.get('recurrence') or ""),
+    'description': ('DESCRIPTION', lambda t, court: t['description']),
+}
+# Colonnes par défaut, dans l'ordre ; les nouvelles se placent à la fin
+COLONNES_DEFAUT = ('id', 'status', 'prio', 'due', 'tags', 'title', 'notes', 'created')
+
+
+def colonnes_tache(valeur):
+    """Colonnes désignées par --columns (noms séparés par des virgules) ; ValueError si l'une est inconnue.
+
+    L'id est obligatoire : s'il n'est pas cité, il est placé en tête. Un nom répété n'est gardé qu'une fois.
+    """
+    noms = []
+    for nom in str(valeur).split(","):
+        nom = nom.strip().lower()
+        if not nom:
+            continue
+        if nom not in CHAMPS_TACHES:
+            raise ValueError(f"colonne inconnue : {nom} (attendues : {', '.join(CHAMPS_TACHES)})")
+        if nom not in noms:
+            noms.append(nom)
+    if not noms:
+        raise ValueError(f"aucune colonne indiquée (attendues : {', '.join(CHAMPS_TACHES)})")
+    return tuple(noms) if 'id' in noms else ('id', *noms)
 
 
 def resoudre(fmt, flux=None):
@@ -94,19 +128,18 @@ def tableau(entetes, lignes, largeur_max=None):
     return "\n".join(sortie)
 
 
-def ligne_tache(t, court=True):
-    """Champs d'une tâche pour les colonnes COLONNES_TACHES (plain : id complet ; table : préfixe de 8)."""
-    return (t['id'][:8] if court else t['id'],
-            'done' if t['statut'] == "TERMINE" else 'todo',
-            t['priorite'], t['date_echeance'] or "", ",".join(t['tags']), t['titre'], len(t.get('notes') or []))
+def ligne_tache(t, court=True, colonnes=COLONNES_DEFAUT):
+    """Champs d'une tâche pour `colonnes` (plain : id complet ; table : préfixe de 8)."""
+    return tuple(CHAMPS_TACHES[c][1](t, court) for c in colonnes)
 
 
-def sortie_taches(fmt, taches):
+def sortie_taches(fmt, taches, colonnes=None):
     """Rend une liste de tâches en `plain` ou `table` ; renvoie False pour tout autre format."""
+    colonnes = colonnes or COLONNES_DEFAUT
     if fmt == 'plain':
-        imprimer_plain(ligne_tache(t, court=False) for t in taches)
+        imprimer_plain(ligne_tache(t, False, colonnes) for t in taches)
     elif fmt == 'table':
-        print(tableau(ENTETES_TACHES, [ligne_tache(t) for t in taches]))
+        print(tableau([CHAMPS_TACHES[c][0] for c in colonnes], [ligne_tache(t, True, colonnes) for t in taches]))
     else:
         return False
     return True

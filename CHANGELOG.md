@@ -3,6 +3,21 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.10.0] - 2026-11-19
+
+### Ajouté
+
+- **`--columns COLONNES`** (`list`, `next`, `archive list`) : choix et ordre des colonnes des formats
+  `table` et `plain` parmi `id`, `status`, `prio`, `due`, `tags`, `title`, `notes`, `created`, `done`,
+  `archived`, `recurrence`, `description`. L'id est obligatoire (placé en tête s'il manque). Sans
+  `--format`, un terminal donne un tableau ; `text` et `json` refusent l'option.
+- **Colonne de création** (`creee` / `CRÉÉE`, date `AAAA-MM-JJ`) dans les colonnes par défaut de `table` et `plain`.
+
+### Modifié
+
+- Les sorties `plain` de `list`, `next` et `archive list` ont une 8ᵉ colonne par défaut (la date de
+  création, ajoutée à la fin : les positions 1 à 7 sont inchangées).
+
 ## [2.9.0] - 2026-11-18
 
 ### Ajouté
@@ -200,6 +215,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.10.0
 [2.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.9.0
 [2.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.8.0
 [2.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.7.0
