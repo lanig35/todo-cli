@@ -6,7 +6,7 @@ import sys
 import uuid
 from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
-from . import couleurs, journal
+from . import couleurs, dependances, journal
 from .dates import MSG_FORMATS_DATE, MSG_FORMATS_REPETITION, _decaler, _libelle_recurrence, _parse_date, _parser_recurrence, _prochaine_echeance, _resoudre_date, _sans_accents
 from . import notes as carnet
 from .sauvegardes import sauvegarder_base
@@ -17,7 +17,7 @@ def _parser_tags(tags_str):
     """Transforme 'Pro, dev' en ['pro', 'dev'] (minuscules, sans vides)."""
     return [t.strip().lower() for t in tags_str.split(",") if t.strip()] if tags_str else []
 
-def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silencieux=False, sauvegarder=True, repeter=None):
+def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silencieux=False, sauvegarder=True, repeter=None, apres=None):
     """Insère une tâche sérialisée en JSON dans la base clé-valeur intégrée."""
     if not titre or not titre.strip():
         journal.echec("empty_title")
@@ -56,6 +56,11 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
     tags = _parser_tags(tags_str)
 
     with dbm.open(DB_NAME, 'c') as db:
+        dependances_ids = []
+        if apres:
+            dependances_ids = dependances.resoudre(db, dependances.liste_prefixes(apres))
+            if dependances_ids is None:
+                sys.exit(1)
         id_tache = str(uuid.uuid4())
         donnees_tache = {
             "titre": titre.strip(),
@@ -65,7 +70,8 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
             "date_creation": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "date_echeance": date_echeance,
             "tags": tags,
-            "recurrence": recurrence
+            "recurrence": recurrence,
+            "apres": dependances_ids,
         }
         # Conversion du dictionnaire en chaîne JSON exploitable par DBM
         db[id_tache] = json.dumps(donnees_tache)
@@ -76,6 +82,8 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
         if recurrence:
             suite = f" — première échéance : aujourd'hui" if echeance_par_defaut else f" — échéance : {date_echeance}"
             print(f"    {couleurs.CLR_DIM}↻ Répétition {_libelle_recurrence(recurrence)}{suite}{couleurs.CLR_RESET}")
+        if dependances_ids:
+            print(f"    {couleurs.CLR_DIM}🔒 Après : {', '.join(d[:8] for d in dependances_ids)}{couleurs.CLR_RESET}")
     if sauvegarder:
         sauvegarder_base()
 
@@ -132,6 +140,7 @@ def marquer_terminee(ids, note=None):
             if t['statut'] == STATUT_TERMINE:
                 print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà terminée.{couleurs.CLR_RESET}")
                 continue
+            attendues = dependances.en_attente(db, t)
             t['statut'] = STATUT_TERMINE
             t['date_terminee'] = datetime.now().strftime("%Y-%m-%d %H:%M")
             occurrence = _creer_occurrence_suivante(db, t) if t['recurrence'] else None
@@ -139,6 +148,9 @@ def marquer_terminee(ids, note=None):
                 carnet.ajouter_a(t, note, "done")  # la note reste sur l'occurrence terminée, pas sur la suivante
             db[key] = json.dumps(t)
             print(f" {couleurs.CLR_DONE}🎉{couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' validée !")
+            if attendues:
+                liste_attendues = ", ".join("{} ({})".format(dep['titre'], d[:8]) for d, dep in attendues)
+                print(f"    {couleurs.CLR_DEL}⚠️ Elle attendait encore : {liste_attendues}.{couleurs.CLR_RESET}")
             if note:
                 carnet.confirmer_ajout()
             if occurrence:
@@ -212,17 +224,18 @@ def rouvrir_tache(id_recherche, note=None):
         sauvegarder_base()
     return True
 
-def modifier_tache(id_recherche, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None, note=None):
+def modifier_tache(id_recherche, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None, note=None, apres=None):
     """Modifie les champs fournis d'une tâche (None = champ inchangé).
 
     - date_echeance : date absolue ou relative ; 'none' (ou chaîne vide) supprime l'échéance.
     - tags_str      : chaîne vide supprime tous les tags ; sinon remplace la liste.
     - repeter       : 'weekly', '2w'... ; 'none' (ou chaîne vide) supprime la répétition.
     - note          : texte ajouté aux notes de la tâche (seul ou avec d'autres modifications).
+    - apres         : identifiants des tâches à terminer avant celle-ci (remplace la liste) ; 'none' (ou chaîne vide) la vide.
     """
-    if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter, note)):
+    if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter, note, apres)):
         journal.echec("nothing_to_edit")
-        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat, --note.")
+        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat, --after, --note.")
         return False
     if note is not None:
         note = carnet.valider_note(note)
@@ -313,6 +326,14 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
                 return False
             t['date_echeance'] = datetime.now().date().strftime("%Y-%m-%d")
             modifications.append("échéance (aujourd'hui par défaut)")
+
+        if apres is not None:
+            nouvelles = dependances.resoudre(db, dependances.liste_prefixes(apres), key.decode('utf-8', errors='replace'))
+            if nouvelles is None:
+                return False
+            if nouvelles != t['apres']:
+                t['apres'] = nouvelles
+                modifications.append("dépendances")
 
         if note:
             carnet.ajouter_a(t, note, "edit")

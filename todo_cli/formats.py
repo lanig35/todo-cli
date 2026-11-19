@@ -31,6 +31,8 @@ CHAMPS_TACHES = {
     'archived': ('ARCHIVÉE', lambda t, court: (t.get('date_archivage') or "")[:10]),
     'recurrence': ('RÉPÉTITION', lambda t, court: t.get('recurrence') or ""),
     'description': ('DESCRIPTION', lambda t, court: t['description']),
+    'after': ('APRÈS', lambda t, court: ",".join(d[:8] if court else d for d in t.get('apres', []))),
+    'blocked': ('BLOQUÉE', lambda t, court: 'yes' if t.get('bloquee_par') else 'no'),
 }
 # Colonnes par défaut, dans l'ordre (réglage [general] columns)
 COLONNES_DEFAUT = ('id', 'status', 'prio', 'due', 'tags', 'title', 'notes')

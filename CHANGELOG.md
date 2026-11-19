@@ -3,6 +3,18 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.13.0] - 2026-11-19
+
+### Ajouté
+
+- **Dépendances entre tâches** : `--after IDS` sur `add` et `edit` (`none` pour supprimer). Une tâche à faire
+  est bloquée tant qu'une de ses dépendances est à faire ; `next` ne la propose pas, `list` la marque
+  `🔒`, `done` avertit mais aboutit. Une dépendance terminée, archivée ou supprimée ne bloque plus ;
+  les dépendances circulaires sont refusées.
+- **`list --blocked` / `--ready`**, colonnes `after` et `blocked` pour `--columns`.
+- Champ `apres` (ids) dans les tâches, `show` et l'export/import JSON (les anciens fichiers restent
+  lisibles) ; `bloquee_par` dans `list --format json` et `next --format json`.
+
 ## [2.12.0] - 2026-11-19
 
 ### Ajouté
@@ -242,6 +254,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.13.0
 [2.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.12.0
 [2.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.11.0
 [2.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.10.0
