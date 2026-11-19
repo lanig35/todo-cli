@@ -22,6 +22,8 @@ import re
 import sys
 from typing import NamedTuple, Optional, Tuple
 
+from .formats import CHAMPS_TACHES, COLONNES_DEFAUT, colonnes_tache
+
 
 COMPLETION = bool(os.environ.get("_ARGCOMPLETE"))   # le shell complète une ligne : rien ne doit s'afficher
 
@@ -29,7 +31,7 @@ COMPLETION = bool(os.environ.get("_ARGCOMPLETE"))   # le shell complète une lig
 class Reglage(NamedTuple):
     section: str
     cle: str
-    type: str                 # "bool", "int", "choix" ou "chemin"
+    type: str                 # "bool", "int", "choix", "chemin" ou "colonnes"
     defaut: object
     aide: str
     choix: Optional[tuple] = None
@@ -46,6 +48,9 @@ REGLAGES = (
     Reglage("general", "format", "choix", "auto",
             "Format de sortie par défaut : auto (text dans un terminal, plain dans un pipe), text, table ou plain.",
             choix=("auto", "text", "table", "plain")),
+    Reglage("general", "columns", "colonnes", ",".join(COLONNES_DEFAUT),
+            "Colonnes par défaut des formats table et plain (list, next, archive list), séparées par des virgules : "
+            + ", ".join(CHAMPS_TACHES) + ". L'id est toujours présent."),
     Reglage("general", "pager", "bool", True,
             "Utiliser un pager (less, ou $PAGER) quand un affichage dépasse l'écran."),
     Reglage("general", "keep_backups", "int", 5,
@@ -182,6 +187,8 @@ def convertir(reglage, texte):
         if brut.lower() not in reglage.choix:
             raise ValueError(f"'{brut}' n'est pas dans : {', '.join(reglage.choix)}")
         return brut.lower()
+    if reglage.type == "colonnes":
+        return ",".join(colonnes_tache(brut))      # forme normalisée : id en tête s'il manquait, sans doublon
     if not brut:
         raise ValueError("valeur vide")
     return os.path.abspath(os.path.expanduser(brut))  # chemin

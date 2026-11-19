@@ -19,17 +19,73 @@ def champs(r):
     return [l.split("\t") for l in r.out.splitlines()]
 
 
-def test_creation_dans_le_defaut_de_plain_et_de_table(base):
+def test_colonnes_par_defaut_sans_creation(base):
     lignes = {l[5]: l for l in champs(base("list", "--format", "plain"))}
-    assert lignes["Appeler Paul"][-1] == "2026-03-04" and lignes["Fini"][-1] == "2026-02-01"
+    assert all(len(l) == 7 for l in lignes.values()) and lignes["Appeler Paul"][6] == "0"
     table = base("list", "--format", "table").out
-    assert "CRÉÉE" in table.splitlines()[1] and "2026-03-04" in table
+    assert "CRÉÉE" not in table and "NOTES" in table.splitlines()[1]
 
 
-def test_creation_dans_next_et_archive(base):
-    assert champs(base("next", "--format", "plain"))[0][-1] == "2026-03-04"
+# ------------------------------------------------------------------ réglage [general] columns
+def test_reglage_par_defaut(base):
+    assert base("config", "get", "general.columns").sortie.strip() == "id,status,prio,due,tags,title,notes"
+
+
+def test_reglage_par_variable_d_environnement(base):
+    r = base("list", "--format", "plain", "--status", "todo", env={"TODO_COLUMNS": "title,created"})
+    assert champs(r) == [["a" * 8 + "-0", "Appeler Paul", "2026-03-04"]]      # id ajouté en tête
+
+
+def test_reglage_par_fichier_de_configuration(base):
+    base.config("[general]\ncolumns = id, title, created\n")
+    assert champs(base("list", "--format", "plain", "--status", "todo")) == [["a" * 8 + "-0", "Appeler Paul", "2026-03-04"]]
+    assert "CRÉÉE" in base("list", "--format", "table").out.splitlines()[1]
+
+
+def test_option_prioritaire_sur_variable_et_fichier(base):
+    base.config("[general]\ncolumns = id,created\n")
+    r = base("list", "--format", "plain", "--status", "todo", "--columns", "id,title", env={"TODO_COLUMNS": "id,prio"})
+    assert champs(r) == [["a" * 8 + "-0", "Appeler Paul"]]
+    r = base("list", "--format", "plain", "--status", "todo", env={"TODO_COLUMNS": "id,prio"})
+    assert champs(r) == [["a" * 8 + "-0", "high"]]                              # variable > fichier
+
+
+def test_reglage_vaut_pour_next_et_archive_list(base):
+    env = {"TODO_COLUMNS": "id,created"}
+    assert champs(base("next", "--format", "plain", env=env)) == [["a" * 8 + "-0", "2026-03-04"]]
     base("archive", "add")
-    assert champs(base("archive", "list", "--format", "plain"))[0][-1] == "2026-02-01"
+    assert champs(base("archive", "list", "--format", "plain", env=env)) == [["b" * 8 + "-0", "2026-02-01"]]
+
+
+def test_reglage_sans_effet_sur_text_et_json(base):
+    env = {"TODO_COLUMNS": "id,created"}
+    r = base("list", "--format", "text", env=env)
+    assert r.code == 0 and "Appeler Paul" in r.sortie
+    assert base("list", "--format", "json", env=env).json()[0]["titre"]
+
+
+def test_reglage_n_impose_pas_le_tableau_dans_un_terminal(base):
+    """Seule l'option --columns transforme le texte en tableau ; le réglage ne change que les colonnes."""
+    r = base.pty("list", env={"TODO_COLUMNS": "id,title", "TODO_FORMAT": None})
+    assert "┌" not in r.texte
+
+
+def test_config_set_normalise_et_valide(base):
+    assert base("config", "set", "general.columns", "title,created").code == 0
+    assert base("config", "get", "general.columns").sortie.strip() == "id,title,created"
+    r = base("config", "set", "general.columns", "foo")
+    assert r.code == 1 and "colonne inconnue" in r.texte
+    assert base("config", "get", "general.columns").sortie.strip() == "id,title,created"   # inchangé
+
+
+def test_variable_invalide_signalee_et_ignoree(base):
+    r = base("list", "--format", "plain", env={"TODO_COLUMNS": "foo"})
+    assert "TODO_COLUMNS" in r.texte and all(len(l) == 7 for l in champs(r))
+
+
+def test_config_show_indique_l_origine(base):
+    lignes = {l[0]: l for l in champs(base("config", "show", "--format", "plain", env={"TODO_COLUMNS": "id,title"}))}
+    assert lignes["general.columns"][1:] == ["id,title", "variable TODO_COLUMNS"]
 
 
 def test_colonnes_choisies_dans_l_ordre_demande(base):

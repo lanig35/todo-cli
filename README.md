@@ -484,15 +484,22 @@ séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponible
 `due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description` (les trois
 dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
 manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
-avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs). Avec `archive
+avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs).
+
+**Colonnes par défaut** : le réglage `[general] columns` (variable `TODO_COLUMNS`) fixe les colonnes quand
+`--columns` n'est pas donné, par exemple `todo config set general.columns id,title,due,created`. Il suit la
+précédence habituelle (option > variable > fichier > défaut `id,status,prio,due,tags,title,notes`), est
+validé à l'écriture et normalisé (l'`id` est ajouté en tête s'il manque). Il ne change que les colonnes : il
+n'impose pas le format tableau dans un terminal (seul `--columns` le fait) et il est sans effet sur `text`
+et `json`. Avec `archive
 --columns…`, l'ancienne syntaxe en déduit la consultation de l'archive.
 
 Le format `plain` est un contrat stable (colonnes et ordre ne changent pas) :
 
 - `list`, `next`, `archive list` : `id` (complet), `statut` (`todo`/`done`), `priorite`, `echeance`
-  (vide si aucune), `tags` (séparés par des virgules), `titre`, `notes` (nombre de notes), `creee` (date de
-  création, `AAAA-MM-JJ`). Sans `--columns`, les colonnes par défaut sont celles-ci (mêmes que `table`, qui
-  réduit l'id à 8 caractères) ; les nouvelles colonnes par défaut sont toujours ajoutées à la fin.
+  (vide si aucune), `tags` (séparés par des virgules), `titre`, `notes` (nombre de notes). Ce sont les colonnes
+  par défaut (mêmes que `table`, qui réduit l'id à 8 caractères) ; pour en changer, `--columns` ou le réglage
+  `[general] columns` (voir ci-dessous).
 - `show` : une ligne `clé<TAB>valeur` par champ renseigné (`id`, `titre`, `statut`, `priorite`, `creee`,
   `echeance`, `terminee`, `repetition`, `suivante`, `tags`, `description`) et une ligne
   `note<TAB>date<TAB>texte` par note.
@@ -666,6 +673,7 @@ Exemple de fichier :
 color = auto            # auto | always | never
 format = auto           # auto | text | table | plain
 pager = true
+columns = id,status,prio,due,tags,title,notes   # colonnes de table/plain (list, next, archive list)
 lock_timeout = 10       # secondes d'attente si la base est utilisée par une autre instance
 
 [list]
@@ -689,6 +697,7 @@ soon = 0
 | `general` | `format` | `auto` | `TODO_FORMAT` | `--format` |
 | `general` | `pager` | `true` | `TODO_PAGER` | `--pager`, `--no-pager` |
 | `general` | `keep_backups` | `5` (minimum 2) | `TODO_KEEP_BACKUPS` | — |
+| `general` | `columns` | `id,status,prio,due,tags,title,notes` | `TODO_COLUMNS` | `--columns` |
 | `general` | `lock_timeout` | `10` (secondes, 0 = pas d'attente) | `TODO_LOCK_TIMEOUT` | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |

@@ -143,7 +143,12 @@ def _args_colonnes(p):
     p.add_argument('--columns', type=_colonnes, default=None, metavar='COLONNES',
                    help="Colonnes des formats table et plain, séparées par des virgules, dans cet ordre : id, status, prio, due, "
                         "tags, title, notes, created, done, archived, recurrence, description. L'id est toujours présent "
-                        "(placé en tête s'il manque). Défaut : id,status,prio,due,tags,title,notes,created")
+                        "(placé en tête s'il manque). Défaut : id,status,prio,due,tags,title,notes (ou [general] columns)")
+
+
+def _colonnes_effectives(args):
+    """Colonnes des formats table et plain : --columns, sinon [general] columns (TODO_COLUMNS, fichier, défaut)."""
+    return args.columns or colonnes_tache(reglages.obtenir('general', 'columns'))
 
 
 def _exiger_search(args):
@@ -823,7 +828,7 @@ def main():
                       retards_en_premier=reglages.obtenir('list', 'overdue_first', args.overdue_first),
                       limite=reglages.obtenir('list', 'limit', args.limit) or None, debut=args.start,
                       pager=reglages.obtenir('general', 'pager', args.pager), champs=args.search_in or CHAMPS_RECHERCHE,
-                      avant=avant, apres=apres, filtres=filtres, colonnes=args.columns)
+                      avant=avant, apres=apres, filtres=filtres, colonnes=_colonnes_effectives(args))
     elif args.commande == 'show':
         succes = afficher_tache(args.id, args.format)
     elif args.commande == 'undone':
@@ -857,7 +862,7 @@ def main():
     elif args.commande == 'undo':
         succes = annuler_derniere_action()
     elif args.commande == 'next':
-        afficher_prochaines(reglages.obtenir('next', 'count', args.count), args.tag, args.prio, args.format, args.columns)
+        afficher_prochaines(reglages.obtenir('next', 'count', args.count), args.tag, args.prio, args.format, _colonnes_effectives(args))
     elif args.commande == 'remind':
         if args.disable:
             desactiver_rappels(args.format)
@@ -891,7 +896,7 @@ def main():
                 sys.exit(1)
             lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager),
                            champs=args.search_in or CHAMPS_RECHERCHE, filtres=_filtres_communs(args, archive=True),
-                           tag=args.tag, prio=args.prio, tri=args.sort, limite=args.limit, debut=args.start, colonnes=args.columns)
+                           tag=args.tag, prio=args.prio, tri=args.sort, limite=args.limit, debut=args.start, colonnes=_colonnes_effectives(args))
         else:
             if args.ids and args.anciennete:
                 journal.echec("invalid_combination")
