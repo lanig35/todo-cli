@@ -166,8 +166,8 @@ def correspond_recherche(t, recherche, champs=CHAMPS_RECHERCHE):
     """Vrai si la tâche contient `recherche` (sans tenir compte des accents ni de la casse) dans `champs`."""
     return normaliser_recherche(recherche) in _texte_recherche(t, champs)
 
-def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text", tag_filtre=None,
-                  prio_filtre=None, retard=False, aujourdhui=False, retards_en_premier=True,
+def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text",
+                  retard=False, aujourdhui=False, retards_en_premier=True,
                   limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE, filtres=None, colonnes=None):
     """Extrait, filtre, trie et met en forme l'ensemble des enregistrements actifs.
 
@@ -177,7 +177,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
     avant / apres (objets date) bornent l'échéance, bornes INCLUSES. Une tâche sans échéance
     valide est exclue, et les tâches terminées aussi, sauf si statut_filtre vaut "done".
 
-    filtres : dict d'options de `filtres.garder` (sans_echeance, notes, fini_apres, fini_avant).
+    filtres : dict d'options de `filtres.garder` (tags, priorités, notes, échéance absente, dates…).
 
     limite / debut : n'affichent qu'une tranche de la liste triée (debut commence à 1,
     comme la numérotation affichée). pager : autorise l'usage d'un pager en mode table.
@@ -197,8 +197,6 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
     for t in toutes:
         if statut_filtre == "todo" and t['statut'] != STATUT_A_FAIRE: continue
         if statut_filtre == "done" and t['statut'] != STATUT_TERMINE: continue
-        if tag_filtre and tag_filtre.lower() not in t['tags']: continue
-        if prio_filtre and t['priorite'] != prio_filtre: continue
         if avant is not None or apres is not None:
             echeance = _parse_date(t['date_echeance'])
             if echeance is None: continue

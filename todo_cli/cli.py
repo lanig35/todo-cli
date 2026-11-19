@@ -47,6 +47,55 @@ _AIDE_SEARCH_IN = ("Limite --search à ces champs, séparés par des virgules : 
                    "(défaut : all). Ex. : --search-in notes")
 
 
+def _prios(valeur):
+    """Type argparse : une ou plusieurs priorités séparées par des virgules."""
+    noms = tuple(n.strip().lower() for n in str(valeur).split(",") if n.strip())
+    mauvais = [n for n in noms if n not in PRIORITES]
+    if not noms or mauvais:
+        raise argparse.ArgumentTypeError(f"priorité inconnue : {', '.join(mauvais) or valeur} (attendues : {', '.join(PRIORITES)})")
+    return noms
+
+
+def _liste(valeurs):
+    """Valeurs d'une option répétable ou séparée par des virgules, en minuscules sans doublon (None si absente)."""
+    if not valeurs:
+        return None
+    res = []
+    for v in valeurs:
+        for x in str(v).split(","):
+            x = x.strip().lower()
+            if x and x not in res:
+                res.append(x)
+    return res or None
+
+
+def _args_filtres_selection(p):
+    """Filtres par tag, priorité, récurrence, création et identifiant (list et archive list)."""
+    p.add_argument('--tag', action='append', default=None, metavar='TAGS',
+                   help="Seulement les tâches portant ce tag ; répétable ou séparé par des virgules : TOUS les tags indiqués")
+    p.add_argument('--any-tag', action='append', default=None, metavar='TAGS',
+                   help="Seulement les tâches portant AU MOINS UN de ces tags (répétable ou séparés par des virgules)")
+    p.add_argument('--no-tag', action='store_true', help="Seulement les tâches sans aucun tag")
+    p.add_argument('--not-tag', action='append', default=None, metavar='TAGS',
+                   help="Écarter les tâches portant l'un de ces tags (répétable ou séparés par des virgules)")
+    p.add_argument('--prio', type=_prios, default=None, metavar='PRIO',
+                   help="Seulement cette priorité (ou plusieurs, séparées par des virgules : high,medium)")
+    p.add_argument('--not-prio', type=_prios, default=None, metavar='PRIO', help="Écarter cette priorité (ou plusieurs, séparées par des virgules)")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument('--recurring', action='store_true', help="Seulement les tâches récurrentes")
+    g.add_argument('--no-recurring', action='store_true', help="Seulement les tâches non récurrentes")
+    p.add_argument('--created-after', type=str, default=None, metavar='DATE',
+                   help="Créées à partir de cette date, incluse (AAAA-MM-JJ, hier, ou durée écoulée : 7d, 2w, 1m, 1y)")
+    p.add_argument('--created-before', type=str, default=None, metavar='DATE',
+                   help="Créées au plus tard à cette date, incluse (mêmes formats que --created-after)")
+    p.add_argument('--id', dest='filtre_id', action='append', default=None, metavar='ID',
+                   help="Seulement la tâche dont l'identifiant commence par ID (répétable ou séparés par des virgules)")
+
+
+_ATTRS_SELECTION = ('tag', 'any_tag', 'no_tag', 'not_tag', 'prio', 'not_prio', 'recurring', 'no_recurring',
+                    'created_after', 'created_before', 'filtre_id')
+
+
 def _args_filtres_notes(p):
     g = p.add_mutually_exclusive_group()
     g.add_argument('--has-notes', action='store_true', help="Seulement les tâches qui ont au moins une note")
@@ -88,6 +137,20 @@ def _plage_vide(apres, avant, option_apres, option_avant):
 def _filtres_communs(args, archive=False):
     """Dict d'options pour `filtres.garder`, d'après les options de la ligne de commande (erreur si incohérentes)."""
     f = {}
+    tags, un_tag, pas_tags = _liste(args.tag), _liste(args.any_tag), _liste(args.not_tag)
+    if args.no_tag and (tags or un_tag):
+        journal.echec("invalid_combination")
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --no-tag ne se combine pas avec --tag ni --any-tag.")
+        sys.exit(1)
+    f.update(tags=tags, un_tag=un_tag, pas_tags=pas_tags, prios=args.prio, pas_prios=args.not_prio,
+             ids=_liste(args.filtre_id))
+    if args.no_tag:
+        f['sans_tag'] = True
+    if args.recurring or args.no_recurring:
+        f['recurrente'] = bool(args.recurring)
+    f['cree_apres'] = _date_passee(args.created_after, '--created-after')
+    f['cree_avant'] = _date_passee(args.created_before, '--created-before')
+    _plage_vide(f['cree_apres'], f['cree_avant'], '--created-after', '--created-before')
     if getattr(args, 'no_due', False):
         f['sans_echeance'] = True
     if args.has_notes or args.no_notes:
@@ -112,8 +175,7 @@ def _filtres_communs(args, archive=False):
 
 def _args_archive_filtres(p, ancien=False):
     """Filtres, tri et tranche de `archive list` (et de `archive --list`)."""
-    p.add_argument('--tag', type=str, default=None, help="Seulement les tâches portant ce tag")
-    p.add_argument('--prio', choices=list(PRIORITES), default=None, help="Seulement cette priorité")
+    _args_filtres_selection(p)
     _args_filtres_notes(p)
     _args_filtres_fin(p, archive=True)
     if not ancien:
@@ -127,7 +189,7 @@ def _args_archive_filtres(p, ancien=False):
 
 
 def _filtres_archive_actifs(args):
-    return any([args.tag, args.prio, args.has_notes, args.no_notes, args.done_after, args.done_before,
+    return any([*(getattr(args, a) for a in _ATTRS_SELECTION), args.has_notes, args.no_notes, args.done_after, args.done_before,
                 args.archived_after, args.archived_before, args.sort, args.limit, args.start, args.columns])
 
 
@@ -213,8 +275,7 @@ def _args_list(p):
     p.add_argument('--status', choices=['todo', 'done'], help="Filtrer selon l'avancement")
     p.add_argument('--search', type=str, help='Recherche plein texte (titre, description, tags, notes), sans tenir compte des accents ni de la casse')
     p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
-    p.add_argument('--tag', type=str, default=None, help='Extraction par étiquette exclusive')
-    p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Ne montrer que cette priorité')
+    _args_filtres_selection(p)
     p.add_argument('--no-due', action='store_true', help="Seulement les tâches sans échéance")
     _args_filtres_notes(p)
     _args_filtres_fin(p)
@@ -480,7 +541,8 @@ def _args_note_ancien(p):
 
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
 _ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
-                     tag=None, prio=None, has_notes=False, no_notes=False, done_after=None, done_before=None,
+                     tag=None, any_tag=None, no_tag=False, not_tag=None, prio=None, not_prio=None, recurring=False,
+                     no_recurring=False, created_after=None, created_before=None, filtre_id=None, has_notes=False, no_notes=False, done_after=None, done_before=None,
                      archived_after=None, archived_before=None, sort=None, limit=None, start=None, columns=None)
 
 # (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
@@ -823,8 +885,8 @@ def main():
             journal.echec("empty_range")
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Plage vide : --due-after ({apres}) est postérieure à --due-before ({avant}).")
             sys.exit(1)
-        lister_taches(args.status, args.search, args.sort, args.format, args.tag,
-                      prio_filtre=args.prio, retard=args.overdue, aujourdhui=args.today,
+        lister_taches(args.status, args.search, args.sort, args.format,
+                      retard=args.overdue, aujourdhui=args.today,
                       retards_en_premier=reglages.obtenir('list', 'overdue_first', args.overdue_first),
                       limite=reglages.obtenir('list', 'limit', args.limit) or None, debut=args.start,
                       pager=reglages.obtenir('general', 'pager', args.pager), champs=args.search_in or CHAMPS_RECHERCHE,
@@ -896,7 +958,7 @@ def main():
                 sys.exit(1)
             lister_archive(args.search, args.format, pager=reglages.obtenir('general', 'pager', args.pager),
                            champs=args.search_in or CHAMPS_RECHERCHE, filtres=_filtres_communs(args, archive=True),
-                           tag=args.tag, prio=args.prio, tri=args.sort, limite=args.limit, debut=args.start, colonnes=_colonnes_effectives(args))
+                           tri=args.sort, limite=args.limit, debut=args.start, colonnes=_colonnes_effectives(args))
         else:
             if args.ids and args.anciennete:
                 journal.echec("invalid_combination")

@@ -217,21 +217,17 @@ def desarchiver_taches(ids):
 
 
 def lister_archive(recherche=None, fmt="text", pager=True, champs=CHAMPS_RECHERCHE, filtres=None,
-                   tag=None, prio=None, tri=None, limite=None, debut=None, colonnes=None):
+                   tri=None, limite=None, debut=None, colonnes=None):
     """Affiche l'archive (la plus récemment terminée en premier), éventuellement filtrée.
 
-    recherche / champs : texte cherché ; tag, prio : étiquette et priorité ; filtres : options de
+    recherche / champs : texte cherché ; filtres : options de
     `filtres.garder` ; tri : done (défaut), archived, alpha ou priority ; limite / debut : tranche
     (debut commence à 1), appliquée après filtres et tri.
     """
     taches = _lire_archive_triee()
-    filtre = bool(recherche or tag or prio or filtres or limite or debut)
+    filtre = bool(recherche or filtres or limite or debut)
     if recherche:
         taches = [t for t in taches if correspond_recherche(t, recherche, champs)]
-    if tag:
-        taches = [t for t in taches if tag.lower() in t['tags']]
-    if prio:
-        taches = [t for t in taches if t['priorite'] == prio]
     if filtres:
         taches = [t for t in taches if garder(t, **filtres)]
     if tri == "archived":

@@ -3,6 +3,20 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.12.0] - 2026-11-19
+
+### Ajouté
+
+- **Filtres de sélection** pour `list` et `archive list` : `--tag` répétable ou séparé par des virgules
+  (tous les tags), `--any-tag` (au moins un), `--no-tag`, `--not-tag`, `--prio` multiple (`high,medium`),
+  `--not-prio`, `--recurring` / `--no-recurring`, `--created-after` / `--created-before` (mêmes formats que
+  `--done-after`) et `--id` (début d'identifiant). Ils se combinent entre eux (ET) et avec les filtres existants.
+
+### Modifié
+
+- `--tag` et `--prio` de `list` / `archive list` acceptent plusieurs valeurs ; l'usage à une seule valeur
+  est inchangé. `next` garde ses options `--tag` / `--prio` à valeur unique.
+
 ## [2.11.0] - 2026-11-19
 
 ### Ajouté
@@ -228,6 +242,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.12.0
 [2.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.11.0
 [2.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.10.0
 [2.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.9.0
