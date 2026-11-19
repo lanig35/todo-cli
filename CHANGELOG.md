@@ -3,6 +3,19 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.11.0] - 2026-11-19
+
+### Ajouté
+
+- **Réglage `[general] columns`** (variable `TODO_COLUMNS`) : colonnes par défaut des formats `table` et
+  `plain` pour `list`, `next` et `archive list`, quand `--columns` n'est pas donné. Validé et normalisé
+  par `config set` (l'id est ajouté en tête s'il manque). Il ne change pas le format choisi.
+
+### Modifié
+
+- Les colonnes par défaut redeviennent `id,status,prio,due,tags,title,notes` : la date de création
+  (introduite en 2.10.0 dans le défaut) s'obtient avec `--columns …,created` ou en l'ajoutant au réglage.
+
 ## [2.10.0] - 2026-11-19
 
 ### Ajouté
@@ -215,6 +228,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.11.0
 [2.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.10.0
 [2.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.9.0
 [2.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.8.0

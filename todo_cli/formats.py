@@ -32,8 +32,8 @@ CHAMPS_TACHES = {
     'recurrence': ('RÉPÉTITION', lambda t, court: t.get('recurrence') or ""),
     'description': ('DESCRIPTION', lambda t, court: t['description']),
 }
-# Colonnes par défaut, dans l'ordre ; les nouvelles se placent à la fin
-COLONNES_DEFAUT = ('id', 'status', 'prio', 'due', 'tags', 'title', 'notes', 'created')
+# Colonnes par défaut, dans l'ordre (réglage [general] columns)
+COLONNES_DEFAUT = ('id', 'status', 'prio', 'due', 'tags', 'title', 'notes')
 
 
 def colonnes_tache(valeur):
