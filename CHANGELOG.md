@@ -3,6 +3,17 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.14.0] - 2026-11-19
+
+### Ajouté
+
+- **`archive add --tag TAGS`** : archive toutes les tâches terminées portant ce tag (répétable ou séparé par
+  des virgules : tous les tags), avec `--older-than` en option. Les tâches à faire qui le portent restent en
+  place, et leur nombre est indiqué.
+- **Archivage automatique** : réglage `[archive] auto_days` (`TODO_ARCHIVE_AUTO_DAYS`, 0 = désactivé, défaut).
+  Archive les tâches terminées depuis au moins N jours, une fois par jour, à la première commande qui
+  modifie la base ; bilan sur stderr, sauvegarde (donc `undo`), état dans `archive_auto`.
+
 ## [2.13.0] - 2026-11-19
 
 ### Ajouté
@@ -254,6 +265,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.14.0
 [2.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.13.0
 [2.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.12.0
 [2.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.11.0

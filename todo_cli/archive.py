@@ -7,11 +7,12 @@ avec la base principale.
 import dbm
 import json
 import re
+import sys
 from datetime import datetime
 from . import couleurs, journal
 from .filtres import garder
 from .affichage import CHAMPS_RECHERCHE, _afficher_texte, correspond_recherche
-from .config import ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_TERMINE
+from .config import ARCHIVE_AUTO_LAST, ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from .dates import _decaler, _parse_date
 from .formats import sortie_taches
 from .sauvegardes import sauvegarder_base
@@ -34,24 +35,28 @@ def _sans_id(t):
     return {k: v for k, v in t.items() if k != 'id'}
 
 
-def archiver_taches(ids=None, anciennete=None):
+def archiver_taches(ids=None, anciennete=None, tags=None, silencieux=False, bilan=None):
     """Déplace des tâches terminées vers l'archive.
 
     ids        : préfixes d'identifiants à archiver (ils doivent désigner des tâches terminées).
     anciennete : (n, unité) ; ne retient que les tâches terminées depuis au moins cette durée.
-    Sans ids, toutes les tâches terminées (éventuellement filtrées par ancienneté) sont archivées.
+    tags       : (sans ids) ne retient que les tâches terminées portant TOUS ces tags ; les tâches à faire
+                 qui les portent restent en place (signalé).
+    Sans ids, toutes les tâches terminées (éventuellement filtrées par ancienneté et tags) sont archivées.
+    silencieux : n'affiche rien ; bilan : dict rempli avec `archivees` (nombre de tâches déplacées).
     Retourne True si aucun identifiant n'a posé problème.
 
     Chaque tâche est écrite dans l'archive AVANT d'être retirée de la base principale : une
     interruption laisse un doublon récupérable plutôt qu'une tâche perdue.
     """
     if not _base_existe():
-        print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à archiver.{couleurs.CLR_RESET}")
+        if not silencieux:
+            print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à archiver.{couleurs.CLR_RESET}")
         return not ids
 
     maintenant = datetime.now()
     horodatage = maintenant.strftime("%Y-%m-%d %H:%M")
-    nb_ok, echecs, sans_date = 0, 0, 0
+    nb_ok, echecs, sans_date, restent_a_faire = 0, 0, 0, 0
     with dbm.open(ARCHIVE_NAME, 'c') as archive, dbm.open(DB_NAME, 'w') as db:
         if ids:
             cles, echecs = _resoudre_ids(db, ids)
@@ -75,7 +80,10 @@ def archiver_taches(ids=None, anciennete=None):
             limite = _decaler(maintenant.date(), -anciennete[0], anciennete[1]) if anciennete else None
             a_traiter = []
             for t in _charger_taches(db):
+                if tags and not all(x in t['tags'] for x in tags):
+                    continue
                 if t['statut'] != STATUT_TERMINE:
+                    restent_a_faire += 1 if t['statut'] == STATUT_A_FAIRE else 0
                     continue
                 if limite is not None:
                     date_fin = _parse_date((t['date_terminee'] or "")[:10])
@@ -91,15 +99,21 @@ def archiver_taches(ids=None, anciennete=None):
             del db[cle]
             nb_ok += 1
             journal.noter(ids=[cle], titres=[t['titre']], modifie=True)
-            if ids:
+            if ids and not silencieux:
                 print(f" 📦 Tâche archivée : '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}'.")
 
-    if not ids:
+    if bilan is not None:
+        bilan['archivees'] = nb_ok
+    if not ids and not silencieux:
         if nb_ok:
             print(f" 📦 {couleurs.CLR_DONE}{nb_ok} tâche(s) archivée(s).{couleurs.CLR_RESET}")
         else:
             qualif = f" depuis au moins {anciennete[0]}{anciennete[1]}" if anciennete else ""
-            print(f" {couleurs.CLR_DIM}Aucune tâche terminée{qualif} à archiver.{couleurs.CLR_RESET}")
+            marque = f" portant {'+'.join('#' + x for x in tags)}" if tags else ""
+            print(f" {couleurs.CLR_DIM}Aucune tâche terminée{qualif}{marque} à archiver.{couleurs.CLR_RESET}")
+        if tags and restent_a_faire:
+            print(f" {couleurs.CLR_DIM}ℹ️  {restent_a_faire} tâche(s) à faire portant ce(s) tag(s) restent dans la liste : "
+                  f"seules les tâches terminées s'archivent.{couleurs.CLR_RESET}")
         if sans_date:
             print(f" {couleurs.CLR_DIM}ℹ️  {sans_date} tâche(s) terminée(s) sans date de complétion ignorée(s) : "
                   f"âge inconnu (archivez-les par identifiant).{couleurs.CLR_RESET}")
@@ -107,9 +121,39 @@ def archiver_taches(ids=None, anciennete=None):
     # Une seule sauvegarde pour tout le lot, APRÈS fermeture des deux bases
     if nb_ok:
         sauvegarder_base()
-    if ids:
+    if ids and not silencieux:
         _afficher_bilan_lot(len(ids), nb_ok, "archivée(s)", echecs)
     return echecs == 0
+
+
+def archivage_automatique(jours):
+    """Réglage [archive] auto_days : archive les tâches terminées depuis au moins `jours` jours.
+
+    Au plus une fois par jour (la date du dernier passage est gardée dans `archive_auto`). Le bilan, une
+    ligne, va sur stderr pour ne pas polluer la sortie des pipes. Retourne le nombre de tâches archivées.
+    Sans effet si `jours` vaut 0 ou si l'état ne peut pas être lu ou écrit (jamais bloquant).
+    """
+    if not jours:
+        return 0
+    aujourdhui = datetime.now().strftime("%Y-%m-%d")
+    try:
+        with open(ARCHIVE_AUTO_LAST, encoding="utf-8") as f:
+            if f.read().strip() == aujourdhui:
+                return 0
+    except OSError:
+        pass
+    bilan = {}
+    try:
+        archiver_taches(anciennete=(jours, 'd'), silencieux=True, bilan=bilan)
+        with open(ARCHIVE_AUTO_LAST, "w", encoding="utf-8") as f:
+            f.write(aujourdhui + "\n")
+    except (OSError, *dbm.error):
+        return bilan.get('archivees', 0)
+    nombre = bilan.get('archivees', 0)
+    if nombre:
+        print(f" 📦 {nombre} tâche(s) terminée(s) depuis plus de {jours} jour(s) archivée(s) automatiquement "
+              f"([archive] auto_days).", file=sys.stderr)
+    return nombre
 
 
 def purger_archive(ids=None, anciennete=None, confirmer=True):

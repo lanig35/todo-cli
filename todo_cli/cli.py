@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import datetime
 from .agenda import afficher_agenda
-from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archiver_taches, desarchiver_taches, lister_archive, purger_archive
+from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archivage_automatique, archiver_taches, desarchiver_taches, lister_archive, purger_archive
 from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches
 from .config import PRIORITES
 from . import __version__, couleurs, reglages, journal, verrou
@@ -520,6 +520,9 @@ def _args_archive_ajouter(p):
     p.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
     p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
                    help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
+    p.add_argument('--tag', dest='tags_archive', action='append', default=None, metavar='TAGS',
+                   help="Archive les tâches terminées portant ce tag (répétable ou séparé par des virgules : tous les tags) ; "
+                        "les tâches à faire portant ce tag restent en place")
 
 def _args_archive_lister(p):
     p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags, notes), sans accents ni casse")
@@ -549,7 +552,7 @@ def _args_note_ancien(p):
 
 
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
-_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
+_ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, tags_archive=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
                      tag=None, any_tag=None, no_tag=False, not_tag=None, prio=None, not_prio=None, recurring=False,
                      no_recurring=False, created_after=None, created_before=None, filtre_id=None, has_notes=False, no_notes=False, done_after=None, done_before=None,
                      archived_after=None, archived_before=None, sort=None, limit=None, start=None, columns=None)
@@ -778,6 +781,10 @@ def _completer_ligne():
     sys.exit(0)
 
 
+# Commandes qui ne déclenchent pas l'archivage automatique (elles gèrent déjà l'archive ou l'historique)
+_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed')
+
+
 def _mode_verrou(args):
     """Verrou à prendre sur la base : None (rien), PARTAGE (lecture) ou EXCLUSIF (écriture)."""
     c = args.commande
@@ -847,6 +854,8 @@ def main():
     mode_verrou = _mode_verrou(args)
     if mode_verrou:
         verrou.prendre(mode_verrou, reglages.obtenir('general', 'lock_timeout'))
+    if mode_verrou == verrou.EXCLUSIF and args.commande not in _SANS_ARCHIVAGE_AUTO:
+        archivage_automatique(reglages.obtenir('archive', 'auto_days'))
 
     # Moteur d'aiguillage vers l'action requise.
     # `succes` passe à False si un identifiant de done / remove / postpone n'a pas pu être traité :
@@ -969,9 +978,10 @@ def main():
                            champs=args.search_in or CHAMPS_RECHERCHE, filtres=_filtres_communs(args, archive=True),
                            tri=args.sort, limite=args.limit, debut=args.start, colonnes=_colonnes_effectives(args))
         else:
-            if args.ids and args.anciennete:
+            tags_archive = _liste(getattr(args, 'tags_archive', None))
+            if args.ids and (args.anciennete or tags_archive):
                 journal.echec("invalid_combination")
-                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Indiquez des identifiants OU --older-than, pas les deux.")
+                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Indiquez des identifiants OU --older-than / --tag, pas les deux.")
                 sys.exit(1)
             anciennete = None
             if args.anciennete is not None:
@@ -984,7 +994,7 @@ def main():
             if args.purge:
                 succes = purger_archive(args.ids or None, anciennete, not args.yes)
             else:
-                succes = archiver_taches(args.ids or None, anciennete)
+                succes = archiver_taches(args.ids or None, anciennete, tags=tags_archive)
     elif args.commande == 'unarchive':
         succes = desarchiver_taches(args.ids)
     elif args.commande == 'config':
