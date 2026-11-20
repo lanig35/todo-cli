@@ -567,6 +567,8 @@ Les tâches terminées peuvent être rangées hors de la liste, sans être suppr
 todo archive add                      # archive toutes les tâches terminées
 todo archive add --older-than 30d     # seulement celles terminées depuis au moins 30 jours
 todo archive add a1b2c3 d4e5f6        # ou des tâches précises (elles doivent être terminées)
+todo archive add --tag projet-x       # toutes les tâches terminées portant ce tag
+todo archive add --tag projet-x --older-than 2w   # idem, terminées depuis au moins 2 semaines
 todo archive list               # consulter l'archive
 todo archive list --search facture     # chercher dans l'archive (mêmes règles ; `--search-in` disponible)
 todo archive list --tag pro --prio high         # filtrer par tag et priorité
@@ -577,6 +579,18 @@ todo archive purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce
 todo report stats --with-archive         # statistiques incluant l'historique archivé
 ```
 
+- **Archiver par tag** : `archive add --tag TAGS` (répétable ou séparé par des virgules : tous les tags)
+  archive les tâches **terminées** portant ce tag, par exemple à la fin d'un projet. Les tâches à faire qui le
+  portent restent dans la liste (leur nombre est indiqué) : seules les tâches terminées s'archivent. Il se
+  combine avec `--older-than` (ET) mais pas avec des identifiants. Avec l'ancienne syntaxe
+  `todo archive --tag x`, l'option reste un filtre de consultation.
+- **Archivage automatique** : avec `todo config set archive.auto_days 30` (variable
+  `TODO_ARCHIVE_AUTO_DAYS`), les tâches terminées depuis au moins 30 jours sont archivées **une fois par
+  jour**, à la première commande qui modifie la base (`add`, `done`, `edit`…). Les commandes de lecture
+  (`list`, `next`, `show`…) et celles qui touchent déjà à l'archive ou à l'historique (`archive`, `undo`,
+  `restore`, `reset`, `import`) ne le déclenchent pas. Le bilan tient en une ligne sur la sortie d'erreur, une
+  sauvegarde est faite (`undo` revient donc en arrière) et la date du dernier passage est gardée dans le
+  fichier `archive_auto` du dossier de stockage. `0` (défaut) désactive la fonction.
 - **Filtres de `archive list`** (et de `archive --list`) : `--search` / `--search-in`, les filtres de sélection de
   `list` (`--tag`, `--any-tag`, `--no-tag`, `--not-tag`, `--prio`, `--not-prio`, `--recurring`, `--no-recurring`,
   `--created-after` / `--created-before`, `--id`),
@@ -740,6 +754,7 @@ soon = 0
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
 | `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
 | `add` | `date_prefix` | `optional` (ou `required`) | `TODO_ADD_DATE_PREFIX` | — |
+| `archive` | `auto_days` | `0` (désactivé ; en jours) | `TODO_ARCHIVE_AUTO_DAYS` | — |
 | `agenda` | `days` | `7` (1 à 366) | `TODO_AGENDA_DAYS` | `--days` |
 | `next` | `count` | `1` | `TODO_NEXT_COUNT` | `-n`, `--count` |
 | `remind` | `enabled` | `true` | `TODO_REMIND_ENABLED` | — (voir ci-dessous) |

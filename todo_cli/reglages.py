@@ -68,6 +68,9 @@ REGLAGES = (
     Reglage("add", "date_prefix", "choix", "optional",
             "Saisie rapide : optional (`demain` et `@demain` sont des dates) ou required (seule `@demain` en est une ; `demain` reste dans le titre).",
             choix=("optional", "required")),
+    Reglage("archive", "auto_days", "int", 0,
+            "Archivage automatique : archive les tâches terminées depuis au moins N jours, une fois par jour, à la première "
+            "commande de modification ; 0 = désactivé.", minimum=0),
     Reglage("agenda", "days", "int", 7,
             "Nombre de jours affichés par agenda.", minimum=1, maximum=366),
     Reglage("next", "count", "int", 1,
