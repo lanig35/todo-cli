@@ -153,6 +153,8 @@ def _filtres_communs(args, archive=False):
     _plage_vide(f['cree_apres'], f['cree_avant'], '--created-after', '--created-before')
     if getattr(args, 'no_due', False):
         f['sans_echeance'] = True
+    if getattr(args, 'blocked', False) or getattr(args, 'ready', False):
+        f['bloquee'] = bool(args.blocked)
     if args.has_notes or args.no_notes:
         f['notes'] = bool(args.has_notes)
     f['fini_apres'] = _date_passee(args.done_after, '--done-after')
@@ -204,7 +206,7 @@ def _colonnes(valeur):
 def _args_colonnes(p):
     p.add_argument('--columns', type=_colonnes, default=None, metavar='COLONNES',
                    help="Colonnes des formats table et plain, séparées par des virgules, dans cet ordre : id, status, prio, due, "
-                        "tags, title, notes, created, done, archived, recurrence, description. L'id est toujours présent "
+                        "tags, title, notes, created, done, archived, recurrence, description, after, blocked. L'id est toujours présent "
                         "(placé en tête s'il manque). Défaut : id,status,prio,due,tags,title,notes (ou [general] columns)")
 
 
@@ -264,6 +266,8 @@ def _args_add(p):
     p.add_argument('--due', type=str, default=None,
                             help="Échéance : AAAA-MM-JJ, aujourd'hui, demain, apres-demain, +3d/+2w/+1m/+1y ou un jour (lundi...)")
     p.add_argument('--tags', type=str, default=None, help='Tags catégoriels indexés (ex: pro,dev)')
+    p.add_argument('--after', type=str, default=None, metavar='IDS',
+                   help="Tâche(s) à terminer d'abord (identifiants ou préfixes, séparés par des virgules) : elle n'apparaît pas dans `next` tant qu'elles sont à faire")
     p.add_argument('--repeat', type=str, default=None,
                             help="Tâche récurrente : daily, weekly, monthly, yearly ou 3d/2w/1m/1y (échéance = aujourd'hui si --due absent)")
 
@@ -276,6 +280,9 @@ def _args_list(p):
     p.add_argument('--search', type=str, help='Recherche plein texte (titre, description, tags, notes), sans tenir compte des accents ni de la casse')
     p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
     _args_filtres_selection(p)
+    g = p.add_mutually_exclusive_group()
+    g.add_argument('--blocked', action='store_true', help="Seulement les tâches à faire qui attendent une dépendance (--after)")
+    g.add_argument('--ready', action='store_true', help="Seulement les tâches à faire qui ne sont pas bloquées")
     p.add_argument('--no-due', action='store_true', help="Seulement les tâches sans échéance")
     _args_filtres_notes(p)
     _args_filtres_fin(p)
@@ -310,6 +317,8 @@ def _args_edit(p):
                              help="Nouvelle échéance : AAAA-MM-JJ, demain, +3d, lundi... ('none' pour la supprimer)")
     p.add_argument('--tags', type=str, default=None, help="Nouveaux tags, remplace les anciens (chaîne vide pour tout effacer)")
     p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
+    p.add_argument('--after', type=str, default=None, metavar='IDS',
+                   help="Remplace les dépendances : tâche(s) à terminer d'abord (identifiants ou préfixes, séparés par des virgules ; 'none' pour les supprimer)")
     p.add_argument('--repeat', type=str, default=None,
                              help="Nouvelle répétition : daily, weekly, monthly, yearly, 3d/2w/1m/1y ('none' pour la supprimer)")
 
@@ -860,7 +869,7 @@ def main():
             else:
                 analyse = None
         prio = prio or reglages.obtenir('add', 'priority')   # option > titre > variable > fichier > défaut
-        ajouter_tache(titre, args.desc, prio, due, tags, repeter=repeter)
+        ajouter_tache(titre, args.desc, prio, due, tags, repeter=repeter, apres=args.after)
         if analyse:
             compris = []
             if analyse["due"]:
@@ -896,7 +905,7 @@ def main():
     elif args.commande == 'undone':
         succes = rouvrir_tache(args.id, args.note)
     elif args.commande == 'edit':
-        succes = modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note)
+        succes = modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note, apres=args.after)
     elif args.commande == 'note':
         succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
     elif args.commande == 'export':

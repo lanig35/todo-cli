@@ -153,7 +153,7 @@ class Todo:
         """Écrit des tâches directement dans la base, avec des clés connues (aucune sauvegarde créée).
 
         Chaque tâche est un dict : cle, titre, et au choix statut, priorite, echeance, recurrence,
-        tags, description, creation, terminee.
+        tags, description, creation, terminee, apres.
         """
         with dbm.open(str(self.db_dir / "todo_db"), "c") as db:
             for t in taches:
@@ -162,6 +162,7 @@ class Todo:
                     "description": t.get("description", ""), "date_echeance": t.get("echeance"),
                     "tags": t.get("tags", []), "recurrence": t.get("recurrence"),
                     "date_creation": t.get("creation", "2026-01-01 10:00"), "date_terminee": t.get("terminee"),
+                    "apres": t.get("apres", []),
                 })
 
     def seed_brut(self, cle, octets):

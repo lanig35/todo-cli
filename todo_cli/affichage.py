@@ -9,7 +9,7 @@ import sys
 from collections import Counter
 from datetime import datetime
 from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
-from . import couleurs, journal
+from . import couleurs, dependances, journal
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date, _sans_accents
 from .filtres import garder
 from .formats import imprimer_plain, sortie_taches, tableau
@@ -32,11 +32,20 @@ def champs_tache(t, id_complet):
         champs.append(("repetition", "Répétition", t['recurrence']))
     if t['suivante']:
         champs.append(("suivante", "Suivante", t['suivante']))
+    if t['apres']:
+        champs.append(("apres", "Après", ",".join(t['apres'])))
     champs.append(("tags", "Tags", ",".join(t['tags'])))
     champs.append(("description", "Description", t['description'] or ""))
     for i, n in enumerate(t['notes'], start=1):
         champs.append(("note", f"Note {i}", (n['date'], n['texte'])))
     return champs
+
+
+def _lire_dep(db, identifiant):
+    try:
+        return _normaliser_tache(db[identifiant])
+    except (KeyError, ValueError):
+        return None
 
 
 def afficher_tache(id_recherche, fmt="text"):
@@ -56,6 +65,9 @@ def afficher_tache(id_recherche, fmt="text"):
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être affichée.")
             return False
         id_complet = key.decode('utf-8', errors='replace')
+        attentes = [(d, _lire_dep(db, d)) for d in t['apres']] if fmt == "text" else []
+        if fmt == "json":       # comme `list --format json` : les dépendances qui bloquent encore la tâche
+            t['bloquee_par'] = [d for d, _ in dependances.en_attente(db, t)] if t['statut'] == STATUT_A_FAIRE else []
 
     if fmt == "json":
         t['id'] = id_complet
@@ -95,6 +107,14 @@ def afficher_tache(id_recherche, fmt="text"):
         print(f"  {couleurs.CLR_BOLD}Répétition  :{couleurs.CLR_RESET} ↻ {_libelle_recurrence(t['recurrence'])}")
     if t['suivante']:
         print(f"  {couleurs.CLR_BOLD}Suivante    :{couleurs.CLR_RESET} {t['suivante']}")
+    for i, (d, dep) in enumerate(attentes):
+        if dep is None:
+            etat = f"{couleurs.CLR_DIM}introuvable (ignorée){couleurs.CLR_RESET}"
+        elif dep['statut'] == STATUT_A_FAIRE:
+            etat = f"{couleurs.CLR_DEL}🔒 à faire{couleurs.CLR_RESET} · {dep['titre']}"
+        else:
+            etat = f"{couleurs.CLR_DONE}✔ terminée{couleurs.CLR_RESET} · {dep['titre']}"
+        print(f"  {couleurs.CLR_BOLD}{'Après' if i == 0 else '':<12}:{couleurs.CLR_RESET} {d[:8]} {etat}")
     print(f"  {couleurs.CLR_BOLD}Tags        :{couleurs.CLR_RESET} {tags}")
     print(f"  {couleurs.CLR_BOLD}Description :{couleurs.CLR_RESET} {description}")
     if t['notes']:
@@ -183,7 +203,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
     comme la numérotation affichée). pager : autorise l'usage d'un pager en mode table.
     """
     maintenant = datetime.now().date()
-    toutes = _lire_taches()
+    toutes = dependances.annoter(_lire_taches())
 
     if not toutes:
         if fmt == "json":
@@ -287,6 +307,8 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
         display_tags = f" {couleurs.CLR_TAG}" + " ".join([f"#{tg}" for tg in t['tags']]) + f"{couleurs.CLR_RESET}" if t['tags'] else ""
         rec_str = f" {couleurs.CLR_DIM}↻ {_libelle_recurrence(t['recurrence'])}{couleurs.CLR_RESET}" if (t['recurrence'] and a_faire) else ""
         nb_notes = f" {couleurs.CLR_DIM}📝{len(t['notes'])}{couleurs.CLR_RESET}" if t['notes'] else ""
+        if t.get('bloquee_par'):
+            nb_notes += f" {couleurs.CLR_DEL}🔒{couleurs.CLR_RESET}{couleurs.CLR_DIM} après {', '.join(d[:8] for d in t['bloquee_par'])}{couleurs.CLR_RESET}"
         numero = f"{couleurs.CLR_DIM}{position:>{largeur}}.{couleurs.CLR_RESET}"
         lignes.append(f"  {numero} {prefixe} {prio_color} {texte_titre}{echeance_str}{rec_str}{display_tags}{nb_notes} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
         if t['description']:

@@ -12,6 +12,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
 - Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
+- Dépendances entre tâches (`--after`) : une tâche attend que d'autres soient terminées
 - Formats de sortie `text`, `table`, `plain` (pipes) et `json`, choisis automatiquement selon le terminal
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
@@ -179,6 +180,7 @@ Options de `list` :
 | `--today` | tâches à faire dont l'échéance est aujourd'hui (avec `--overdue` : l'un ou l'autre) |
 | `--due-before DATE` | échéance au plus tard à cette date, **incluse** |
 | `--due-after DATE` | échéance à partir de cette date, **incluse** |
+| `--blocked`, `--ready` | tâches à faire qui attendent une dépendance (`--after`), ou qui sont libres |
 | `--no-due` | tâches sans échéance (ne se combine pas avec `--due-before` / `--due-after`) |
 | `--has-notes`, `--no-notes` | tâches qui ont au moins une note, ou aucune |
 | `--done-after DATE`, `--done-before DATE` | terminées à partir de / au plus tard à cette date, **incluse** (voir ci-dessous) |
@@ -338,6 +340,31 @@ Valeurs acceptées : `daily`, `weekly`, `monthly`, `yearly`, ou `3d`, `2w`, `1m`
   est déjà terminée).
 - `remove` n'arrête pas la série : utilisez `edit --repeat none`.
 
+### Dépendances entre tâches
+
+Une tâche peut attendre que d'autres soient terminées avec `--after` (identifiants ou préfixes, séparés
+par des virgules) :
+
+```bash
+todo add "Livrer le rapport" --after a1b2c3,d4e5f6   # à la création
+todo task edit 7890ab --after a1b2c3                 # remplace les dépendances
+todo task edit 7890ab --after none                   # supprime les dépendances
+todo list --blocked                                  # les tâches qui attendent encore
+todo list --ready                                    # les tâches à faire qui ne sont pas bloquées
+```
+
+- Une tâche à faire est **bloquée** tant qu'au moins une de ses dépendances est encore à faire. `list` la
+  marque `🔒 après a1b2c3` ; `next` ne la propose jamais (et indique combien de tâches attendent quand il
+  ne reste que celles-là).
+- Une dépendance **terminée, archivée ou supprimée** ne bloque plus : la tâche est libre. Rouvrir une
+  dépendance (`undone`) la bloque de nouveau.
+- Les dépendances **circulaires** (une tâche qui s'attendrait elle-même, directement ou par d'autres) sont refusées.
+- `done` reste possible sur une tâche bloquée, avec un avertissement.
+- L'occurrence suivante d'une tâche récurrente n'hérite pas des dépendances.
+- `show` détaille chaque dépendance et son état ; en `plain`, `apres<TAB>id1,id2`. En `json`, `apres` liste
+  les identifiants et `bloquee_par` (dans `list` et `next`) ceux qui bloquent encore. Colonnes `after` et
+  `blocked` disponibles avec `--columns`.
+
 ### Rappel des tâches en retard
 
 ```bash
@@ -489,7 +516,7 @@ todo list --format plain --columns id,title | grep -i budget
 
 **Choisir les colonnes** (`--columns`, sur `list`, `next` et `archive list`, pour `table` et `plain`) : noms
 séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponibles : `id`, `status`, `prio`,
-`due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description` (les trois
+`due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked` (les trois
 dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
 manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
 avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs).
@@ -509,7 +536,7 @@ Le format `plain` est un contrat stable (colonnes et ordre ne changent pas) :
   par défaut (mêmes que `table`, qui réduit l'id à 8 caractères) ; pour en changer, `--columns` ou le réglage
   `[general] columns` (voir ci-dessous).
 - `show` : une ligne `clé<TAB>valeur` par champ renseigné (`id`, `titre`, `statut`, `priorite`, `creee`,
-  `echeance`, `terminee`, `repetition`, `suivante`, `tags`, `description`) et une ligne
+  `echeance`, `terminee`, `repetition`, `suivante`, `apres`, `tags`, `description`) et une ligne
   `note<TAB>date<TAB>texte` par note.
 - `agenda` : `quand` (`retard` ou la date), `id`, `priorite`, `titre` ; les jours sans tâche n'apparaissent pas.
 - `note list` : `numéro`, `date`, `texte`. `report stats` : `indicateur<TAB>valeur`.
@@ -908,6 +935,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
 | `configuration.py` | commande `config` (show, path, init) |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
+| `dependances.py` | dépendances entre tâches (`--after`) : blocage, cycles |
 | `filtres.py` | filtres communs à `list` et `archive list` (sans échéance, notes, dates de fin et d'archivage) |
 | `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
 | `rappel.py` | commande `remind` (rappel des retards) |

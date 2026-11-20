@@ -48,6 +48,8 @@ def _normaliser_tache(brut):
     # Échéance d'origine de la série (AAAA-MM-JJ) : les occurrences se calculent depuis elle, pas depuis
     # la précédente, sinon un « 31 du mois » ramené au 28 en février resterait au 28 (voir _prochaine_echeance)
     t['ancre'] = t['ancre'] if isinstance(t.get('ancre'), str) and t['ancre'] else None
+    apres = t.get('apres')       # ids des tâches dont celle-ci dépend (voir dependances.py)
+    t['apres'] = list(dict.fromkeys(x for x in apres if isinstance(x, str) and x)) if isinstance(apres, list) else []
     t['notes'] = _normaliser_notes(t.get('notes'))  # journal daté de la tâche (absent des anciennes tâches)
     return t
 

@@ -1,7 +1,7 @@
 """Commande `next` : la ou les tâches à traiter en premier."""
 import json
 from datetime import datetime
-from . import couleurs
+from . import couleurs, dependances
 from .formats import sortie_taches
 from .config import PRIORITES, STATUT_A_FAIRE
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence
@@ -18,8 +18,11 @@ def _rang(t, aujourdhui):
 
 
 def choisir_prochaines(taches, nombre, aujourdhui, tag=None, prio=None):
-    """Les `nombre` premières tâches à faire (filtrables par tag / priorité) et le nombre total candidates."""
-    candidates = [t for t in taches if t['statut'] == STATUT_A_FAIRE
+    """Les `nombre` premières tâches à faire (filtrables par tag / priorité) et le nombre total candidates.
+
+    Les tâches bloquées par une dépendance non terminée (`--after`) ne sont jamais proposées."""
+    dependances.annoter(taches)
+    candidates = [t for t in taches if t['statut'] == STATUT_A_FAIRE and not t['bloquee_par']
                   and (not tag or tag.lower() in t['tags']) and (not prio or t['priorite'] == prio)]
     candidates.sort(key=lambda t: _rang(t, aujourdhui))
     return candidates[:nombre], len(candidates)
@@ -28,7 +31,8 @@ def choisir_prochaines(taches, nombre, aujourdhui, tag=None, prio=None):
 def afficher_prochaines(nombre=1, tag=None, prio=None, fmt="text", colonnes=None):
     """Affiche les prochaines tâches à traiter."""
     aujourdhui = datetime.now().date()
-    choisies, total = choisir_prochaines(_lire_taches(), nombre, aujourdhui, tag, prio)
+    toutes = _lire_taches()
+    choisies, total = choisir_prochaines(toutes, nombre, aujourdhui, tag, prio)
 
     if fmt == "json":
         print(json.dumps(choisies, indent=2, ensure_ascii=False))
@@ -38,6 +42,10 @@ def afficher_prochaines(nombre=1, tag=None, prio=None, fmt="text", colonnes=None
         return
     if not choisies:
         filtre = " correspondant à ces critères" if (tag or prio) else ""
+        bloquees = sum(1 for t in toutes if t['statut'] == STATUT_A_FAIRE and t['bloquee_par'])
+        if bloquees and not filtre:
+            print(f" 🔒 {couleurs.CLR_DIM}Rien à faire pour l'instant : {bloquees} tâche(s) en attente d'une dépendance.{couleurs.CLR_RESET}")
+            return
         print(f" 🎉 {couleurs.CLR_DIM}Rien à faire : aucune tâche en attente{filtre}.{couleurs.CLR_RESET}")
         return
 

@@ -1,6 +1,7 @@
 """Filtres communs à `list` et `archive list` : échéance absente, notes, dates de fin et d'archivage."""
 import re
 from datetime import datetime
+from .config import STATUT_A_FAIRE
 from .dates import _decaler, _parse_date, _resoudre_date, _sans_accents
 
 MSG_FORMATS_DATE_PASSEE = ("AAAA-MM-JJ, aujourd'hui, hier, ou une durée écoulée : 3d / 2w / 1m / 1y "
@@ -37,7 +38,7 @@ def _jour(valeur):
 
 def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None, archive_apres=None, archive_avant=None,
            anciennete=None, tags=None, un_tag=None, sans_tag=False, pas_tags=None, prios=None, pas_prios=None,
-           recurrente=None, cree_apres=None, cree_avant=None, ids=None):
+           recurrente=None, cree_apres=None, cree_avant=None, ids=None, bloquee=None):
     """Vrai si la tâche satisfait tous les filtres donnés (les filtres absents ne retiennent rien).
 
     sans_echeance : seulement les tâches sans échéance ; notes : True = au moins une note,
@@ -46,7 +47,8 @@ def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None,
     au plus tard ce jour-là (comme `archive add --older-than`).
     tags : TOUS ces tags ; un_tag : AU MOINS UN de ces tags ; sans_tag : aucun tag ; pas_tags : aucun de ces
     tags ; prios / pas_prios : priorité dans / hors de ces valeurs ; recurrente : True/False ; cree_* : bornes
-    incluses sur la date de création ; ids : début de l'identifiant (l'un d'eux suffit).
+    incluses sur la date de création ; ids : début de l'identifiant (l'un d'eux suffit) ; bloquee : True =
+    à faire et en attente d'une dépendance, False = à faire et prête (voir dependances.annoter).
     """
     if tags and not all(x in t['tags'] for x in tags):
         return False
@@ -66,6 +68,8 @@ def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None,
         jour = _jour(t.get('date_creation'))
         if jour is None or (cree_apres is not None and jour < cree_apres) or (cree_avant is not None and jour > cree_avant):
             return False
+    if bloquee is not None and (t['statut'] != STATUT_A_FAIRE or bool(t.get('bloquee_par')) != bloquee):
+        return False
     if ids and not any(t['id'].lower().startswith(i) for i in ids):
         return False
     if sans_echeance and _parse_date(t.get('date_echeance')) is not None:
