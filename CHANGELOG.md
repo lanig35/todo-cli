@@ -3,6 +3,16 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.15.0] - 2026-11-20
+
+### Modifié
+
+- **Emplacement du stockage résolu à l'exécution** (aucun changement visible) : la base, l'archive, les
+  sauvegardes, les fichiers d'état du rappel et le verrou ne sont plus des constantes calculées à l'import,
+  mais des chemins déduits à la demande du dossier de stockage courant (`TODO_DB_DIR`, `--config`, fichier
+  de configuration). Les dossiers sont créés au démarrage de la commande, après lecture de `--config`.
+  C'est le préalable aux projets (plusieurs listes de tâches) prévus ensuite.
+
 ## [2.14.0] - 2026-11-19
 
 ### Ajouté
@@ -265,6 +275,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.15.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.15.0
 [2.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.14.0
 [2.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.13.0
 [2.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.12.0

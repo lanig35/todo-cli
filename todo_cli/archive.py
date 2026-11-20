@@ -12,7 +12,8 @@ from datetime import datetime
 from . import couleurs, journal
 from .filtres import garder
 from .affichage import CHAMPS_RECHERCHE, _afficher_texte, correspond_recherche
-from .config import ARCHIVE_AUTO_LAST, ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from . import config
 from .dates import _decaler, _parse_date
 from .formats import sortie_taches
 from .sauvegardes import sauvegarder_base
@@ -57,7 +58,7 @@ def archiver_taches(ids=None, anciennete=None, tags=None, silencieux=False, bila
     maintenant = datetime.now()
     horodatage = maintenant.strftime("%Y-%m-%d %H:%M")
     nb_ok, echecs, sans_date, restent_a_faire = 0, 0, 0, 0
-    with dbm.open(ARCHIVE_NAME, 'c') as archive, dbm.open(DB_NAME, 'w') as db:
+    with dbm.open(config.ARCHIVE_NAME, 'c') as archive, dbm.open(config.DB_NAME, 'w') as db:
         if ids:
             cles, echecs = _resoudre_ids(db, ids)
             a_traiter = []
@@ -137,7 +138,7 @@ def archivage_automatique(jours):
         return 0
     aujourdhui = datetime.now().strftime("%Y-%m-%d")
     try:
-        with open(ARCHIVE_AUTO_LAST, encoding="utf-8") as f:
+        with open(config.ARCHIVE_AUTO_LAST, encoding="utf-8") as f:
             if f.read().strip() == aujourdhui:
                 return 0
     except OSError:
@@ -145,7 +146,7 @@ def archivage_automatique(jours):
     bilan = {}
     try:
         archiver_taches(anciennete=(jours, 'd'), silencieux=True, bilan=bilan)
-        with open(ARCHIVE_AUTO_LAST, "w", encoding="utf-8") as f:
+        with open(config.ARCHIVE_AUTO_LAST, "w", encoding="utf-8") as f:
             f.write(aujourdhui + "\n")
     except (OSError, *dbm.error):
         return bilan.get('archivees', 0)
@@ -170,7 +171,7 @@ def purger_archive(ids=None, anciennete=None, confirmer=True):
 
     sans_date = 0
     echecs = 0
-    with dbm.open(ARCHIVE_NAME, 'r') as archive:
+    with dbm.open(config.ARCHIVE_NAME, 'r') as archive:
         cibles = []                                 # (clé, titre)
         if ids:
             cles, echecs = _resoudre_ids(archive, ids)
@@ -213,7 +214,7 @@ def purger_archive(ids=None, anciennete=None, confirmer=True):
             print(" ❌ Opération annulée.")
             return True
 
-    with dbm.open(ARCHIVE_NAME, 'w') as archive:
+    with dbm.open(config.ARCHIVE_NAME, 'w') as archive:
         for cle, titre in cibles:
             del archive[cle]
             journal.noter(ids=[cle], titres=[titre], modifie=True)
@@ -232,7 +233,7 @@ def desarchiver_taches(ids):
         return False
 
     nb_ok = 0
-    with dbm.open(ARCHIVE_NAME, 'w') as archive, dbm.open(DB_NAME, 'c') as db:
+    with dbm.open(config.ARCHIVE_NAME, 'w') as archive, dbm.open(config.DB_NAME, 'c') as db:
         cles, echecs = _resoudre_ids(archive, ids)
         for cle in cles:
             try:

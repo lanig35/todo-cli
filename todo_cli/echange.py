@@ -16,7 +16,8 @@ import tempfile
 import uuid
 from datetime import datetime
 from . import __version__
-from .config import ARCHIVE_NAME, DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from . import config
 from . import couleurs, journal
 from .dates import _parser_recurrence
 from .sauvegardes import sauvegarder_base
@@ -248,7 +249,7 @@ def importer(source, mode="ajouter", simuler=False, confirmer=True, fmt="text"):
             return False
 
     if not simuler and (plan or supprimees):
-        with dbm.open(DB_NAME, 'c') as db, dbm.open(ARCHIVE_NAME, 'c') as archive:
+        with dbm.open(config.DB_NAME, 'c') as db, dbm.open(config.ARCHIVE_NAME, 'c') as archive:
             if mode == "remplacer":
                 for base in (db, archive):
                     for cle in list(base.keys()):

@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 from . import couleurs, journal
-from .config import REMIND_OFF
+from . import config
 from .formats import imprimer_plain, tableau
 from . import reglages
 from .reglages import REGLAGES, chemin_config, modele_fichier, nom_variable, obtenir_avec_origine, origine_chemin_config
@@ -33,7 +33,7 @@ def afficher_config(fmt="text"):
             "fichier": chemin, "fichier_origine": origine_chemin_config(), "fichier_existe": existe,
             "reglages": [{"cle": cle, "valeur": valeur, "origine": origine, "variable": nom_variable(r.section, r.cle)}
                          for cle, valeur, origine, r in lignes],
-            "rappels_coupes_par_commande": os.path.exists(REMIND_OFF),
+            "rappels_coupes_par_commande": os.path.exists(config.REMIND_OFF),
         }, indent=2, ensure_ascii=False))
         return
 
@@ -60,7 +60,7 @@ def afficher_config(fmt="text"):
         style = couleurs.CLR_BOLD if modifie else ""
         print(f"  {cle:<{largeur_cle}}  {style}{texte:<{largeur_val}}{couleurs.CLR_RESET}  "
               f"{couleurs.CLR_DIM}{origine}{couleurs.CLR_RESET}")
-    if os.path.exists(REMIND_OFF):
+    if os.path.exists(config.REMIND_OFF):
         print(f"\n  {couleurs.CLR_DIM}Rappels coupés par « todo reminder disable » (todo reminder enable pour les réactiver).{couleurs.CLR_RESET}")
     print(f"\n  {couleurs.CLR_DIM}Priorité : option > variable d'environnement > fichier > défaut.{couleurs.CLR_RESET}\n")
 

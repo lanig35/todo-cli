@@ -8,7 +8,8 @@ import subprocess
 import sys
 from collections import Counter
 from datetime import datetime
-from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from . import config
 from . import couleurs, dependances, journal
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date, _sans_accents
 from .filtres import garder
@@ -54,7 +55,7 @@ def afficher_tache(id_recherche, fmt="text"):
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à afficher.{couleurs.CLR_RESET}")
         return False
 
-    with dbm.open(DB_NAME, 'r') as db:
+    with dbm.open(config.DB_NAME, 'r') as db:
         key = _resoudre_id(db, id_recherche)
         if key is None:
             return False
