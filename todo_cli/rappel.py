@@ -10,7 +10,8 @@ import json
 import os
 from datetime import datetime
 from . import couleurs, reglages, journal
-from .config import PRIORITES, REMIND_LAST, REMIND_OFF, REMIND_STATUS, STATUT_A_FAIRE
+from .config import PRIORITES, STATUT_A_FAIRE
+from . import config
 from .dates import _jours_restants, _libelle_echeance
 from .formats import imprimer_plain, tableau
 from .stockage import _lire_taches
@@ -21,7 +22,7 @@ def rappels_actifs():
     """Faux si un des interrupteurs coupe les rappels : `remind --disable` (fichier d'état), ou le
     réglage [remind] enabled (TODO_REMIND_ENABLED, fichier de configuration) ; TODO_NO_REMIND les coupe
     toujours. Les interrupteurs se cumulent : un seul suffit pour couper."""
-    return reglages.obtenir("remind", "enabled") and not os.path.exists(REMIND_OFF)
+    return reglages.obtenir("remind", "enabled") and not os.path.exists(config.REMIND_OFF)
 
 
 def _lire(chemin):
@@ -60,12 +61,12 @@ def etat_rappels():
     (« commande remind --disable », « variable TODO_NO_REMIND », « fichier »…).
     """
     raisons = []
-    if os.path.exists(REMIND_OFF):
+    if os.path.exists(config.REMIND_OFF):
         raisons.append("commande remind --disable")
     valeur, origine = reglages.obtenir_avec_origine("remind", "enabled")
     if not valeur:
         raisons.append(origine)
-    return {"actif": not raisons, "desactive_par": raisons, "dernier_rappel": _lire(REMIND_LAST) or None}
+    return {"actif": not raisons, "desactive_par": raisons, "dernier_rappel": _lire(config.REMIND_LAST) or None}
 
 
 def _afficher_json(document):
@@ -87,9 +88,9 @@ def _afficher_etat_tabulaire(fmt):
 
 
 def desactiver_rappels(fmt="text"):
-    _ecrire(REMIND_OFF, "")
+    _ecrire(config.REMIND_OFF, "")
     journal.noter(modifie=True, state="disabled")
-    _ecrire(REMIND_STATUS, "")  # le résumé affiché dans l'invite disparaît tout de suite
+    _ecrire(config.REMIND_STATUS, "")  # le résumé affiché dans l'invite disparaît tout de suite
     if fmt == "json":
         return _afficher_json(etat_rappels())
     if fmt in ("plain", "table"):
@@ -98,9 +99,9 @@ def desactiver_rappels(fmt="text"):
 
 
 def activer_rappels(fmt="text"):
-    _supprimer(REMIND_OFF)
+    _supprimer(config.REMIND_OFF)
     journal.noter(modifie=True, state="enabled")
-    _supprimer(REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
+    _supprimer(config.REMIND_LAST)  # le prochain `--once-a-day` peut s'afficher dès maintenant
     if fmt == "json":
         return _afficher_json(etat_rappels())
     if fmt in ("plain", "table"):
@@ -116,14 +117,14 @@ def afficher_etat_rappels(fmt="text"):
         return _afficher_json(etat_rappels())
     if fmt in ("plain", "table"):
         return _afficher_etat_tabulaire(fmt)
-    if os.path.exists(REMIND_OFF):
+    if os.path.exists(config.REMIND_OFF):
         print(f" 🔕 Rappels désactivés (todo reminder enable pour les réactiver).")
     elif not reglages.obtenir("remind", "enabled"):
         _, origine = reglages.obtenir_avec_origine("remind", "enabled")
         print(f" 🔕 Rappels coupés par le réglage [remind] enabled ({origine}).")
     else:
         print(f" 🔔 Rappels activés.")
-    dernier = _lire(REMIND_LAST)
+    dernier = _lire(config.REMIND_LAST)
     if dernier:
         print(f"    {couleurs.CLR_DIM}Dernier rappel affiché avec --once-a-day : {dernier}.{couleurs.CLR_RESET}")
 
@@ -250,21 +251,21 @@ def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False, 
         return _afficher_rappel_tabulaire(fmt, bientot)
     if not rappels_actifs():
         if ecrire_statut:
-            _ecrire(REMIND_STATUS, "")
+            _ecrire(config.REMIND_STATUS, "")
         return
 
     aujourdhui = datetime.now().date()
     retards, du_jour, a_venir = construire_rappel(_lire_taches(), aujourdhui, bientot)
 
     if ecrire_statut:
-        _ecrire(REMIND_STATUS, resume_une_ligne(retards, du_jour, a_venir))
+        _ecrire(config.REMIND_STATUS, resume_une_ligne(retards, du_jour, a_venir))
         return
 
     texte = texte_rappel(retards, du_jour, a_venir, aujourdhui, limite)
     if not texte:
         return
     if une_fois_par_jour:
-        if _lire(REMIND_LAST) == aujourdhui.isoformat():
+        if _lire(config.REMIND_LAST) == aujourdhui.isoformat():
             return
-        _ecrire(REMIND_LAST, aujourdhui.isoformat())
+        _ecrire(config.REMIND_LAST, aujourdhui.isoformat())
     print(texte)

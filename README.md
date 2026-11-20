@@ -963,7 +963,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `echange.py` | export et import JSON |
 | `sauvegardes.py` | sauvegardes, rotation, restauration, remise à zéro |
 | `couleurs.py` | codes ANSI et règles d'activation des couleurs |
-| `config.py` | emplacement du stockage et constantes |
+| `config.py` | constantes métier et chemins du stockage, résolus à l'exécution (`config.DB_NAME`…) |
 | `seed.py` | génération de tâches factices |
 
 Le lien symbolique `~/.local/bin/todo` continue de fonctionner : le lanceur retrouve le paquet à côté

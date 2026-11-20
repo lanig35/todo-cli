@@ -8,7 +8,7 @@ import dbm
 import json
 import sys
 from datetime import datetime
-from .config import DB_NAME
+from . import config
 from .formats import imprimer_plain, tableau
 from . import couleurs, journal
 from .sauvegardes import sauvegarder_base
@@ -80,7 +80,7 @@ def commande_note(id_recherche, mots, fmt="text", modifier=None, supprimer=None)
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, aucune tâche à annoter.{couleurs.CLR_RESET}")
         return False
 
-    with dbm.open(DB_NAME, 'w' if ecriture else 'r') as db:
+    with dbm.open(config.DB_NAME, 'w' if ecriture else 'r') as db:
         cle = _resoudre_id(db, id_recherche)
         if cle is None:
             return False

@@ -24,9 +24,8 @@ except ImportError:               # plateforme sans fcntl (Windows) : pas de ver
     fcntl = None
 
 from . import couleurs, journal
-from .config import DB_DIR
+from . import config
 
-FICHIER = os.path.join(DB_DIR, "todo.lock")
 PARTAGE, EXCLUSIF = "shared", "exclusive"
 
 _descripteur = None               # le verrou vit autant que le processus
@@ -42,7 +41,7 @@ def prendre(mode, delai):
     if fcntl is None or _descripteur is not None:
         return
     try:
-        fd = os.open(FICHIER, os.O_RDWR | os.O_CREAT, 0o600)
+        fd = os.open(config.LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
     except OSError:
         return
     drapeau = fcntl.LOCK_SH if mode == PARTAGE else fcntl.LOCK_EX

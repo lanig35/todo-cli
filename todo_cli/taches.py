@@ -5,7 +5,8 @@ import re
 import sys
 import uuid
 from datetime import datetime
-from .config import DB_NAME, PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
+from . import config
 from . import couleurs, dependances, journal
 from .dates import MSG_FORMATS_DATE, MSG_FORMATS_REPETITION, _decaler, _libelle_recurrence, _parse_date, _parser_recurrence, _prochaine_echeance, _resoudre_date, _sans_accents
 from . import notes as carnet
@@ -55,7 +56,7 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
     # Parsing et normalisation des tags optionnels
     tags = _parser_tags(tags_str)
 
-    with dbm.open(DB_NAME, 'c') as db:
+    with dbm.open(config.DB_NAME, 'c') as db:
         dependances_ids = []
         if apres:
             dependances_ids = dependances.resoudre(db, dependances.liste_prefixes(apres))
@@ -127,7 +128,7 @@ def marquer_terminee(ids, note=None):
         return False
 
     nb_ok = 0
-    with dbm.open(DB_NAME, 'w') as db:
+    with dbm.open(config.DB_NAME, 'w') as db:
         cles, echecs = _resoudre_ids(db, ids)
         for key in cles:
             try:
@@ -174,7 +175,7 @@ def rouvrir_tache(id_recherche, note=None):
         return False
 
     modifie = False
-    with dbm.open(DB_NAME, 'w') as db:
+    with dbm.open(config.DB_NAME, 'w') as db:
         key = _resoudre_id(db, id_recherche)
         if key is None:
             return False
@@ -284,7 +285,7 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
         return False
 
     modifications = []
-    with dbm.open(DB_NAME, 'w') as db:
+    with dbm.open(config.DB_NAME, 'w') as db:
         key = _resoudre_id(db, id_recherche)
         if key is None:
             return False
@@ -367,7 +368,7 @@ def supprimer_tache(ids, note=None):
         return False
 
     nb_ok = 0
-    with dbm.open(DB_NAME, 'w') as db:
+    with dbm.open(config.DB_NAME, 'w') as db:
         cles, echecs = _resoudre_ids(db, ids)
         for key in cles:
             try:
@@ -412,7 +413,7 @@ def reporter_taches(ids, cible="+1d", note=None):
         return False
 
     nb_ok = 0
-    with dbm.open(DB_NAME, 'w') as db:
+    with dbm.open(config.DB_NAME, 'w') as db:
         cles, echecs = _resoudre_ids(db, ids)
         for key in cles:
             try:

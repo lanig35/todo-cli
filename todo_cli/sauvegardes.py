@@ -6,7 +6,7 @@ import re
 import shutil
 import sys
 from datetime import datetime
-from .config import ARCHIVE_NAME, BACKUP_DIR, DB_DIR, DB_NAME, NB_BACKUPS_MAX
+from . import config
 from . import couleurs, journal
 from .stockage import _charger_taches, _lire_archive, _lire_taches
 
@@ -16,27 +16,27 @@ _MOTIF_BACKUP = re.compile(r"^\d{8}_\d{6}_\d{6}$")
 
 def _noms_sauvegardes():
     """Noms des dossiers de sauvegarde, du plus ancien au plus récent."""
-    if not os.path.isdir(BACKUP_DIR):
+    if not os.path.isdir(config.BACKUP_DIR):
         return []
     return sorted(
-        d for d in os.listdir(BACKUP_DIR)
-        if _MOTIF_BACKUP.match(d) and os.path.isdir(os.path.join(BACKUP_DIR, d))
+        d for d in os.listdir(config.BACKUP_DIR)
+        if _MOTIF_BACKUP.match(d) and os.path.isdir(os.path.join(config.BACKUP_DIR, d))
     )
 
 def sauvegarder_base(rotation=True):
     """Crée un instantané daté de la base DBM (et de la base d'archive) dans son propre dossier
-    et, si rotation=True, ne conserve que les NB_BACKUPS_MAX plus récents.
+    et, si rotation=True, ne conserve que les config.NB_BACKUPS_MAX plus récents.
 
     Doit être appelée une fois la base fermée, sinon les dernières écritures
     pourraient ne pas encore être sur le disque.
     Retourne le chemin du dossier créé (ou None s'il n'y a rien à sauvegarder).
     """
-    fichiers_base = [f for f in glob.glob(f"{DB_NAME}*") + glob.glob(f"{ARCHIVE_NAME}*") if os.path.isfile(f)]
+    fichiers_base = [f for f in glob.glob(f"{config.DB_NAME}*") + glob.glob(f"{config.ARCHIVE_NAME}*") if os.path.isfile(f)]
     if not fichiers_base:
         return None
 
     horodatage = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    dossier = os.path.join(BACKUP_DIR, horodatage)
+    dossier = os.path.join(config.BACKUP_DIR, horodatage)
     os.makedirs(dossier, exist_ok=True)
 
     # Duplication de l'ensemble des sous-fichiers DBM (.db, .pag, .dir selon OS)
@@ -45,8 +45,8 @@ def sauvegarder_base(rotation=True):
 
     # --- Rotation : on supprime les dossiers les plus anciens ---
     if rotation:
-        for ancien in _noms_sauvegardes()[:-NB_BACKUPS_MAX]:
-            shutil.rmtree(os.path.join(BACKUP_DIR, ancien), ignore_errors=True)
+        for ancien in _noms_sauvegardes()[:-config.NB_BACKUPS_MAX]:
+            shutil.rmtree(os.path.join(config.BACKUP_DIR, ancien), ignore_errors=True)
     return dossier
 
 def _compter(nom):
@@ -60,8 +60,8 @@ def _compter(nom):
 
 def reinitialiser_base(avec_archive=False):
     """Remise à zéro après confirmation et sauvegarde ultime : la liste, et l'archive si `avec_archive`."""
-    nb_taches = _compter(DB_NAME)               # toutes les entrées, y compris les illisibles : reset les supprime aussi
-    nb_archive = _compter(ARCHIVE_NAME) if avec_archive else 0
+    nb_taches = _compter(config.DB_NAME)               # toutes les entrées, y compris les illisibles : reset les supprime aussi
+    nb_archive = _compter(config.ARCHIVE_NAME) if avec_archive else 0
     if nb_taches == 0 and nb_archive == 0:
         quoi = "La base de données et l'archive sont déjà vides." if avec_archive else "La base de données est déjà vide."
         print(f" 📋 {couleurs.CLR_DIM}{quoi}{couleurs.CLR_RESET}")
@@ -77,7 +77,7 @@ def reinitialiser_base(avec_archive=False):
         return
 
     sauvegarder_base()  # Sauvegarde de l'état AVANT purge (bases fermées) : liste et archive
-    bases = [(DB_NAME, nb_taches)] + ([(ARCHIVE_NAME, nb_archive)] if avec_archive else [])
+    bases = [(config.DB_NAME, nb_taches)] + ([(config.ARCHIVE_NAME, nb_archive)] if avec_archive else [])
     for nom, nombre in bases:
         if nombre:
             with dbm.open(nom, 'w') as db:
@@ -94,7 +94,7 @@ def _infos_sauvegarde(nom):
     except ValueError:
         date_txt = nom
     try:
-        with dbm.open(os.path.join(BACKUP_DIR, nom, "todo_db"), 'r') as db:
+        with dbm.open(os.path.join(config.BACKUP_DIR, nom, "todo_db"), 'r') as db:
             nb = len(db)
     except (dbm.error, OSError):
         nb = None
@@ -171,7 +171,7 @@ def restaurer_base(reference=None, confirmer=True):
             print(" ❌ Opération annulée.")
             return
 
-    dossier_source = os.path.join(BACKUP_DIR, nom)
+    dossier_source = os.path.join(config.BACKUP_DIR, nom)
     fichiers_source = [f for f in glob.glob(os.path.join(dossier_source, "*")) if os.path.isfile(f)]
 
     # 1. Filet de sécurité : sauvegarde de l'état actuel SANS rotation, pour que
@@ -182,11 +182,11 @@ def restaurer_base(reference=None, confirmer=True):
     try:
         # La base ET l'archive reviennent à l'état de la sauvegarde : sans cela, une tâche
         # archivée depuis pourrait exister à la fois dans la liste restaurée et dans l'archive.
-        for f in glob.glob(f"{DB_NAME}*") + glob.glob(f"{ARCHIVE_NAME}*"):
+        for f in glob.glob(f"{config.DB_NAME}*") + glob.glob(f"{config.ARCHIVE_NAME}*"):
             if os.path.isfile(f):
                 os.remove(f)
         for f in fichiers_source:
-            shutil.copy2(f, os.path.join(DB_DIR, os.path.basename(f)))
+            shutil.copy2(f, os.path.join(config.DB_DIR, os.path.basename(f)))
     except OSError as e:
         journal.echec("restore_error", detail=str(e))
         print(f" {couleurs.CLR_DEL}❌ Erreur pendant la restauration :{couleurs.CLR_RESET} {e}")
@@ -205,7 +205,7 @@ def restaurer_base(reference=None, confirmer=True):
 # 6 ter. ANNULATION DE LA DERNIÈRE MODIFICATION
 def _taches_sauvegarde(nom, base):
     """Tâches d'un fichier DBM d'un dossier de sauvegarde ('todo_db' ou 'todo_archive'), {id: tâche}."""
-    chemin = os.path.join(BACKUP_DIR, nom, base)
+    chemin = os.path.join(config.BACKUP_DIR, nom, base)
     if not glob.glob(f"{chemin}*"):
         return {}
     with dbm.open(chemin, 'r') as db:

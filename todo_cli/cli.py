@@ -7,6 +7,7 @@ from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archivage_automatique, archiver_taches, desarchiver_taches, lister_archive, purger_archive
 from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches
 from .config import PRIORITES
+from . import config
 from . import __version__, couleurs, reglages, journal, verrou
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
@@ -836,6 +837,7 @@ def main():
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} fichier de configuration introuvable : "
                   f"{reglages.chemin_config()} (option --config). `todo --config FICHIER config init` le crée.", file=sys.stderr)
             sys.exit(1)
+    config.preparer()               # dossier de stockage (après --config, qui peut en changer)
     journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
     if hasattr(args, 'format'):     # option > TODO_FORMAT > fichier > auto ; auto : text dans un terminal, plain sinon
