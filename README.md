@@ -149,6 +149,7 @@ todo add "Sauvegarde du serveur ~weekly #admin"
 todo list                                  # tout, les retards en premier
 todo list --status todo --prio high        # à faire, priorité haute
 todo list --tag pro --sort alpha           # par tag, tri alphabétique
+todo list --any-tag pro,perso --not-prio low   # l'un des deux tags, sans les priorités basses
 todo list --search reunion                 # titre, description, tags et notes ; « Réunion » est trouvée sans accent
 todo list --search appel --search-in notes # uniquement dans les notes
 todo list --overdue --today                # en retard ou pour aujourd'hui
@@ -165,8 +166,15 @@ Options de `list` :
 | `--status todo\|done` | filtre sur l'avancement |
 | `--search TEXTE` | recherche dans le titre, la description, les tags et les notes, sans tenir compte des accents ni de la casse |
 | `--search-in CHAMPS` | limite `--search` à `title`, `description`, `tags`, `notes` (séparés par des virgules ; défaut `all`) |
-| `--tag TAG` | tâches portant ce tag |
-| `--prio low\|medium\|high` | filtre sur la priorité |
+| `--tag TAGS` | tâches portant ce tag ; répétable ou séparé par des virgules : **tous** les tags indiqués (`--tag pro,tel`) |
+| `--any-tag TAGS` | tâches portant **au moins un** de ces tags (`--any-tag tel,perso`) |
+| `--no-tag` | tâches sans aucun tag (refusé avec `--tag` / `--any-tag`) |
+| `--not-tag TAGS` | écarte les tâches portant l'un de ces tags |
+| `--prio low\|medium\|high` | filtre sur la priorité ; plusieurs possibles, séparées par des virgules (`--prio high,medium`) |
+| `--not-prio PRIO` | écarte cette priorité (ou plusieurs, séparées par des virgules) |
+| `--recurring`, `--no-recurring` | seulement les tâches récurrentes, ou non récurrentes |
+| `--created-after DATE`, `--created-before DATE` | créées à partir de / au plus tard à cette date, incluse (mêmes formats que `--done-after`) |
+| `--id ID` | tâche dont l'identifiant commence par `ID` ; répétable ou séparé par des virgules |
 | `--overdue` | tâches à faire dont l'échéance est dépassée |
 | `--today` | tâches à faire dont l'échéance est aujourd'hui (avec `--overdue` : l'un ou l'autre) |
 | `--due-before DATE` | échéance au plus tard à cette date, **incluse** |
@@ -542,7 +550,9 @@ todo archive purge --older-than 1y   # supprimer DÉFINITIVEMENT de l'archive ce
 todo report stats --with-archive         # statistiques incluant l'historique archivé
 ```
 
-- **Filtres de `archive list`** (et de `archive --list`) : `--search` / `--search-in`, `--tag`, `--prio`,
+- **Filtres de `archive list`** (et de `archive --list`) : `--search` / `--search-in`, les filtres de sélection de
+  `list` (`--tag`, `--any-tag`, `--no-tag`, `--not-tag`, `--prio`, `--not-prio`, `--recurring`, `--no-recurring`,
+  `--created-after` / `--created-before`, `--id`),
   `--has-notes` / `--no-notes`, `--done-after` / `--done-before` (date de fin), `--archived-after` /
   `--archived-before` (date d'archivage, mêmes formats), `--older-than` (terminées depuis au moins cette
   durée, comme pour `archive add`), `--sort done|archived|alpha|priority` (défaut `done`, la plus récemment

@@ -36,14 +36,38 @@ def _jour(valeur):
 
 
 def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None, archive_apres=None, archive_avant=None,
-           anciennete=None):
+           anciennete=None, tags=None, un_tag=None, sans_tag=False, pas_tags=None, prios=None, pas_prios=None,
+           recurrente=None, cree_apres=None, cree_avant=None, ids=None):
     """Vrai si la tâche satisfait tous les filtres donnés (les filtres absents ne retiennent rien).
 
     sans_echeance : seulement les tâches sans échéance ; notes : True = au moins une note,
     False = aucune ; fini_* / archive_* : bornes INCLUSES (dates) sur la date de fin / d'archivage —
     une tâche sans cette date est exclue ; anciennete : date limite, la tâche doit être terminée
     au plus tard ce jour-là (comme `archive add --older-than`).
+    tags : TOUS ces tags ; un_tag : AU MOINS UN de ces tags ; sans_tag : aucun tag ; pas_tags : aucun de ces
+    tags ; prios / pas_prios : priorité dans / hors de ces valeurs ; recurrente : True/False ; cree_* : bornes
+    incluses sur la date de création ; ids : début de l'identifiant (l'un d'eux suffit).
     """
+    if tags and not all(x in t['tags'] for x in tags):
+        return False
+    if un_tag and not any(x in t['tags'] for x in un_tag):
+        return False
+    if sans_tag and t['tags']:
+        return False
+    if pas_tags and any(x in t['tags'] for x in pas_tags):
+        return False
+    if prios and t['priorite'] not in prios:
+        return False
+    if pas_prios and t['priorite'] in pas_prios:
+        return False
+    if recurrente is not None and bool(t.get('recurrence')) != recurrente:
+        return False
+    if cree_apres is not None or cree_avant is not None:
+        jour = _jour(t.get('date_creation'))
+        if jour is None or (cree_apres is not None and jour < cree_apres) or (cree_avant is not None and jour > cree_avant):
+            return False
+    if ids and not any(t['id'].lower().startswith(i) for i in ids):
+        return False
     if sans_echeance and _parse_date(t.get('date_echeance')) is not None:
         return False
     if notes is not None and bool(t.get('notes')) != notes:
