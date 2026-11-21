@@ -187,6 +187,34 @@ def correspond_recherche(t, recherche, champs=CHAMPS_RECHERCHE):
     """Vrai si la tâche contient `recherche` (sans tenir compte des accents ni de la casse) dans `champs`."""
     return normaliser_recherche(recherche) in _texte_recherche(t, champs)
 
+def selectionner(taches, statut_filtre=None, recherche_filtre=None, champs=CHAMPS_RECHERCHE, retard=False,
+                 aujourdhui=False, avant=None, apres=None, filtres=None, maintenant=None):
+    """Tâches qui satisfont tous les critères de `list` (les mêmes servent aux actions en lot).
+
+    Mêmes paramètres que `lister_taches` : statut ("todo" / "done"), recherche plein texte, retard / aujourd'hui,
+    bornes d'échéance (incluses) et dict `filtres` de `filtres.garder`. L'ordre d'entrée est conservé.
+    """
+    maintenant = maintenant or datetime.now().date()
+    retenues = []
+    for t in taches:
+        if statut_filtre == "todo" and t['statut'] != STATUT_A_FAIRE: continue
+        if statut_filtre == "done" and t['statut'] != STATUT_TERMINE: continue
+        if avant is not None or apres is not None:
+            echeance = _parse_date(t['date_echeance'])
+            if echeance is None: continue
+            if t['statut'] != STATUT_A_FAIRE and statut_filtre != "done": continue
+            if avant is not None and echeance > avant: continue
+            if apres is not None and echeance < apres: continue
+        if retard or aujourdhui:
+            jours = _jours_restants(t, maintenant)
+            if t['statut'] != STATUT_A_FAIRE or jours is None: continue
+            if not ((retard and jours < 0) or (aujourdhui and jours == 0)): continue
+        if recherche_filtre and not correspond_recherche(t, recherche_filtre, champs): continue
+        if filtres and not garder(t, **filtres): continue
+        retenues.append(t)
+    return retenues
+
+
 def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text",
                   retard=False, aujourdhui=False, retards_en_premier=True,
                   limite=None, debut=None, pager=True, avant=None, apres=None, champs=CHAMPS_RECHERCHE, filtres=None, colonnes=None):
@@ -214,23 +242,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
         return
 
     # Application sélective des filtres
-    liste_taches = []
-    for t in toutes:
-        if statut_filtre == "todo" and t['statut'] != STATUT_A_FAIRE: continue
-        if statut_filtre == "done" and t['statut'] != STATUT_TERMINE: continue
-        if avant is not None or apres is not None:
-            echeance = _parse_date(t['date_echeance'])
-            if echeance is None: continue
-            if t['statut'] != STATUT_A_FAIRE and statut_filtre != "done": continue
-            if avant is not None and echeance > avant: continue
-            if apres is not None and echeance < apres: continue
-        if retard or aujourdhui:
-            jours = _jours_restants(t, maintenant)
-            if t['statut'] != STATUT_A_FAIRE or jours is None: continue
-            if not ((retard and jours < 0) or (aujourdhui and jours == 0)): continue
-        if recherche_filtre and not correspond_recherche(t, recherche_filtre, champs): continue
-        if filtres and not garder(t, **filtres): continue
-        liste_taches.append(t)
+    liste_taches = selectionner(toutes, statut_filtre, recherche_filtre, champs, retard, aujourdhui, avant, apres, filtres, maintenant)
 
     if not liste_taches:
         if fmt == "json":

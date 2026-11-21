@@ -167,79 +167,100 @@ def marquer_terminee(ids, note=None):
     _afficher_bilan_lot(len(ids), nb_ok, "validée(s)", echecs)
     return echecs == 0
 
-def rouvrir_tache(id_recherche, note=None):
-    """Repasse une tâche terminée au statut 'A FAIRE' via préfixe d'ID (unique). `note` est ajoutée à la tâche."""
+def rouvrir_tache(ids, note=None):
+    """Repasse une ou plusieurs tâches terminées au statut 'A FAIRE' via préfixes d'ID (uniques).
+
+    `note` est ajoutée à chaque tâche effectivement rouverte. Une seule sauvegarde pour tout le lot.
+    Retourne True si aucun identifiant n'a posé problème (introuvable, ambigu, occurrence suivante déjà terminée).
+    """
+    if isinstance(ids, str):
+        ids = [ids]
     note = carnet.valider_note(note) if note is not None else None
     if not _base_existe():
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à rouvrir.{couleurs.CLR_RESET}")
         return False
 
-    modifie = False
+    nb_ok = 0
     with dbm.open(config.DB_NAME, 'w') as db:
-        key = _resoudre_id(db, id_recherche)
-        if key is None:
-            return False
-        try:
-            t = _normaliser_tache(db[key])
-        except ValueError:
-            journal.echec("corrupted_entry")
-            print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
-            return False
-        if t['statut'] == STATUT_A_FAIRE:
-            print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà à faire.{couleurs.CLR_RESET}")
-            return True     # rien à faire : pas une erreur
-        # Annuler la complétion d'une tâche récurrente annule aussi l'occurrence qu'elle a créée,
-        # sinon on aurait deux occurrences actives (tant que celle-ci n'a pas été terminée).
-        echeance_supprimee = None
-        if t['suivante']:
-            cle_suivante = t['suivante'].encode('utf-8')
-            if cle_suivante in db:
-                try:
-                    suivante = _normaliser_tache(db[cle_suivante])
-                except ValueError:
-                    suivante = None
-                if suivante is not None and suivante['statut'] != STATUT_A_FAIRE:
-                    journal.echec("next_occurrence_done")
-                    print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Impossible : l'occurrence suivante de '{t['titre']}' est déjà terminée.")
-                    return False
-                if suivante is not None:
-                    del db[cle_suivante]
-                    echeance_supprimee = suivante['date_echeance']
-            t['suivante'] = None
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            try:
+                t = _normaliser_tache(db[key])
+            except ValueError:
+                journal.echec("corrupted_entry")
+                print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
+                echecs += 1
+                continue
+            if t['statut'] == STATUT_A_FAIRE:
+                print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà à faire.{couleurs.CLR_RESET}")
+                continue     # rien à faire : pas une erreur
+            # Annuler la complétion d'une tâche récurrente annule aussi l'occurrence qu'elle a créée,
+            # sinon on aurait deux occurrences actives (tant que celle-ci n'a pas été terminée).
+            echeance_supprimee = None
+            if t['suivante']:
+                cle_suivante = t['suivante'].encode('utf-8')
+                if cle_suivante in db:
+                    try:
+                        suivante = _normaliser_tache(db[cle_suivante])
+                    except ValueError:
+                        suivante = None
+                    if suivante is not None and suivante['statut'] != STATUT_A_FAIRE:
+                        journal.echec("next_occurrence_done")
+                        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Impossible : l'occurrence suivante de '{t['titre']}' est déjà terminée.")
+                        echecs += 1
+                        continue
+                    if suivante is not None:
+                        del db[cle_suivante]
+                        echeance_supprimee = suivante['date_echeance']
+                t['suivante'] = None
 
-        t['statut'] = STATUT_A_FAIRE
-        t['date_terminee'] = None  # une tâche rouverte n'est plus terminée
-        if note:
-            carnet.ajouter_a(t, note, "undone")
-        db[key] = json.dumps(t)
-        print(f" {couleurs.CLR_TODO}↩️{couleurs.CLR_RESET}  Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' rouverte.")
-        if note:
-            carnet.confirmer_ajout()
-        if echeance_supprimee:
-            print(f"    {couleurs.CLR_DIM}↻ L'occurrence suivante (échéance {echeance_supprimee}) a été supprimée.{couleurs.CLR_RESET}")
-        modifie = True
-        journal.noter(ids=[key], titres=[t['titre']], modifie=True)
+            t['statut'] = STATUT_A_FAIRE
+            t['date_terminee'] = None  # une tâche rouverte n'est plus terminée
+            if note:
+                carnet.ajouter_a(t, note, "undone")
+            db[key] = json.dumps(t)
+            print(f" {couleurs.CLR_TODO}↩️{couleurs.CLR_RESET}  Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' rouverte.")
+            if note:
+                carnet.confirmer_ajout()
+            if echeance_supprimee:
+                print(f"    {couleurs.CLR_DIM}↻ L'occurrence suivante (échéance {echeance_supprimee}) a été supprimée.{couleurs.CLR_RESET}")
+            nb_ok += 1
+            journal.noter(ids=[key], titres=[t['titre']], modifie=True)
 
-    # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
-    if modifie:
+    # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base pour capturer les modifications
+    if nb_ok:
         sauvegarder_base()
-    return True
+    if len(ids) > 1:
+        _afficher_bilan_lot(len(ids), nb_ok, "rouverte(s)", echecs)
+    return echecs == 0
 
-def modifier_tache(id_recherche, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None, note=None, apres=None):
-    """Modifie les champs fournis d'une tâche (None = champ inchangé).
+def modifier_tache(ids, titre=None, description=None, priorite=None, date_echeance=None, tags_str=None, repeter=None, note=None, apres=None,
+                   tags_ajout=None, tags_retrait=None):
+    """Modifie les champs fournis d'une ou plusieurs tâches (None = champ inchangé).
+
+    `ids` : un préfixe d'identifiant ou une liste (les mêmes modifications s'appliquent à chaque tâche, avec une seule
+    sauvegarde pour tout le lot). Retourne True si aucun identifiant n'a posé problème.
 
     - date_echeance : date absolue ou relative ; 'none' (ou chaîne vide) supprime l'échéance.
     - tags_str      : chaîne vide supprime tous les tags ; sinon remplace la liste.
+    - tags_ajout / tags_retrait : tags (chaînes séparées par des virgules) ajoutés à la liste existante / retirés d'elle.
     - repeter       : 'weekly', '2w'... ; 'none' (ou chaîne vide) supprime la répétition.
     - note          : texte ajouté aux notes de la tâche (seul ou avec d'autres modifications).
     - apres         : identifiants des tâches à terminer avant celle-ci (remplace la liste) ; 'none' (ou chaîne vide) la vide.
     """
-    if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter, note, apres)):
+    if isinstance(ids, str):
+        ids = [ids]
+    if all(v is None for v in (titre, description, priorite, date_echeance, tags_str, repeter, note, apres, tags_ajout, tags_retrait)):
         journal.echec("nothing_to_edit")
-        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --repeat, --after, --note.")
+        print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Rien à modifier. Options : --title, --desc, --prio, --due, --tags, --add-tag, --remove-tag, --repeat, --after, --note.")
         return False
     if note is not None:
         note = carnet.valider_note(note)
+    if tags_str is not None and (tags_ajout is not None or tags_retrait is not None):
+        journal.echec("invalid_combination")
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --tags remplace la liste : il ne se combine pas avec --add-tag ni --remove-tag.")
+        sys.exit(1)
+    ajout, retrait = _parser_tags(tags_ajout), _parser_tags(tags_retrait)
 
     # --- Validation des valeurs AVANT toute ouverture de la base ---
     if titre is not None:
@@ -284,73 +305,86 @@ def modifier_tache(id_recherche, titre=None, description=None, priorite=None, da
         print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à modifier.{couleurs.CLR_RESET}")
         return False
 
-    modifications = []
+    nb_ok = nb_modifiees = 0
     with dbm.open(config.DB_NAME, 'w') as db:
-        key = _resoudre_id(db, id_recherche)
-        if key is None:
-            return False
-        try:
-            t = _normaliser_tache(db[key])
-        except ValueError:
-            journal.echec("corrupted_entry")
-            print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
-            return False
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            modifications = []
+            try:
+                t = _normaliser_tache(db[key])
+            except ValueError:
+                journal.echec("corrupted_entry")
+                print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
+                echecs += 1
+                continue
 
-        if titre is not None and titre != t['titre']:
-            t['titre'] = titre
-            modifications.append("titre")
-        if description is not None and description != t['description']:
-            t['description'] = description
-            modifications.append("description")
-        if priorite is not None and priorite != t['priorite']:
-            t['priorite'] = priorite
-            modifications.append("priorité")
-        if date_echeance is not None and (date_echeance or None) != t['date_echeance']:
-            t['date_echeance'] = date_echeance or None
-            t['ancre'] = None                      # nouvelle échéance voulue : la série repart de cette date
-            modifications.append("échéance")
-        if tags_str is not None:
-            nouveaux_tags = _parser_tags(tags_str)
-            if nouveaux_tags != t['tags']:
-                t['tags'] = nouveaux_tags
-                modifications.append("tags")
-        if repeter is not None and (repeter or None) != t['recurrence']:
-            t['recurrence'] = repeter or None
-            t['ancre'] = None
-            modifications.append("répétition")
+            if titre is not None and titre != t['titre']:
+                t['titre'] = titre
+                modifications.append("titre")
+            if description is not None and description != t['description']:
+                t['description'] = description
+                modifications.append("description")
+            if priorite is not None and priorite != t['priorite']:
+                t['priorite'] = priorite
+                modifications.append("priorité")
+            if date_echeance is not None and (date_echeance or None) != t['date_echeance']:
+                t['date_echeance'] = date_echeance or None
+                t['ancre'] = None                      # nouvelle échéance voulue : la série repart de cette date
+                modifications.append("échéance")
+            if tags_str is not None:
+                nouveaux_tags = _parser_tags(tags_str)
+                if nouveaux_tags != t['tags']:
+                    t['tags'] = nouveaux_tags
+                    modifications.append("tags")
+            if ajout or retrait:
+                nouveaux_tags = [x for x in t['tags'] if x not in retrait]
+                nouveaux_tags += [x for x in ajout if x not in nouveaux_tags]
+                if nouveaux_tags != t['tags']:
+                    t['tags'] = nouveaux_tags
+                    modifications.append("tags")
+            if repeter is not None and (repeter or None) != t['recurrence']:
+                t['recurrence'] = repeter or None
+                t['ancre'] = None
+                modifications.append("répétition")
 
-        # Une tâche récurrente doit toujours avoir une échéance
-        if t['recurrence'] and not t['date_echeance']:
-            if date_echeance == "":
-                journal.echec("recurrence_needs_due")
-                print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Une tâche récurrente doit avoir une échéance : supprimez d'abord la répétition (--repeat none).")
-                return False
-            t['date_echeance'] = datetime.now().date().strftime("%Y-%m-%d")
-            modifications.append("échéance (aujourd'hui par défaut)")
+            # Une tâche récurrente doit toujours avoir une échéance
+            if t['recurrence'] and not t['date_echeance']:
+                if date_echeance == "":
+                    journal.echec("recurrence_needs_due")
+                    print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Une tâche récurrente doit avoir une échéance : supprimez d'abord la répétition (--repeat none).")
+                    echecs += 1
+                    continue
+                t['date_echeance'] = datetime.now().date().strftime("%Y-%m-%d")
+                modifications.append("échéance (aujourd'hui par défaut)")
 
-        if apres is not None:
-            nouvelles = dependances.resoudre(db, dependances.liste_prefixes(apres), key.decode('utf-8', errors='replace'))
-            if nouvelles is None:
-                return False
-            if nouvelles != t['apres']:
-                t['apres'] = nouvelles
-                modifications.append("dépendances")
+            if apres is not None:
+                nouvelles = dependances.resoudre(db, dependances.liste_prefixes(apres), key.decode('utf-8', errors='replace'))
+                if nouvelles is None:
+                    echecs += 1
+                    continue
+                if nouvelles != t['apres']:
+                    t['apres'] = nouvelles
+                    modifications.append("dépendances")
 
-        if note:
-            carnet.ajouter_a(t, note, "edit")
-            modifications.append("note")
+            if note:
+                carnet.ajouter_a(t, note, "edit")
+                modifications.append("note")
 
-        if not modifications:
-            print(f" {couleurs.CLR_DIM}ℹ️  Aucun changement : les valeurs fournies sont déjà celles de la tâche '{t['titre']}'.{couleurs.CLR_RESET}")
-            return True     # valeurs déjà en place : pas une erreur
+            if not modifications:
+                print(f" {couleurs.CLR_DIM}ℹ️  Aucun changement : les valeurs fournies sont déjà celles de la tâche '{t['titre']}'.{couleurs.CLR_RESET}")
+                continue     # valeurs déjà en place : pas une erreur
 
-        db[key] = json.dumps(t)
-        journal.noter(ids=[key], titres=[t['titre']], modifie=True, fields=modifications)
-        print(f" {couleurs.CLR_DONE}✏️{couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' modifiée ({', '.join(modifications)}).")
+            db[key] = json.dumps(t)
+            journal.noter(ids=[key], titres=[t['titre']], modifie=True, fields=modifications)
+            print(f" {couleurs.CLR_DONE}✏️{couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' modifiée ({', '.join(modifications)}).")
+            nb_ok += 1
 
-    # Sauvegarde APRÈS fermeture de la base, pour capturer la modification
-    sauvegarder_base()
-    return True
+    # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base pour capturer les modifications
+    if nb_ok:
+        sauvegarder_base()
+    if len(ids) > 1:
+        _afficher_bilan_lot(len(ids), nb_ok, "modifiée(s)", echecs)
+    return echecs == 0
 
 def supprimer_tache(ids, note=None):
     """Retire définitivement une ou plusieurs entrées de la base de données.

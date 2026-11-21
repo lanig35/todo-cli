@@ -5,10 +5,11 @@ import sys
 from datetime import datetime
 from .agenda import afficher_agenda
 from .archive import MSG_FORMAT_ANCIENNETE, _parser_anciennete, archivage_automatique, archiver_taches, desarchiver_taches, lister_archive, purger_archive
-from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches
-from .config import PRIORITES
+from .affichage import CHAMPS_RECHERCHE, afficher_stats, afficher_tache, champs_recherche, lister_taches, selectionner
+from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
-from . import __version__, couleurs, reglages, journal, verrou
+from . import __version__, couleurs, dependances, journal, lot, reglages, verrou
+from .stockage import _lire_taches
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .dates import _decaler
@@ -70,8 +71,11 @@ def _liste(valeurs):
     return res or None
 
 
-def _args_filtres_selection(p):
-    """Filtres par tag, priorité, récurrence, création et identifiant (list et archive list)."""
+def _args_filtres_selection(p, prio=True):
+    """Filtres par tag, priorité, récurrence, création et identifiant (list, archive list, actions en lot).
+
+    `prio=False` omet --prio : `edit` l'utilise déjà pour la NOUVELLE priorité (--not-prio reste disponible).
+    """
     p.add_argument('--tag', action='append', default=None, metavar='TAGS',
                    help="Seulement les tâches portant ce tag ; répétable ou séparé par des virgules : TOUS les tags indiqués")
     p.add_argument('--any-tag', action='append', default=None, metavar='TAGS',
@@ -79,8 +83,9 @@ def _args_filtres_selection(p):
     p.add_argument('--no-tag', action='store_true', help="Seulement les tâches sans aucun tag")
     p.add_argument('--not-tag', action='append', default=None, metavar='TAGS',
                    help="Écarter les tâches portant l'un de ces tags (répétable ou séparés par des virgules)")
-    p.add_argument('--prio', type=_prios, default=None, metavar='PRIO',
-                   help="Seulement cette priorité (ou plusieurs, séparées par des virgules : high,medium)")
+    if prio:
+        p.add_argument('--prio', type=_prios, default=None, metavar='PRIO',
+                       help="Seulement cette priorité (ou plusieurs, séparées par des virgules : high,medium)")
     p.add_argument('--not-prio', type=_prios, default=None, metavar='PRIO', help="Écarter cette priorité (ou plusieurs, séparées par des virgules)")
     g = p.add_mutually_exclusive_group()
     g.add_argument('--recurring', action='store_true', help="Seulement les tâches récurrentes")
@@ -135,15 +140,17 @@ def _plage_vide(apres, avant, option_apres, option_avant):
         sys.exit(1)
 
 
-def _filtres_communs(args, archive=False):
-    """Dict d'options pour `filtres.garder`, d'après les options de la ligne de commande (erreur si incohérentes)."""
+def _filtres_communs(args, archive=False, sans_prio=False):
+    """Dict d'options pour `filtres.garder`, d'après les options de la ligne de commande (erreur si incohérentes).
+
+    `sans_prio` : ignore args.prio (pour `edit`, où --prio est la nouvelle priorité et non un filtre)."""
     f = {}
     tags, un_tag, pas_tags = _liste(args.tag), _liste(args.any_tag), _liste(args.not_tag)
     if args.no_tag and (tags or un_tag):
         journal.echec("invalid_combination")
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --no-tag ne se combine pas avec --tag ni --any-tag.")
         sys.exit(1)
-    f.update(tags=tags, un_tag=un_tag, pas_tags=pas_tags, prios=args.prio, pas_prios=args.not_prio,
+    f.update(tags=tags, un_tag=un_tag, pas_tags=pas_tags, prios=None if sans_prio else args.prio, pas_prios=args.not_prio,
              ids=_liste(args.filtre_id))
     if args.no_tag:
         f['sans_tag'] = True
@@ -194,6 +201,98 @@ def _args_archive_filtres(p, ancien=False):
 def _filtres_archive_actifs(args):
     return any([*(getattr(args, a) for a in _ATTRS_SELECTION), args.has_notes, args.no_notes, args.done_after, args.done_before,
                 args.archived_after, args.archived_before, args.sort, args.limit, args.start, args.columns])
+
+
+_ATTRS_LOT = ('status', 'search', 'search_in', 'overdue', 'today', 'due_before', 'due_after', 'no_due', 'blocked', 'ready',
+              'has_notes', 'no_notes', 'done_after', 'done_before', *_ATTRS_SELECTION)
+
+
+def _args_lot(p, statut=False, prio=True):
+    """Options communes des actions en lot (done, undone, postpone, remove, edit) : sélection par filtre.
+
+    Les filtres sont ceux de `list` ; sans identifiant, ils désignent les tâches visées. `statut` ajoute
+    --status (done et postpone, undone s'appliquent d'office aux tâches à faire / terminées).
+    `prio=False` : voir `_args_filtres_selection`.
+    """
+    g = p.add_argument_group("sélection par filtre (à la place des identifiants)",
+                             "Les filtres de `list`, combinés par ET : la sélection est calculée d'abord, puis l'action s'applique à "
+                             "chaque tâche retenue (une seule sauvegarde, un seul `undo`). Une confirmation est demandée à partir de "
+                             "[general] batch_confirm tâches (5 par défaut) ; -y la passe.")
+    g.add_argument('--all', dest='tout', action='store_true', help="Toutes les tâches concernées (sans filtre ni identifiant)")
+    if statut:
+        g.add_argument('--status', choices=['todo', 'done'], default=None, help="Seulement les tâches à faire (todo) ou terminées (done)")
+    g.add_argument('--search', type=str, default=None, help='Recherche plein texte (titre, description, tags, notes), sans accents ni casse')
+    g.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
+    _args_filtres_selection(g, prio=prio)
+    gb = g.add_mutually_exclusive_group()
+    gb.add_argument('--blocked', action='store_true', help="Seulement les tâches à faire qui attendent une dépendance (--after)")
+    gb.add_argument('--ready', action='store_true', help="Seulement les tâches à faire qui ne sont pas bloquées")
+    g.add_argument('--no-due', action='store_true', help="Seulement les tâches sans échéance")
+    _args_filtres_notes(g)
+    _args_filtres_fin(g)
+    g.add_argument('--overdue', action='store_true', help="Tâches à faire dont l'échéance est dépassée")
+    g.add_argument('--today', action='store_true', help="Tâches à faire dont l'échéance est aujourd'hui (avec --overdue : l'un ou l'autre)")
+    g.add_argument('--due-before', type=str, default=None, metavar='DATE', help="Échéance au plus tard à cette date, incluse")
+    g.add_argument('--due-after', type=str, default=None, metavar='DATE', help="Échéance à partir de cette date, incluse")
+    g.add_argument('--dry-run', action='store_true', help="Montre les tâches visées sans rien modifier")
+    g.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation pour un lot")
+    g.add_argument('--format', choices=FORMATS, default=None, help="Format de l'aperçu de --dry-run (json : compatible jq)")
+    _args_colonnes(g)
+
+
+def _erreur_lot(cause, message, code=1):
+    """Quitte avec une erreur de sélection (code 2 = erreur d'usage, sur stderr, comme argparse)."""
+    if code == 2:
+        journal.echec("usage", detail=message)
+    else:
+        journal.echec(cause)
+    print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} {message}", file=sys.stderr if code == 2 else sys.stdout)
+    sys.exit(code)
+
+
+def _ids_ou_lot(args, statut_implicite, infinitif, participe, sans_prio=False):
+    """Identifiants visés par une action : ceux donnés, ou la sélection par filtre (`None` : rien à faire).
+
+    Sans filtre ni `--all`, les identifiants de la ligne de commande sont rendus tels quels. Avec un filtre, la
+    sélection est calculée et figée (identifiants complets) ; elle est annoncée vide, simulée (`--dry-run`) ou
+    confirmée avant que l'action ne soit lancée. `statut_implicite` : "todo" / "done" pour les actions qui ne
+    concernent que ces tâches, None pour celles où `--status` choisit.
+    """
+    attrs = [a for a in _ATTRS_LOT if not (sans_prio and a == 'prio')]
+    filtre = any(getattr(args, a, None) for a in attrs)
+    if not filtre and not args.tout:
+        if args.dry_run:
+            _erreur_lot("invalid_combination", "--dry-run s'utilise avec un filtre ou --all.")
+        if not args.ids:
+            _erreur_lot("missing_target", "Indiquez au moins un identifiant, ou un filtre (--all pour toutes les tâches concernées).", code=2)
+        return args.ids
+    if args.ids:
+        _erreur_lot("invalid_combination", "Indiquez des identifiants OU des filtres (ou --all), pas les deux.")
+    if filtre and args.tout:
+        _erreur_lot("invalid_combination", "--all ne se combine pas avec des filtres : ils désignent déjà les tâches visées.")
+    _exiger_search(args)
+    if args.no_due and (args.due_before or args.due_after):
+        _erreur_lot("invalid_combination", "--no-due ne se combine pas avec --due-before ni --due-after.")
+    avant = _date_filtre(args.due_before, '--due-before')
+    apres = _date_filtre(args.due_after, '--due-after')
+    if avant is not None and apres is not None and apres > avant:
+        _erreur_lot("empty_range", f"Plage vide : --due-after ({apres}) est postérieure à --due-before ({avant}).")
+    cibles = selectionner(dependances.annoter(_lire_taches()), statut_implicite or getattr(args, 'status', None), args.search,
+                          args.search_in or CHAMPS_RECHERCHE, args.overdue, args.today, avant, apres,
+                          _filtres_communs(args, sans_prio=sans_prio))
+    cibles.sort(key=lambda t: (t['statut'] != STATUT_A_FAIRE, t['date_echeance'] or "9999-12-31",
+                               -PRIORITES.index(t['priorite']), t.get('date_creation') or "", t['id']))
+    if not cibles:
+        journal.noter(total=0)
+        print(f" ℹ️  {couleurs.CLR_DIM}Aucune tâche ne correspond à ces critères : rien à {infinitif}.{couleurs.CLR_RESET}")
+        return None
+    if args.dry_run:
+        lot.apercu(cibles, resoudre_format(args.format or 'auto'), _colonnes_effectives(args), participe)
+        return None
+    if not lot.confirmer(cibles, infinitif.capitalize(), reglages.obtenir('general', 'batch_confirm'), args.yes):
+        return None
+    journal.noter(selection="filter", count=len(cibles))
+    return [t['id'] for t in cibles]
 
 
 def _colonnes(valeur):
@@ -310,18 +409,21 @@ def _args_list(p):
 
 
 def _args_edit(p):
-    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
     p.add_argument('--title', type=str, default=None, help='Nouveau titre')
     p.add_argument('--desc', type=str, default=None, help='Nouvelle description (chaîne vide pour effacer)')
     p.add_argument('--prio', choices=list(PRIORITES), default=None, help='Nouvelle priorité')
     p.add_argument('--due', type=str, default=None,
                              help="Nouvelle échéance : AAAA-MM-JJ, demain, +3d, lundi... ('none' pour la supprimer)")
     p.add_argument('--tags', type=str, default=None, help="Nouveaux tags, remplace les anciens (chaîne vide pour tout effacer)")
-    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
+    p.add_argument('--add-tag', type=str, default=None, metavar='TAGS', help="Ajoute ces tags (séparés par des virgules) aux tags existants")
+    p.add_argument('--remove-tag', type=str, default=None, metavar='TAGS', help="Retire ces tags (séparés par des virgules) des tags existants")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche modifiée")
     p.add_argument('--after', type=str, default=None, metavar='IDS',
                    help="Remplace les dépendances : tâche(s) à terminer d'abord (identifiants ou préfixes, séparés par des virgules ; 'none' pour les supprimer)")
     p.add_argument('--repeat', type=str, default=None,
                              help="Nouvelle répétition : daily, weekly, monthly, yearly, 3d/2w/1m/1y ('none' pour la supprimer)")
+    _args_lot(p, statut=True, prio=False)
 
 
 
@@ -332,8 +434,9 @@ def _args_show(p):
 
 
 def _args_undone(p):
-    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à la tâche")
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche rouverte")
+    _args_lot(p)
 
 
 def _args_export(p):
@@ -363,22 +466,25 @@ def _args_restore(p):
 
 
 def _args_done(p):
-    p.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
     p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche clôturée")
+    _args_lot(p)
 
 
 def _args_remove(p):
-    p.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
     p.add_argument('-m', '--note', type=str, default=None,
                                help="Motif de la suppression : la tâche disparaît, il est écrit au journal (avec le titre)")
+    _args_lot(p, statut=True)
 
 
 def _args_postpone(p):
-    p.add_argument('ids', nargs='+', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté)")
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
     p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche reportée")
     p.add_argument('--to', type=str, default='+1d', metavar='DATE',
                                  help="Nouvelle échéance (défaut : +1d). +2d / +1w / +1m / +1y : décalage depuis l'échéance actuelle, "
                                       "ou depuis aujourd'hui si elle est dépassée ou absente ; ou date fixe : AAAA-MM-JJ, demain, lundi...")
+    _args_lot(p)
 
 
 def _args_seed(p):
@@ -799,6 +905,8 @@ def _mode_verrou(args):
         return verrou.PARTAGE
     if c == 'import' and args.dry_run:
         return verrou.PARTAGE
+    if c in ('done', 'undone', 'postpone', 'remove', 'edit') and args.dry_run:
+        return verrou.PARTAGE          # simulation : ne modifie rien (ni archivage automatique)
     return verrou.EXCLUSIF
 
 
@@ -914,9 +1022,15 @@ def main():
     elif args.commande == 'show':
         succes = afficher_tache(args.id, args.format)
     elif args.commande == 'undone':
-        succes = rouvrir_tache(args.id, args.note)
+        ids = _ids_ou_lot(args, 'done', "rouvrir", "rouvertes")
+        succes = rouvrir_tache(ids, args.note) if ids else True
     elif args.commande == 'edit':
-        succes = modifier_tache(args.id, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note, apres=args.after)
+        champs = (args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note, args.after, args.add_tag, args.remove_tag)
+        ids = args.ids if all(v is None for v in champs) else _ids_ou_lot(args, None, "modifier", "modifiées", sans_prio=True)
+        if ids is not None and args.title is not None and (len(ids) > 1 or args.tout):
+            _erreur_lot("invalid_combination", "--title ne s'applique qu'à une seule tâche.")
+        succes = modifier_tache(ids, args.title, args.desc, args.prio, args.due, args.tags, args.repeat, args.note,
+                                apres=args.after, tags_ajout=args.add_tag, tags_retrait=args.remove_tag) if ids is not None else True
     elif args.commande == 'note':
         succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
     elif args.commande == 'export':
@@ -927,11 +1041,14 @@ def main():
     elif args.commande == 'restore':
         restaurer_base(args.backup, confirmer=not args.yes)
     elif args.commande == 'done':
-        succes = marquer_terminee(args.ids, args.note)
+        ids = _ids_ou_lot(args, 'todo', "valider", "validées")
+        succes = marquer_terminee(ids, args.note) if ids else True
     elif args.commande == 'remove':
-        succes = supprimer_tache(args.ids, args.note)
+        ids = _ids_ou_lot(args, None, "supprimer", "supprimées")
+        succes = supprimer_tache(ids, args.note) if ids else True
     elif args.commande == 'postpone':
-        succes = reporter_taches(args.ids, args.to, args.note)
+        ids = _ids_ou_lot(args, 'todo', "reporter", "reportées")
+        succes = reporter_taches(ids, args.to, args.note) if ids else True
     elif args.commande == 'seed':
         peupler_fausses_taches(args.count)
     elif args.commande == 'agenda':

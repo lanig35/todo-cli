@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.16.0] - 2026-11-21
+
+### Ajouté
+
+- **Actions en lot par filtre** : `done`, `undone`, `postpone`, `remove` et `edit` acceptent les filtres de `list`
+  à la place des identifiants (`todo postpone --overdue --to demain`, `todo done --tag courses`). `--all` vise toutes
+  les tâches concernées ; `--dry-run` montre la sélection sans rien modifier (formats `text`, `table`, `plain`,
+  `json`, `--columns`) ; une confirmation est demandée à partir de `[general] batch_confirm` tâches (5 par défaut,
+  0 = jamais ; `TODO_BATCH_CONFIRM`), `-y` la passe et elle est obligatoire sans terminal. La sélection est figée
+  avant toute modification, avec une seule sauvegarde (un seul `undo`).
+- `edit` : `--add-tag` et `--remove-tag` ajoutent ou retirent des tags sans remplacer la liste.
+- `undone` et `edit` acceptent plusieurs identifiants (bilan, une seule sauvegarde, code de sortie `1` en cas d'échec).
+
+### Modifié
+
+- Sans identifiant ni filtre, `done`, `undone`, `postpone` et `remove` s'arrêtent avec une erreur d'usage (code 2).
+- `edit` : `--title` est refusé quand plusieurs tâches sont visées.
+
 ## [2.15.0] - 2026-11-20
 
 ### Modifié
@@ -275,6 +293,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.16.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.16.0
 [2.15.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.15.0
 [2.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.14.0
 [2.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.13.0
