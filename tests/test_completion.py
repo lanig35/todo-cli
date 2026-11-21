@@ -171,3 +171,25 @@ def test_messages_d_aide_utilisent_les_groupes(todo):
     assert "todo admin restore" in todo("admin", "restore").sortie
     todo.seed({"cle": "d" * 8, "titre": "x"})
     assert 'todo note add dddddddd "texte"' in todo("note", "list", "d" * 8).sortie
+
+
+# --- projets -------------------------------------------------------------------------------------------------------------
+def test_groupe_project_dans_les_groupes(todo, argcomplete_utilisable):
+    assert "project" in completer(todo, "todo ")[0]
+    assert {"current", "list", "create", "use", "rename", "delete"} <= set(completer(todo, "todo project ")[0])
+
+
+def test_noms_de_projets_proposes_sans_rien_creer(todo, argcomplete_utilisable):
+    todo("project", "create", "travail")
+    todo("project", "create", "perso")
+    for ligne in ("todo project use ", "todo list --project ", "todo -p ", "todo project delete "):
+        propositions, code, err, _ = completer(todo, ligne)
+        assert {"default", "travail", "perso"} <= set(propositions), ligne
+        assert err == ""
+    assert completer(todo, "todo project use tr")[0] == ["travail "]
+    assert sorted(p.name for p in (todo.db_dir / "projects").iterdir()) == ["perso", "travail"]
+
+
+def test_completion_avec_un_projet_inexistant_ne_cree_rien(todo, argcomplete_utilisable):
+    propositions, code, err, _ = completer(todo, "todo -p fantome list --", env=None)
+    assert err == "" and not (todo.db_dir / "projects").exists()

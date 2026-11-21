@@ -3,6 +3,20 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.18.0] - 2026-11-21
+
+### Ajouté
+
+- **Projets** : plusieurs listes de tâches indépendantes (perso, travail…), chacune avec sa base, son archive, ses
+  sauvegardes, son `undo` et son verrou. Le projet `default` reste à la racine du stockage (aucune migration) ; les
+  autres sont dans `<stockage>/projects/<nom>/`. La configuration, le journal et l'état du rappel restent communs.
+  - Option globale `--project/-p` (toutes les commandes), variable `TODO_PROJECT`, réglage `[general] project`.
+  - Groupe `project` : `current` (nom et origine), `list` (compteurs), `create`, `use` (écrit `[general] project`),
+    `rename`, `delete` (déplace le projet dans `<stockage>/.trash/`, refuse le projet courant et un projet non vide
+    sans `--force`).
+  - Un projet inexistant est refusé avec une suggestion, jamais créé implicitement. Complétion des noms de projet.
+  - Le journal ajoute `project=NOM` quand le projet n'est pas `default`.
+
 ## [2.17.0] - 2026-11-21
 
 ### Ajouté
@@ -307,6 +321,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.18.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.18.0
 [2.17.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.17.0
 [2.16.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.16.0
 [2.15.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.15.0
