@@ -217,7 +217,7 @@ def test_entree_corrompue(jr):
 @pytest.mark.parametrize("args, detail", [
     (["add", "X", "--prio", "urgent"], "invalid choice"),
     (["list", "--limit", "0"], "--limit"),
-    (["done"], "required"),
+    (["done"], "Indiquez au moins un identifiant"),
     (["--inconnue"], "unrecognized"),
 ])
 def test_erreurs_d_usage(jr, args, detail):

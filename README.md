@@ -11,6 +11,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Tâches avec titre, description, priorité (`low`, `medium`, `high`), échéance et tags
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
 - Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
+- Actions en lot par filtre : `todo done --tag courses`, `todo postpone --overdue --to demain` (aperçu `--dry-run`, confirmation)
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
 - Dépendances entre tâches (`--after`) : une tâche attend que d'autres soient terminées
 - Formats de sortie `text`, `table`, `plain` (pipes) et `json`, choisis automatiquement selon le terminal
@@ -239,6 +240,42 @@ todo task remove a1b2c3 d4e5f6
   donc s'en servir dans un script. Terminer une tâche déjà terminée n'est pas une erreur.
   `show`, `undone` et `edit`, qui ne ciblent qu'une tâche, gardent le code `0` même si
   l'identifiant est introuvable.
+
+#### Actions en lot par filtre
+
+Plutôt que de recopier des identifiants, `done`, `undone`, `postpone`, `remove` et `edit` acceptent les filtres de
+`list` pour désigner les tâches visées :
+
+```bash
+todo postpone --overdue --to demain          # tout ce qui est en retard, reporté à demain
+todo done --tag courses                      # toutes les tâches « courses » à faire sont terminées
+todo task edit --tag pro --add-tag urgent --prio high     # ajoute un tag et change la priorité de toutes les tâches « pro »
+todo task remove --status done --done-before 6m -y        # supprime les tâches terminées depuis plus de 6 mois
+todo done --tag courses --dry-run            # montre les tâches visées, sans rien modifier
+todo undone --all                            # rouvre toutes les tâches terminées
+```
+
+- **Filtres** : ceux de `list` (`--tag`, `--any-tag`, `--no-tag`, `--not-tag`, `--prio`, `--not-prio`,
+  `--recurring`, `--created-after` / `--created-before`, `--id`, `--search` / `--search-in`, `--overdue`, `--today`,
+  `--due-before` / `--due-after`, `--no-due`, `--blocked` / `--ready`, `--has-notes` / `--no-notes`,
+  `--done-after` / `--done-before`), combinés par ET. Sur `remove` et `edit`, `--status todo|done` choisit les tâches
+  à faire ou terminées ; `done` et `postpone` ne visent que les tâches à faire, `undone` que les terminées.
+  Sur `edit`, `--prio` est la **nouvelle** priorité (pas un filtre) : `--not-prio` reste disponible.
+- **Garde-fous** : sans identifiant ni filtre, la commande refuse (code 2) ; `--all` vise toutes les tâches
+  concernées et ne se combine pas avec un filtre ; identifiants et filtres ne se mélangent pas. Une sélection vide
+  n'est pas une erreur (message, code 0).
+- **Aperçu** : `--dry-run` liste les tâches visées sans rien modifier ; avec `--format json|plain|table`
+  (et `--columns`), le même rendu que `list` (`todo done --tag x --dry-run --format json | jq`).
+- **Confirmation** : à partir de `[general] batch_confirm` tâches (5 par défaut ; 0 = jamais), `todo` demande
+  `(y/N)` ; `-y` / `--yes` la passe. Sans terminal pour poser la question (cron, pipe), un lot de cette taille
+  s'arrête avec le code 1 tant que `-y` n'est pas donné. Des identifiants écrits à la main ne demandent jamais de
+  confirmation.
+- **Cohérence** : la sélection est calculée d'abord puis figée ; une seule sauvegarde pour tout le lot, donc un
+  seul `todo undo`. Bilan et code de sortie comme pour plusieurs identifiants. `done` sur des tâches récurrentes crée
+  une occurrence suivante par tâche ; le lot ne rattrape pas ces nouvelles occurrences.
+- **`edit` en lot** : `--title` est refusé (un même titre pour toutes les tâches n'a pas de sens). `--add-tag TAGS` et
+  `--remove-tag TAGS` ajoutent ou retirent des tags sans remplacer la liste (ils servent aussi sur une seule
+  tâche) ; ils ne se combinent pas avec `--tags`, qui la remplace.
 
 ### Notes
 
@@ -726,6 +763,7 @@ format = auto           # auto | text | table | plain
 pager = true
 columns = id,status,prio,due,tags,title,notes   # colonnes de table/plain (list, next, archive list)
 lock_timeout = 10       # secondes d'attente si la base est utilisée par une autre instance
+batch_confirm = 5       # actions en lot par filtre : confirmation à partir de ce nombre de tâches (0 = jamais)
 
 [list]
 limit = 30              # 0 = pas de limite
@@ -750,6 +788,7 @@ soon = 0
 | `general` | `keep_backups` | `5` (minimum 2) | `TODO_KEEP_BACKUPS` | — |
 | `general` | `columns` | `id,status,prio,due,tags,title,notes` | `TODO_COLUMNS` | `--columns` |
 | `general` | `lock_timeout` | `10` (secondes, 0 = pas d'attente) | `TODO_LOCK_TIMEOUT` | — |
+| `general` | `batch_confirm` | `5` (0 = jamais de confirmation) | `TODO_BATCH_CONFIRM` | `-y` |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
 | `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
@@ -952,6 +991,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
 | `dependances.py` | dépendances entre tâches (`--after`) : blocage, cycles |
 | `filtres.py` | filtres communs à `list` et `archive list` (sans échéance, notes, dates de fin et d'archivage) |
+| `lot.py` | actions en lot par filtre : aperçu (`--dry-run`) et confirmation |
 | `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
