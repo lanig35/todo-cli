@@ -66,30 +66,33 @@ def prendre(mode, delai):
     _descripteur = fd
 
 
-def prendre_tous(delai):
-    """Verrou partagé sur chaque projet (lecture transverse : --all-projects, rappel), pris dans un ordre fixe.
+def prendre_projets(noms, mode, delai):
+    """Prend le verrou `mode` sur chacun des projets `noms`, dans l'ordre donné (toujours celui de `config.projets()`).
 
-    Un projet dont le fichier de verrou ne peut pas être ouvert est ignoré, comme pour `prendre`.
+    Servent : la lecture transverse (`--all-projects`, rappel : PARTAGE sur tous les projets) et `task move`
+    (EXCLUSIF sur la source et la cible). L'ordre commun à toutes les commandes évite qu'elles s'attendent
+    mutuellement. Un projet dont le fichier de verrou ne peut pas être ouvert est ignoré, comme pour `prendre`.
     """
     global _descripteur
     if fcntl is None or _descripteur is not None:
         return
+    drapeau = fcntl.LOCK_SH if mode == PARTAGE else fcntl.LOCK_EX
     ouverts = []
     limite = time.monotonic() + max(0, delai)
-    for nom in config.projets():
+    for nom in noms:
         try:
             fd = os.open(os.path.join(config.dossier_du_projet(nom), config._FICHIERS["LOCK_FILE"]), os.O_RDWR | os.O_CREAT, 0o600)
         except OSError:
             continue
         while True:
             try:
-                fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                fcntl.flock(fd, drapeau | fcntl.LOCK_NB)
                 ouverts.append(fd)
                 break
             except BlockingIOError:
                 if time.monotonic() >= limite:
                     os.close(fd)
-                    journal.echec("db_locked", timeout=delai, mode=PARTAGE, projet=nom)
+                    journal.echec("db_locked", timeout=delai, mode=mode, projet=nom)
                     print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} le projet '{nom}' est utilisé par une autre instance de todo "
                           f"(attente de {delai} s dépassée). Réessayez, ou augmentez le réglage general.lock_timeout.", file=sys.stderr)
                     sys.exit(1)
@@ -99,6 +102,11 @@ def prendre_tous(delai):
                 break
     _descripteur = ouverts[0] if ouverts else None
     _autres.extend(ouverts[1:])
+
+
+def prendre_tous(delai):
+    """Verrou partagé sur chaque projet (lecture transverse : --all-projects, rappel)."""
+    prendre_projets(config.projets(), PARTAGE, delai)
 
 
 def liberer():

@@ -11,7 +11,8 @@ from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
 from . import __version__, couleurs, dependances, journal, lot, reglages, verrou
 from .stockage import _lire_taches
-from . import projets, stockage
+from . import deplacement, projets, stockage
+from .deplacement import deplacer_taches
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .dates import _decaler
@@ -492,6 +493,13 @@ def _args_done(p):
     _args_lot(p)
 
 
+def _args_move(p):
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
+    p.add_argument('--to', dest='vers', required=True, metavar='PROJET', type=str,
+                   help="Projet de destination (il doit exister : `todo project create`)").completer = _completer_projets
+    _args_lot(p, statut=True)
+
+
 def _args_remove(p):
     p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
     p.add_argument('-m', '--note', type=str, default=None,
@@ -743,6 +751,7 @@ _GROUPES = [
         ('done', 'done', _args_done, 'Clôturer une ou plusieurs tâches', {}),
         ('undone', 'undone', _args_undone, 'Rouvrir une tâche terminée', {}),
         ('remove', 'remove', _args_remove, 'Supprimer une ou plusieurs tâches', {}),
+        ('move', 'move', _args_move, 'Déplacer une ou plusieurs tâches vers un autre projet', {}),
         ('postpone', 'postpone', _args_postpone, "Reporter l'échéance d'une ou plusieurs tâches", {}),
         ('next', 'next', _args_next, 'Afficher la ou les prochaines tâches à traiter', {}),
     ]),
@@ -1096,7 +1105,10 @@ def main():
         cible = args.ancien if args.commande == 'project_rename' else args.nom
         if config._MOTIF_PROJET.match(cible) and config.existe(cible):
             config.definir_projet(cible, "option")
-    if mode_verrou and stockage.tous_projets():
+    if args.commande == 'move' and deplacement.cible_valide(args.vers) is None:
+        noms = [n for n in config.projets() if n in (config.projet(), args.vers)]      # ordre commun : pas d'attente croisée
+        verrou.prendre_projets(noms, verrou.EXCLUSIF, reglages.obtenir('general', 'lock_timeout'))
+    elif mode_verrou and stockage.tous_projets():
         verrou.prendre_tous(reglages.obtenir('general', 'lock_timeout'))
     elif mode_verrou:
         verrou.prendre(mode_verrou, reglages.obtenir('general', 'lock_timeout'))
@@ -1182,6 +1194,9 @@ def main():
     elif args.commande == 'remove':
         ids = _ids_ou_lot(args, None, "supprimer", "supprimées")
         succes = supprimer_tache(ids, args.note) if ids else True
+    elif args.commande == 'move':
+        ids = _ids_ou_lot(args, None, "déplacer", "déplacées")
+        succes = deplacer_taches(ids, args.vers) if ids else True
     elif args.commande == 'postpone':
         ids = _ids_ou_lot(args, 'todo', "reporter", "reportées")
         succes = reporter_taches(ids, args.to, args.note) if ids else True

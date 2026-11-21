@@ -74,7 +74,7 @@ plus courantes ont un **raccourci** de premier niveau.
 
 | Groupe | Actions |
 |---|---|
-| `task` | `add`, `list`, `show`, `edit`, `done`, `undone`, `remove`, `postpone`, `next` |
+| `task` | `add`, `list`, `show`, `edit`, `done`, `undone`, `remove`, `move`, `postpone`, `next` |
 | `note` | `add`, `list`, `edit`, `delete` |
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
@@ -796,7 +796,25 @@ un projet courant est choisi (`project use`, `TODO_PROJECT`) : il sert à ne rie
 (JSON : champ `projet`) ; avec un seul projet, la sortie est identique à celle d'avant. `reminder enable|disable`
 et les fichiers `remind_*` sont communs à tous les projets.
 
-`task move` (déplacer une tâche d'un projet à l'autre) arrive dans la version suivante.
+#### Déplacer des tâches entre projets
+
+```bash
+todo task move 3f2a9c1b --to travail              # une tâche (ou plusieurs identifiants) vers le projet travail
+todo task move --tag pro --to travail --dry-run   # par filtre, comme done/postpone/remove (confirmation dès 5 tâches, -y)
+todo task move 3f2a9c1b --to default -p travail   # dans l'autre sens : -p désigne la source
+```
+
+La tâche garde son identifiant, son statut, ses dates, ses tags, ses notes et sa récurrence. Le projet de destination
+doit exister (`project create`). Les deux projets sont verrouillés pendant l'opération ; la cible est écrite avant que la
+source soit modifiée, donc un incident ne peut laisser qu'un doublon, jamais perdre une tâche.
+
+- **Dépendances** : elles ne traversent pas les projets. Une tâche déplacée n'attend plus ce qui reste dans la source,
+  et ce qui l'attendait dans la source ne l'attend plus (avertissement dans les deux cas). Des tâches déplacées
+  ensemble gardent leurs liens.
+- **Récurrence** : l'occurrence suivante d'une tâche terminée, si elle reste dans la source, n'est plus reliée.
+- **`undo`** : chaque projet a ses sauvegardes, donc `undo` ne défait un déplacement que d'un côté à la fois. Annuler dans
+  la source remet la tâche dans la source sans la retirer de la cible, et inversement (`undo -p CIBLE`) ; la commande le
+  rappelle après chaque déplacement.
 
 ### Annuler la dernière modification
 
@@ -1107,6 +1125,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture ; un par projet) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
+| `deplacement.py` | `task move` : déplacement de tâches entre projets, dépendances et sauvegardes |
 | `projets.py` | groupe `project` : current, list, create, use, rename, delete (corbeille) |
 | `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |

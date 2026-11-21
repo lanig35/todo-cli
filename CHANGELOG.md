@@ -3,6 +3,16 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.20.0] - 2026-11-21
+
+### Ajouté
+
+- **`task move`** : déplace une ou plusieurs tâches vers un autre projet (`todo task move ID… --to travail`), par
+  identifiants ou par filtre (`--tag`, `--overdue`, `--all`…, avec `--dry-run`, confirmation dès 5 tâches, `-y`).
+  La tâche garde son identifiant et tous ses champs. Les deux projets sont verrouillés ; la cible est écrite avant la
+  source. Les dépendances ne traversent pas les projets (liens supprimés avec avertissement ; des tâches déplacées
+  ensemble gardent les leurs). Limite assumée : `undo` agit sur un projet à la fois, ce que la commande rappelle.
+
 ## [2.19.0] - 2026-11-21
 
 ### Ajouté
@@ -337,6 +347,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.20.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.20.0
 [2.19.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.19.0
 [2.18.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.18.0
 [2.17.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.17.0
