@@ -18,6 +18,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Filtres, recherche, tris, filtres par date, pagination et pager automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
+- Rapports : tags utilisés, tâches bloquées, en retard, qui traînent, bilan des tâches terminées (`report`)
 - Journal des actions et des erreurs, lisible avec `journalctl -t todo`
 - Configuration par fichier INI, variables d'environnement et options (`todo config`)
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
@@ -76,7 +77,7 @@ plus courantes ont un **raccourci** de premier niveau.
 | `note` | `add`, `list`, `edit`, `delete` |
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
-| `report` | `stats`, `agenda` |
+| `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
 | `data` | `export`, `import` |
@@ -667,6 +668,55 @@ todo report stats
 Progression, charge active par priorité, tags les plus utilisés, retards et échéances du jour,
 et rythme de complétion (aujourd'hui et sur 7 jours).
 
+### Rapports
+
+Le groupe `report` rassemble des vues d'ensemble en lecture seule (statistiques, agenda, et les rapports ci-dessous).
+Chacun existe dans les quatre formats (`text`, `table`, `plain`, `json`) et accepte `--format` et `--pager` / `--no-pager`.
+
+```bash
+todo report tags                      # tags utilisés, avec le nombre de tâches à faire et terminées
+todo report tags --sort alpha --with-archive
+todo report blocked                   # tâches qui attendent une dépendance (--after), et ce qu'elles attendent
+todo report overdue                   # tâches en retard, les plus en retard d'abord
+todo report stale                     # tâches sans échéance créées il y a au moins 30 jours
+todo report stale --older-than 2w     # ... il y a au moins 2 semaines (7d, 2w, 6m, 1y, hier, AAAA-MM-JJ)
+todo report done                      # bilan des tâches terminées ces 7 derniers jours, jour par jour
+todo report done --since 1m --until 2w --with-archive
+```
+
+| Rapport | Contenu | Options |
+|---|---|---|
+| `tags` | chaque tag avec ses tâches à faire, terminées et le total ; trié par total décroissant puis nom ; les tâches sans tag sont comptées à part | `--sort count\|alpha`, `--with-archive` |
+| `blocked` | tâches à faire qui attendent au moins une dépendance encore à faire, avec les tâches attendues | — |
+| `overdue` | tâches à faire dont l'échéance est passée, avec le nombre de jours de retard ; les plus en retard d'abord | — |
+| `stale` | tâches à faire **sans échéance**, créées il y a au moins `--older-than` (30d par défaut), les plus anciennes d'abord : celles qu'on oublie | `--older-than DURÉE` |
+| `done` | tâches terminées entre `--since` (7d par défaut) et `--until` (aujourd'hui), dates incluses, regroupées par jour, le plus récent d'abord | `--since`, `--until`, `--with-archive` |
+
+Les dates de `--since`, `--until` et `--older-than` suivent les formats de `--done-after` : `7d`, `2w`, `1m`, `1y`,
+`hier`, `aujourd'hui` ou `AAAA-MM-JJ` ; une date future est refusée. L'archive n'est lue qu'avec `--with-archive`.
+
+Sorties `plain` (champs séparés par des tabulations, identifiant complet, rien si le rapport est vide) :
+
+| Rapport | Colonnes |
+|---|---|
+| `tags` | `tag`, `a_faire`, `terminees`, `total` |
+| `blocked` | `id`, `priorite`, `titre`, `attend` (identifiants des tâches attendues, séparés par des virgules) |
+| `overdue` | `id`, `jours_retard`, `priorite`, `echeance`, `titre` |
+| `stale` | `id`, `age_jours`, `priorite`, `titre` |
+| `done` | `terminee` (date et heure), `id`, `priorite`, `titre` |
+
+Sorties `json` : un objet par rapport. `tags` : `{"avec_archive", "tags": [{"tag", "a_faire", "terminees", "total"}],
+"sans_tag": {"a_faire", "terminees"}}`. `blocked`, `overdue`, `stale` : `{"total", "taches": [...]}` (les tâches
+au format de `list --format json`, plus `attend` pour `blocked`, `jours_retard` pour `overdue`, `age_jours` pour
+`stale` ; `overdue` ajoute `date`, `stale` ajoute `avant`). `done` : `{"depuis", "jusqu_a", "avec_archive", "total",
+"jours": [{"date", "taches": [...]}]}`.
+
+```bash
+todo report overdue --format json | jq -r '.taches[] | "\(.jours_retard) j  \(.titre)"'
+todo report tags --format plain | awk -F'\t' '$2 > 0 {print $1}'     # tags qui ont des tâches à faire
+todo report done --since 7d --format plain | cut -f1,4                 # le bilan de la semaine pour un compte rendu
+```
+
 ### Couleurs
 
 Par défaut (`auto`), les couleurs ne sont utilisées que si la sortie est un terminal : dans un pipe
@@ -995,6 +1045,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
+| `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `formats.py` | formats de sortie (text, table, plain, json, choix automatique) et catalogue des colonnes `--columns` |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
