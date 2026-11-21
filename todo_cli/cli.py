@@ -11,7 +11,7 @@ from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
 from . import __version__, couleurs, dependances, journal, lot, reglages, verrou
 from .stockage import _lire_taches
-from . import projets
+from . import projets, stockage
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .dates import _decaler
@@ -315,7 +315,10 @@ def _args_colonnes(p):
 
 def _colonnes_effectives(args):
     """Colonnes des formats table et plain : --columns, sinon [general] columns (TODO_COLUMNS, fichier, défaut)."""
-    return args.columns or colonnes_tache(reglages.obtenir('general', 'columns'))
+    colonnes = args.columns or colonnes_tache(reglages.obtenir('general', 'columns'))
+    if stockage.tous_projets() and 'project' not in colonnes:      # lecture transverse : la colonne du projet suit l'id
+        colonnes = (colonnes[0], 'project', *colonnes[1:])
+    return colonnes
 
 
 def _exiger_search(args):
@@ -386,7 +389,14 @@ def _args_add(p):
                             help="Garde le titre tel quel : désactive la saisie rapide (dates, !priorité, #tags, ~récurrence)")
 
 
+def _ajouter_tous_projets(p):
+    p.add_argument('--all-projects', dest='tous_projets', action='store_true',
+                   help="Porte sur tous les projets (lecture seule) ; chaque tâche indique son projet. "
+                        "Les identifiants affichés s'utilisent ensuite avec -p PROJET")
+
+
 def _args_list(p):
+    _ajouter_tous_projets(p)
     p.add_argument('--status', choices=['todo', 'done'], help="Filtrer selon l'avancement")
     p.add_argument('--search', type=str, help='Recherche plein texte (titre, description, tags, notes), sans tenir compte des accents ni de la casse')
     p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
@@ -503,6 +513,7 @@ def _args_seed(p):
 
 
 def _args_agenda(p):
+    _ajouter_tous_projets(p)
     p.add_argument('--days', type=_entier_positif, default=None, metavar='N',
                                help='Nombre de jours affichés (défaut : 7, ou [agenda] days)')
     p.add_argument('--from', dest='depuis', type=str, default=None, metavar='DATE',
@@ -513,6 +524,7 @@ def _args_agenda(p):
 
 
 def _args_next(p):
+    _ajouter_tous_projets(p)
     p.add_argument('-n', '--count', type=_entier_positif, default=None, metavar='N',
                              help='Nombre de tâches affichées (défaut : 1, ou [next] count)')
     p.add_argument('--tag', type=str, default=None, help='Ne considérer que les tâches portant ce tag')
@@ -561,6 +573,7 @@ def _args_unarchive(p):
 
 
 def _args_sortie_rapport(p):
+    _ajouter_tous_projets(p)
     p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
                    help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
     p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (voir `todo --help`)')
@@ -589,6 +602,7 @@ def _args_rapport_done(p):
 
 
 def _args_stats(p):
+    _ajouter_tous_projets(p)
     p.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
     p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (voir `todo --help`)')
 
@@ -981,6 +995,24 @@ def _mode_verrou(args):
     return verrou.EXCLUSIF
 
 
+def _lecture_transverse(args, option):
+    """Active la lecture de tous les projets : `--all-projects`, ou le rappel quand aucun projet n'est désigné par --project.
+
+    Le rappel couvre tous les projets par défaut (même si un projet courant est choisi) : il sert à ne rien oublier.
+    """
+    if getattr(args, 'tous_projets', False):
+        if option is not None:
+            journal.echec("invalid_combination")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --all-projects ne se combine pas avec --project.", file=sys.stderr)
+            sys.exit(1)
+        stockage.definir_tous_projets(True)
+        return True
+    if args.commande == 'remind' and option is None:
+        stockage.definir_tous_projets(True, etiqueter=len(config.projets()) > 1)
+        return True
+    return False
+
+
 def _choisir_projet(args):
     """Fixe le projet de la commande (option > TODO_PROJECT > fichier > default) et refuse un projet inexistant.
 
@@ -996,7 +1028,8 @@ def _choisir_projet(args):
             sys.exit(1)
     nom = config.projet()
     journal.definir_projet(nom)
-    if not str(args.commande).startswith('project_') and not config.existe(nom):
+    transverse = _lecture_transverse(args, option)
+    if not str(args.commande).startswith('project_') and not transverse and not config.existe(nom):
         proche = difflib.get_close_matches(nom, config.projets(), n=1)
         journal.echec("unknown_project", projet=nom)
         print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} le projet '{nom}' n'existe pas ({projets._origine_lisible(config.origine_projet())})"
@@ -1063,7 +1096,9 @@ def main():
         cible = args.ancien if args.commande == 'project_rename' else args.nom
         if config._MOTIF_PROJET.match(cible) and config.existe(cible):
             config.definir_projet(cible, "option")
-    if mode_verrou:
+    if mode_verrou and stockage.tous_projets():
+        verrou.prendre_tous(reglages.obtenir('general', 'lock_timeout'))
+    elif mode_verrou:
         verrou.prendre(mode_verrou, reglages.obtenir('general', 'lock_timeout'))
     if mode_verrou == verrou.EXCLUSIF and args.commande not in _SANS_ARCHIVAGE_AUTO:
         archivage_automatique(reglages.obtenir('archive', 'auto_days'))

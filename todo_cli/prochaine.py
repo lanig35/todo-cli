@@ -5,7 +5,7 @@ from . import couleurs, dependances
 from .formats import sortie_taches
 from .config import PRIORITES, STATUT_A_FAIRE
 from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence
-from .stockage import _lire_taches
+from .stockage import _lire_taches, etiquette_projet
 
 
 def _rang(t, aujourdhui):
@@ -57,7 +57,7 @@ def afficher_prochaines(nombre=1, tag=None, prio=None, fmt="text", colonnes=None
         rec = f" {couleurs.CLR_DIM}↻ {_libelle_recurrence(t['recurrence'])}{couleurs.CLR_RESET}" if t['recurrence'] else ""
         numero = f"{couleurs.CLR_DIM}{rang:>{largeur}}.{couleurs.CLR_RESET} " if nombre > 1 else ""
         lignes.append(f"  {numero}{prio_clr}[{t['priorite'].upper()}]{couleurs.CLR_RESET} {couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}"
-                      f"{_libelle_echeance(t, aujourdhui)}{rec}{tags} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
+                      f"{_libelle_echeance(t, aujourdhui)}{rec}{tags}{etiquette_projet(t)} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
         if t['description']:
             lignes.append(f"      {' ' * (largeur + 1) if nombre > 1 else ''}{couleurs.CLR_DIM}↳ {t['description']}{couleurs.CLR_RESET}")
     lignes.append(f" {couleurs.CLR_CYAN}──────────────────────────────────────{couleurs.CLR_RESET}")

@@ -15,7 +15,7 @@ from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _par
 from .filtres import garder
 from .formats import imprimer_plain, sortie_taches, tableau
 from .notes import lignes_notes
-from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
+from .stockage import etiquette_projet, _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 
 def champs_tache(t, id_complet):
@@ -323,7 +323,7 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
         if t.get('bloquee_par'):
             nb_notes += f" {couleurs.CLR_DEL}🔒{couleurs.CLR_RESET}{couleurs.CLR_DIM} après {', '.join(d[:8] for d in t['bloquee_par'])}{couleurs.CLR_RESET}"
         numero = f"{couleurs.CLR_DIM}{position:>{largeur}}.{couleurs.CLR_RESET}"
-        lignes.append(f"  {numero} {prefixe} {prio_color} {texte_titre}{echeance_str}{rec_str}{display_tags}{nb_notes} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
+        lignes.append(f"  {numero} {prefixe} {prio_color} {texte_titre}{echeance_str}{rec_str}{display_tags}{etiquette_projet(t)}{nb_notes} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
         if t['description']:
             lignes.append(f"      {' ' * (largeur + 2)}{couleurs.CLR_DIM if not a_faire else ''}↳ {t['description']}{couleurs.CLR_RESET}")
     lignes.append(f" {couleurs.CLR_CYAN}──────────────────────────────────────{couleurs.CLR_RESET}")

@@ -29,6 +29,7 @@ from . import config
 PARTAGE, EXCLUSIF = "shared", "exclusive"
 
 _descripteur = None               # le verrou vit autant que le processus
+_autres = []                      # verrous des autres projets en lecture transverse
 
 
 def prendre(mode, delai):
@@ -65,9 +66,47 @@ def prendre(mode, delai):
     _descripteur = fd
 
 
+def prendre_tous(delai):
+    """Verrou partagé sur chaque projet (lecture transverse : --all-projects, rappel), pris dans un ordre fixe.
+
+    Un projet dont le fichier de verrou ne peut pas être ouvert est ignoré, comme pour `prendre`.
+    """
+    global _descripteur
+    if fcntl is None or _descripteur is not None:
+        return
+    ouverts = []
+    limite = time.monotonic() + max(0, delai)
+    for nom in config.projets():
+        try:
+            fd = os.open(os.path.join(config.dossier_du_projet(nom), config._FICHIERS["LOCK_FILE"]), os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError:
+            continue
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                ouverts.append(fd)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= limite:
+                    os.close(fd)
+                    journal.echec("db_locked", timeout=delai, mode=PARTAGE, projet=nom)
+                    print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} le projet '{nom}' est utilisé par une autre instance de todo "
+                          f"(attente de {delai} s dépassée). Réessayez, ou augmentez le réglage general.lock_timeout.", file=sys.stderr)
+                    sys.exit(1)
+                time.sleep(0.05)
+            except OSError:
+                os.close(fd)
+                break
+    _descripteur = ouverts[0] if ouverts else None
+    _autres.extend(ouverts[1:])
+
+
 def liberer():
     """Relâche le verrou (utile aux tests ; le système le fait de toute façon à la fin du processus)."""
     global _descripteur
+    for fd in _autres:
+        os.close(fd)
+    _autres.clear()
     if _descripteur is not None:
         os.close(_descripteur)
         _descripteur = None
