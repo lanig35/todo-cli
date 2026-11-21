@@ -32,6 +32,7 @@ CHAMPS_TACHES = {
     'recurrence': ('RÉPÉTITION', lambda t, court: t.get('recurrence') or ""),
     'description': ('DESCRIPTION', lambda t, court: t['description']),
     'after': ('APRÈS', lambda t, court: ",".join(d[:8] if court else d for d in t.get('apres', []))),
+    'project': ('PROJET', lambda t, court: t.get('projet') or ""),
     'blocked': ('BLOQUÉE', lambda t, court: 'yes' if t.get('bloquee_par') else 'no'),
 }
 # Colonnes par défaut, dans l'ordre (réglage [general] columns)

@@ -556,7 +556,7 @@ todo list --format plain --columns id,title | grep -i budget
 
 **Choisir les colonnes** (`--columns`, sur `list`, `next` et `archive list`, pour `table` et `plain`) : noms
 séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponibles : `id`, `status`, `prio`,
-`due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked` (les trois
+`due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked`, `project` (vide hors `--all-projects` ; les trois
 dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
 manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
 avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs).
@@ -773,8 +773,30 @@ n'écrit que le nom, utilisable dans un script. `config show` l'affiche aussi (`
 - La complétion du shell propose les projets existants pour `--project` et les commandes `project`.
 - Le journal ajoute `project=NOM` à ses messages quand le projet n'est pas `default`.
 
-Les vues qui couvrent tous les projets (`--all-projects`), le rappel multi-projets et `task move` arrivent dans
-les versions suivantes.
+#### Vues sur tous les projets
+
+`--all-projects` (lecture seule) fait porter `list`, `next`, `agenda`, `report tags|blocked|overdue|stale|done` et
+`stats` sur tous les projets à la fois :
+
+```bash
+todo list --all-projects --overdue          # tout ce qui est en retard, tous projets confondus
+todo next --all-projects -n 3
+todo report overdue --all-projects --format plain
+```
+
+- Chaque tâche indique son projet : colonne `project` (insérée juste après l'`id` en `table` et `plain`, y compris avec
+  `--columns`), champ `projet` en JSON, marque `[projet]` en `text`. Sans `--all-projects`, aucune sortie ne change.
+- Les identifiants affichés ne sont pas directement actionnables : utilisez-les avec le projet voulu
+  (`todo done 3f2a9c1b -p travail`). Les commandes qui modifient n'acceptent pas `--all-projects`.
+- `--all-projects` et `--project` s'excluent. Un verrou partagé est pris sur chaque projet.
+
+Le **rappel** (`reminder check`, résumé d'une ligne, `--format json`) couvre tous les projets par défaut, même si
+un projet courant est choisi (`project use`, `TODO_PROJECT`) : il sert à ne rien oublier. `todo reminder check
+--project travail` le restreint à un projet. Les tâches y portent la marque du projet quand il en existe plusieurs
+(JSON : champ `projet`) ; avec un seul projet, la sortie est identique à celle d'avant. `reminder enable|disable`
+et les fichiers `remind_*` sont communs à tous les projets.
+
+`task move` (déplacer une tâche d'un projet à l'autre) arrive dans la version suivante.
 
 ### Annuler la dernière modification
 
@@ -1082,7 +1104,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `dependances.py` | dépendances entre tâches (`--after`) : blocage, cycles |
 | `filtres.py` | filtres communs à `list` et `archive list` (sans échéance, notes, dates de fin et d'archivage) |
 | `lot.py` | actions en lot par filtre : aperçu (`--dry-run`) et confirmation |
-| `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
+| `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture ; un par projet) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
 | `projets.py` | groupe `project` : current, list, create, use, rename, delete (corbeille) |

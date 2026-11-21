@@ -3,6 +3,22 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.19.0] - 2026-11-21
+
+### Ajouté
+
+- **Vues sur tous les projets** : `--all-projects` sur `list`, `next`, `agenda`, `report tags|blocked|overdue|stale|done`
+  et `stats` (lecture seule, incompatible avec `--project`). Chaque tâche indique son projet : colonne `project`
+  (après l'`id`) en `table` et `plain`, champ `projet` en JSON, marque `[projet]` en `text`. Sans l'option, les
+  sorties sont inchangées. Un verrou partagé est pris sur chaque projet.
+- Colonne `project` disponible dans `--columns` et `[general] columns`.
+
+### Modifié
+
+- **Rappel** : `reminder check` (texte, `plain`, `table`, JSON, `--once-a-day`, `--write-status`) couvre désormais
+  tous les projets par défaut ; `--project` le restreint à un projet. Avec un seul projet, la sortie est identique
+  à celle d'avant ; avec plusieurs, les tâches portent la marque du projet (JSON : champ `projet`).
+
 ## [2.18.0] - 2026-11-21
 
 ### Ajouté
@@ -321,6 +337,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.19.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.19.0
 [2.18.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.18.0
 [2.17.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.17.0
 [2.16.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.16.0

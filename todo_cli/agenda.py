@@ -6,7 +6,7 @@ from .affichage import _afficher_texte
 from .config import PRIORITES, STATUT_A_FAIRE
 from .dates import _libelle_recurrence, _parse_date
 from .formats import imprimer_plain, tableau
-from .stockage import _lire_taches
+from .stockage import _lire_taches, etiquette_projet
 
 _NOMS_JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
 _NOMS_MOIS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
@@ -56,7 +56,7 @@ def _ligne_tache(t):
     tags = f" {couleurs.CLR_TAG}" + " ".join(f"#{tg}" for tg in t['tags']) + couleurs.CLR_RESET if t['tags'] else ""
     rec = f" {couleurs.CLR_DIM}↻ {_libelle_recurrence(t['recurrence'])}{couleurs.CLR_RESET}" if t['recurrence'] else ""
     return (f"    {prio}[{t['priorite'].upper()}]{couleurs.CLR_RESET} {couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}"
-            f"{rec}{tags} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
+            f"{rec}{tags}{etiquette_projet(t)} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
 
 
 def afficher_agenda(debut=None, nb_jours=7, fmt="text", pager=True):

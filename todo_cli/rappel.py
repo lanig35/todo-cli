@@ -14,7 +14,7 @@ from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
 from .dates import _jours_restants, _libelle_echeance
 from .formats import imprimer_plain, tableau
-from .stockage import _lire_taches
+from .stockage import _lire_taches, etiquette_projet
 
 
 # --------------------------------------------------------------------------- état
@@ -182,7 +182,7 @@ def resume_une_ligne(retards, du_jour, a_venir):
 def _ligne(t, aujourdhui):
     prio = {"high": couleurs.CLR_P_HIGH, "medium": couleurs.CLR_P_MED, "low": couleurs.CLR_P_LOW}[t['priorite']]
     return (f"   {prio}[{t['priorite'].upper()}]{couleurs.CLR_RESET} {couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}"
-            f"{_libelle_echeance(t, aujourdhui)} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
+            f"{_libelle_echeance(t, aujourdhui)}{etiquette_projet(t)} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
 
 
 def texte_rappel(retards, du_jour, a_venir, aujourdhui, limite):

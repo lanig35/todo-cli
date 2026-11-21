@@ -2,6 +2,7 @@
 import dbm
 import glob
 import json
+import os
 import sys
 from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
@@ -9,13 +10,39 @@ from . import couleurs, journal
 from .dates import _parser_recurrence
 
 
+# Lecture transverse (--all-projects, rappel) : `_lire_taches` / `_lire_archive` rassemblent alors tous les projets
+_tous = False              # lire tous les projets au lieu du seul projet courant
+_etiqueter = True          # noter le projet d'origine dans chaque tâche (clé `projet`)
+
+
+def definir_tous_projets(actif, etiqueter=True):
+    """Active la lecture de tous les projets (lecture seule : seules les commandes de consultation s'en servent)."""
+    global _tous, _etiqueter
+    _tous, _etiqueter = actif, etiqueter
+
+
+def tous_projets():
+    return _tous
+
+
+def etiquette_projet(t):
+    """Marque d'affichage du projet d'une tâche (` [travail]`), vide hors lecture transverse."""
+    return f" {couleurs.CLR_DIM}[{t['projet']}]{couleurs.CLR_RESET}" if t.get('projet') else ""
+
+
+def _chemins_base(nom_fichier):
+    """(projet, chemin de base) de chaque projet à lire : le courant, ou tous en lecture transverse."""
+    noms = config.projets() if _tous else [config.projet()]
+    return [(nom, os.path.join(config.dossier_du_projet(nom), nom_fichier)) for nom in noms]
+
+
 def _base_existe():
-    """Vrai si au moins un fichier de la base DBM est présent sur le disque."""
-    return bool(glob.glob(f"{config.DB_NAME}*"))
+    """Vrai si au moins un fichier de la base DBM est présent sur le disque (dans l'un des projets lus)."""
+    return any(glob.glob(f"{chemin}*") for _, chemin in _chemins_base(config._FICHIERS["DB_NAME"]))
 
 def _archive_existe():
-    """Vrai si au moins un fichier de la base d'archive est présent sur le disque."""
-    return bool(glob.glob(f"{config.ARCHIVE_NAME}*"))
+    """Vrai si au moins un fichier de la base d'archive est présent sur le disque (dans l'un des projets lus)."""
+    return any(glob.glob(f"{chemin}*") for _, chemin in _chemins_base(config._FICHIERS["ARCHIVE_NAME"]))
 
 def _normaliser_notes(brutes):
     """Liste de notes valides ({date, texte, action}) ; ce qui n'est pas une note exploitable est ignoré."""
@@ -71,19 +98,27 @@ def _charger_taches(db):
         taches.append(t)
     return taches
 
+def _lire_bases(nom_fichier):
+    """Tâches des bases `nom_fichier` du projet courant (ou de tous), en lecture seule, sans jamais rien créer."""
+    taches = []
+    for nom, chemin in _chemins_base(nom_fichier):
+        if not glob.glob(f"{chemin}*"):
+            continue
+        with dbm.open(chemin, 'r') as db:
+            lues = _charger_taches(db)
+        if _tous and _etiqueter:
+            for t in lues:
+                t['projet'] = nom
+        taches += lues
+    return taches
+
 def _lire_taches():
     """Charge toutes les tâches en lecture seule, sans jamais créer la base."""
-    if not _base_existe():
-        return []
-    with dbm.open(config.DB_NAME, 'r') as db:
-        return _charger_taches(db)
+    return _lire_bases(config._FICHIERS["DB_NAME"])
 
 def _lire_archive():
     """Charge toutes les tâches archivées en lecture seule, sans jamais créer la base d'archive."""
-    if not _archive_existe():
-        return []
-    with dbm.open(config.ARCHIVE_NAME, 'r') as db:
-        return _charger_taches(db)
+    return _lire_bases(config._FICHIERS["ARCHIVE_NAME"])
 
 def _resoudre_id(db, prefixe):
     """Retrouve la clé unique correspondant à un préfixe d'ID.
