@@ -32,7 +32,7 @@ _etat = {}
 def _remettre_a_zero():
     _etat.clear()
     _etat.update(commande=None, ids=[], titres=[], champs={}, modifie=False, echecs=0,
-                 niveau=None, titres_actifs=False, logger=None, avertissements_emis=False)
+                 niveau=None, titres_actifs=False, logger=None, avertissements_emis=False, projet=None)
 
 
 _remettre_a_zero()
@@ -148,6 +148,8 @@ def _emettre(niveau, evenement, champs, trace=None):
         if logger is None:
             return
         commande = _etat["commande"] or "todo"
+        if _etat.get("projet"):
+            champs = {**champs, "project": _etat["projet"]}
         morceaux = [commande] + ([evenement] if evenement else [])
         morceaux += [f"{k}={_texte(v)}" for k, v in champs.items() if v not in (None, "", [], ())]
         message = " ".join(morceaux) + (f"\n{trace}" if trace else "")
@@ -187,6 +189,11 @@ def noter(ids=None, titres=None, modifie=False, **champs):
     if modifie:
         _etat["modifie"] = True
     _etat["champs"].update({k: v for k, v in champs.items() if v is not None})
+
+
+def definir_projet(nom):
+    """Projet visé par la commande : ajouté à chaque message du journal, sauf pour `default` (comme avant les projets)."""
+    _etat["projet"] = nom if nom and nom != "default" else None
 
 
 def titres_actifs():

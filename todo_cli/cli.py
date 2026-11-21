@@ -1,5 +1,6 @@
 """Définition de la ligne de commande (argparse) et aiguillage vers les commandes."""
 import argparse
+import difflib
 import os
 import sys
 from datetime import datetime
@@ -10,6 +11,7 @@ from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
 from . import __version__, couleurs, dependances, journal, lot, reglages, verrou
 from .stockage import _lire_taches
+from . import projets
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .dates import _decaler
@@ -342,6 +344,11 @@ class _Parseur(argparse.ArgumentParser):
         super().error(message)
 
 
+def _completer_projets(prefix, parsed_args, **kwargs):
+    """Complétion d'un nom de projet : ceux qui existent (rien n'est créé en complétant)."""
+    return config.projets()
+
+
 def _ajouter_options_couleur(p):
     """Ajoute --color, --no-color et --log-level à un parseur (principal ou de sous-commande).
 
@@ -354,6 +361,9 @@ def _ajouter_options_couleur(p):
                    help="Désactive les couleurs (équivaut à --color never)")
     p.add_argument('--log-level', choices=['off', 'error', 'warning', 'info', 'debug'], dest='niveau_log',
                    default=argparse.SUPPRESS, help="Niveau du journal pour cette commande (défaut : info, ou [log] level)")
+    p.add_argument('-p', '--project', dest='projet', metavar='PROJET', default=argparse.SUPPRESS,
+                   help="Projet (liste de tâches) à utiliser pour cette commande (prioritaire sur TODO_PROJECT et [general] project ; "
+                        "`todo project list` les liste)").completer = _completer_projets
     p.add_argument('--config', dest='fichier_config', metavar='FICHIER', default=argparse.SUPPRESS,
                    help="Fichier de configuration à utiliser à la place de celui par défaut (prioritaire sur TODO_CONFIG) ; "
                         "à écrire en toutes lettres")
@@ -634,6 +644,22 @@ def _args_config(p):
     p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (json : compatible jq, pour show, path et init)')
 
 
+# --- Groupe ``project`` -------------------------------------------------------------------------------------------
+def _args_projet_nom(p):
+    p.add_argument('nom', type=str, metavar='NOM', help="Nom du projet (minuscules, chiffres, - et _)").completer = _completer_projets
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
+
+def _args_projet_renommer(p):
+    p.add_argument('ancien', type=str, metavar='ANCIEN', help="Projet à renommer").completer = _completer_projets
+    p.add_argument('nouveau', type=str, metavar='NOUVEAU', help="Nouveau nom")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
+
+def _args_projet_supprimer(p):
+    _args_projet_nom(p)
+    p.add_argument('--force', action='store_true', help="Supprime aussi un projet qui contient des tâches (déplacé dans la corbeille)")
+    p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation")
+
+
 # --- Groupes ``note``, ``archive`` et ``reminder`` : une feuille par action -------------------------------------
 def _args_note_ajouter(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
@@ -724,6 +750,14 @@ _GROUPES = [
         ('disable', 'remind', _args_format, 'Désactiver les rappels', {**_RAPPEL_DEFAUTS, 'disable': True}),
         ('status', 'remind', _args_format, 'Indiquer si les rappels sont activés', {**_RAPPEL_DEFAUTS, 'status': True}),
     ]),
+    ('project', "Projets : listes de tâches indépendantes (perso, travail…)", [
+        ('current', 'project_current', _args_format, 'Indiquer le projet courant et son origine', {}),
+        ('list', 'project_list', _args_format, 'Lister les projets et leurs compteurs', {}),
+        ('create', 'project_create', _args_projet_nom, 'Créer un projet', {}),
+        ('use', 'project_use', _args_projet_nom, 'Choisir le projet courant (écrit [general] project)', {}),
+        ('rename', 'project_rename', _args_projet_renommer, 'Renommer un projet', {}),
+        ('delete', 'project_delete', _args_projet_supprimer, 'Supprimer un projet (déplacé dans la corbeille)', {}),
+    ]),
     ('report', "Vues d'ensemble", [
         ('stats', 'stats', _args_stats, 'Tableau de bord des indicateurs', {}),
         ('agenda', 'agenda', _args_agenda, 'Tâches à faire jour par jour', {}),
@@ -755,7 +789,7 @@ _ANCIENNES = {
     'export': _args_export, 'import': _args_import,
 }
 _VERBES = {g: {v[0] for v in verbes} for g, _, verbes in _GROUPES}
-_OPTIONS_A_VALEUR = {'--color', '--log-level', '--config'}
+_OPTIONS_A_VALEUR = {'--color', '--log-level', '--config', '--project', '-p'}
 
 
 def _mots(argv):
@@ -923,14 +957,16 @@ def _completer_ligne():
 
 
 # Commandes qui ne déclenchent pas l'archivage automatique (elles gèrent déjà l'archive ou l'historique)
-_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed')
+_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete')
 
 
 def _mode_verrou(args):
     """Verrou à prendre sur la base : None (rien), PARTAGE (lecture) ou EXCLUSIF (écriture)."""
     c = args.commande
-    if c == 'config':
+    if c == 'config' or c in ('project_current', 'project_list', 'project_create', 'project_use'):
         return None
+    if c in ('project_rename', 'project_delete'):
+        return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
              'report_stale', 'report_done'):
         return verrou.PARTAGE
@@ -943,6 +979,30 @@ def _mode_verrou(args):
     if c in ('done', 'undone', 'postpone', 'remove', 'edit') and args.dry_run:
         return verrou.PARTAGE          # simulation : ne modifie rien (ni archivage automatique)
     return verrou.EXCLUSIF
+
+
+def _choisir_projet(args):
+    """Fixe le projet de la commande (option > TODO_PROJECT > fichier > default) et refuse un projet inexistant.
+
+    Seul le groupe `project` s'accommode d'un projet courant inexistant (il sert justement à le créer ou à en changer).
+    """
+    option = getattr(args, 'projet', None)
+    if option is not None:
+        try:
+            config.definir_projet(config.valider_nom(option), "option")
+        except ValueError as e:
+            journal.echec("invalid_project_name", projet=option)
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} {e} (option --project).", file=sys.stderr)
+            sys.exit(1)
+    nom = config.projet()
+    journal.definir_projet(nom)
+    if not str(args.commande).startswith('project_') and not config.existe(nom):
+        proche = difflib.get_close_matches(nom, config.projets(), n=1)
+        journal.echec("unknown_project", projet=nom)
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} le projet '{nom}' n'existe pas ({projets._origine_lisible(config.origine_projet())})"
+              + (f" ; vouliez-vous dire '{proche[0]}' ?" if proche else "")
+              + f" `todo project create {nom}` le crée, `todo project list` les liste.", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
@@ -980,6 +1040,7 @@ def main():
             print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} fichier de configuration introuvable : "
                   f"{reglages.chemin_config()} (option --config). `todo --config FICHIER config init` le crée.", file=sys.stderr)
             sys.exit(1)
+    _choisir_projet(args)
     config.preparer()               # dossier de stockage (après --config, qui peut en changer)
     journal.regler_niveau(getattr(args, 'niveau_log', None))
     couleurs._configurer_couleurs(reglages.obtenir('general', 'color', getattr(args, 'couleur', None)))
@@ -997,6 +1058,11 @@ def main():
                 args.format = 'table'
 
     mode_verrou = _mode_verrou(args)
+    if args.commande in ('project_rename', 'project_delete'):
+        args.courant = config.projet()            # le verrou se prend sur le projet visé, pas sur le courant
+        cible = args.ancien if args.commande == 'project_rename' else args.nom
+        if config._MOTIF_PROJET.match(cible) and config.existe(cible):
+            config.definir_projet(cible, "option")
     if mode_verrou:
         verrou.prendre(mode_verrou, reglages.obtenir('general', 'lock_timeout'))
     if mode_verrou == verrou.EXCLUSIF and args.commande not in _SANS_ARCHIVAGE_AUTO:
@@ -1180,6 +1246,18 @@ def main():
         jusqu_a = _date_passee(args.until, '--until') or datetime.now().date()
         _plage_vide(depuis, jusqu_a, '--since', '--until')
         rapport_terminees(depuis, jusqu_a, args.with_archive, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'project_current':
+        succes = projets.afficher_courant(config.projet(), config.origine_projet(), args.format)
+    elif args.commande == 'project_list':
+        succes = projets.lister(config.projet(), args.format)
+    elif args.commande == 'project_create':
+        succes = projets.creer(args.nom, args.format)
+    elif args.commande == 'project_use':
+        succes = projets.utiliser(args.nom, args.format)
+    elif args.commande == 'project_rename':
+        succes = projets.renommer(args.ancien, args.nouveau, args.format)
+    elif args.commande == 'project_delete':
+        succes = projets.supprimer(args.nom, args.courant, args.yes, args.force, args.format)
     elif args.commande == 'reset':
         reinitialiser_base(args.include_archive)
     else:

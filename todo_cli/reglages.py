@@ -42,6 +42,9 @@ class Reglage(NamedTuple):
 REGLAGES = (
     Reglage("general", "db_dir", "chemin", "~/.local/share/todo",
             "Dossier de stockage : base, archive, sauvegardes et état du rappel."),
+    Reglage("general", "project", "projet", "default",
+            "Projet courant (liste de tâches) : default, ou un projet créé avec `todo project create`. "
+            "`todo project use NOM` l'écrit ici."),
     Reglage("general", "color", "choix", "auto",
             "Couleurs : auto (seulement dans un terminal, sauf NO_COLOR), always ou never.",
             choix=("auto", "always", "never")),
@@ -195,6 +198,9 @@ def convertir(reglage, texte):
         return brut.lower()
     if reglage.type == "colonnes":
         return ",".join(colonnes_tache(brut))      # forme normalisée : id en tête s'il manquait, sans doublon
+    if reglage.type == "projet":
+        from .config import valider_nom
+        return valider_nom(brut)
     if not brut:
         raise ValueError("valeur vide")
     return os.path.abspath(os.path.expanduser(brut))  # chemin

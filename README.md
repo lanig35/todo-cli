@@ -19,6 +19,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Tâches en retard affichées en premier
 - Agenda : les tâches à faire jour par jour (`agenda`)
 - Rapports : tags utilisés, tâches bloquées, en retard, qui traînent, bilan des tâches terminées (`report`)
+- Projets : plusieurs listes indépendantes (perso, travail…), chacune avec son archive, ses sauvegardes et son `undo` (`project`, `-p`)
 - Journal des actions et des erreurs, lisible avec `journalctl -t todo`
 - Configuration par fichier INI, variables d'environnement et options (`todo config`)
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
@@ -77,6 +78,7 @@ plus courantes ont un **raccourci** de premier niveau.
 | `note` | `add`, `list`, `edit`, `delete` |
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
+| `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
 | `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
@@ -737,6 +739,43 @@ ne contient jamais de couleur. En mode `auto`, les avertissements écrits sur `s
 seulement si `stderr` est lui-même un terminal, indépendamment de la sortie standard
 (`todo list 2> erreurs.log` n'y met aucun code d'échappement).
 
+### Projets
+
+Un **projet** est une liste de tâches indépendante (`perso`, `travail`…) : chacun a sa propre base, son archive,
+ses sauvegardes, son `undo` et son verrou. Le projet `default` est celui d'avant la 2.18 : il reste à la racine du
+stockage, sans migration. Les autres vivent dans `<stockage>/projects/<nom>/`. La configuration, le journal et
+l'état du rappel sont communs à tous les projets.
+
+```bash
+todo project create travail          # crée le projet (jamais créé implicitement)
+todo project list                    # projets, nombre de tâches à faire, terminées, archivées ; * = courant
+todo -p travail add "Préparer la réunion"       # --project/-p : sur toutes les commandes, avant ou après la commande
+todo task list --project travail
+todo project use travail             # projet courant persistant ([general] project)
+todo project current                 # nom et origine du projet courant
+todo project rename travail bureau
+todo project delete bureau           # déplace le projet dans <stockage>/.trash/ (récupérable à la main)
+```
+
+Le projet courant se choisit, de la plus forte priorité à la plus faible, par l'option `--project/-p`, la variable
+`TODO_PROJECT`, le réglage `[general] project` (écrit par `project use`), sinon `default`. `todo project current`
+indique le nom et l'origine (`option`, `variable TODO_PROJECT`, `fichier`, `défaut`) ; avec `--format plain`, il
+n'écrit que le nom, utilisable dans un script. `config show` l'affiche aussi (`general.project`).
+
+- Les noms sont en minuscules, chiffres, `-` et `_` (32 caractères au plus, première lettre ou chiffre).
+  `default` ne peut être ni renommé ni supprimé.
+- Un projet inexistant est refusé (code 1, avec une suggestion s'il ressemble à un autre), jamais créé en silence.
+- `project delete` refuse le projet courant et un projet qui contient des tâches sans `--force` ; il demande
+  confirmation (`-y` pour la passer, obligatoire sans terminal). Le dossier est déplacé dans `.trash/` sous le
+  nom `<projet>-AAAAMMJJ-HHMMSS` : pour le récupérer, déplacez-le vers `projects/<nom>/`.
+- `project rename` met aussi à jour `[general] project` s'il désignait l'ancien nom.
+- Les dépendances (`--after`) ne traversent pas les projets, et `export` / `import` visent le projet choisi.
+- La complétion du shell propose les projets existants pour `--project` et les commandes `project`.
+- Le journal ajoute `project=NOM` à ses messages quand le projet n'est pas `default`.
+
+Les vues qui couvrent tous les projets (`--all-projects`), le rappel multi-projets et `task move` arrivent dans
+les versions suivantes.
+
 ### Annuler la dernière modification
 
 ```bash
@@ -832,6 +871,7 @@ soon = 0
 | Section | Clé | Défaut | Variable d'environnement | Option qui l'emporte |
 |---|---|---|---|---|
 | `general` | `db_dir` | `~/.local/share/todo` | `TODO_DB_DIR` | — |
+| `general` | `project` | `default` | `TODO_PROJECT` | `--project`, `-p` |
 | `general` | `color` | `auto` | `TODO_COLOR` (puis `NO_COLOR`) | `--color`, `--no-color` |
 | `general` | `format` | `auto` | `TODO_FORMAT` | `--format` |
 | `general` | `pager` | `true` | `TODO_PAGER` | `--pager`, `--no-pager` |
@@ -1045,6 +1085,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `verrou.py` | verrou `flock` de la base (partagé en lecture, exclusif en écriture) |
 | `rappel.py` | commande `remind` (rappel des retards) |
 | `prochaine.py` | commande `next` |
+| `projets.py` | groupe `project` : current, list, create, use, rename, delete (corbeille) |
 | `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `formats.py` | formats de sortie (text, table, plain, json, choix automatique) et catalogue des colonnes `--columns` |
@@ -1054,7 +1095,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `echange.py` | export et import JSON |
 | `sauvegardes.py` | sauvegardes, rotation, restauration, remise à zéro |
 | `couleurs.py` | codes ANSI et règles d'activation des couleurs |
-| `config.py` | constantes métier et chemins du stockage, résolus à l'exécution (`config.DB_NAME`…) |
+| `config.py` | constantes métier, chemins du stockage et projet courant, résolus à l'exécution (`config.DB_NAME`…) |
 | `seed.py` | génération de tâches factices |
 
 Le lien symbolique `~/.local/bin/todo` continue de fonctionner : le lanceur retrouve le paquet à côté
@@ -1087,14 +1128,16 @@ status checks to pass* (cocher `pytest (Python`3.13`).
 
 | Élément | Emplacement |
 |---|---|
-| Base | `~/.local/share/todo/todo_db*` |
+| Base (projet `default`) | `~/.local/share/todo/todo_db*` |
+| Autres projets | `~/.local/share/todo/projects/<nom>/` (mêmes fichiers : base, archive, sauvegardes, verrou) |
+| Projets supprimés | `~/.local/share/todo/.trash/<nom>-AAAAMMJJ-HHMMSS/` |
 | Journal (cible `file`) | `~/.local/state/todo/todo.log` |
 | État du rappel | `~/.local/share/todo/remind_off`, `remind_last`, `remind_status` |
-| Archive | `~/.local/share/todo/todo_archive*` |
-| Sauvegardes | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` (base et archive) |
+| Archive (projet `default`) | `~/.local/share/todo/todo_archive*` |
+| Sauvegardes (projet `default`) | `~/.local/share/todo/backups/AAAAMMJJ_HHMMSS_µs/` (base et archive) |
 
 La variable d'environnement `TODO_DB_DIR` (ou `db_dir` dans le fichier de configuration) redirige tout
-le stockage vers un autre dossier (utile pour les tests ou pour avoir plusieurs listes séparées).
+le stockage vers un autre dossier (utile pour les tests). Pour plusieurs listes séparées, utilisez plutôt les projets.
 
 ### Accès concurrent
 
