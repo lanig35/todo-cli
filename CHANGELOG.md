@@ -3,6 +3,20 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [2.17.0] - 2026-11-21
+
+### Ajouté
+
+- **Nouveaux rapports** (groupe `report`, lecture seule, formats `text`, `table`, `plain`, `json`, `--pager`) :
+  - `report tags` : tags utilisés avec le nombre de tâches à faire, terminées et le total (`--sort count|alpha`,
+    `--with-archive`) ;
+  - `report blocked` : tâches qui attendent une dépendance, avec les tâches attendues ;
+  - `report overdue` : tâches en retard, les plus en retard d'abord, avec les jours de retard ;
+  - `report stale` : tâches à faire sans échéance créées il y a au moins `--older-than` (30d par défaut) ;
+  - `report done` : bilan des tâches terminées sur une période (`--since` 7d par défaut, `--until`,
+    `--with-archive`), regroupé par jour.
+  Les colonnes `plain` et les objets `json` de chaque rapport sont décrits dans le README.
+
 ## [2.16.0] - 2026-11-21
 
 ### Ajouté
@@ -293,6 +307,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[2.17.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.17.0
 [2.16.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.16.0
 [2.15.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.15.0
 [2.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.14.0

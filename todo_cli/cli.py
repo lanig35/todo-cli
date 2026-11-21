@@ -16,6 +16,7 @@ from .dates import _decaler
 from .filtres import MSG_FORMATS_DATE_PASSEE, resoudre_date_passee
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
+from .rapports import rapport_bloquees, rapport_retards, rapport_stagnantes, rapport_tags, rapport_terminees
 from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
@@ -549,6 +550,34 @@ def _args_unarchive(p):
     p.add_argument('ids', nargs='+', help="Identifiants (ou préfixes) des tâches archivées à récupérer")
 
 
+def _args_sortie_rapport(p):
+    p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
+                   help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
+    p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (voir `todo --help`)')
+
+
+def _args_rapport_tags(p):
+    p.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
+    p.add_argument('--sort', choices=['count', 'alpha'], default='count',
+                   help="Ordre : nombre de tâches décroissant (count, défaut) ou alphabétique (alpha)")
+    _args_sortie_rapport(p)
+
+
+def _args_rapport_stale(p):
+    p.add_argument('--older-than', type=str, default='30d', metavar='DURÉE',
+                   help="Créées il y a au moins cette durée : 30d (défaut), 2w, 6m, 1y, hier ou AAAA-MM-JJ")
+    _args_sortie_rapport(p)
+
+
+def _args_rapport_done(p):
+    p.add_argument('--since', type=str, default='7d', metavar='DATE',
+                   help="Terminées à partir de cette date, incluse (défaut : 7d) : 7d, 2w, 1m, 1y, hier, aujourd'hui ou AAAA-MM-JJ")
+    p.add_argument('--until', type=str, default=None, metavar='DATE',
+                   help="Terminées au plus tard à cette date, incluse (défaut : aujourd'hui ; mêmes formats que --since)")
+    p.add_argument('--with-archive', action='store_true', help='Inclure les tâches archivées')
+    _args_sortie_rapport(p)
+
+
 def _args_stats(p):
     p.add_argument('--with-archive', action='store_true', help='Compter aussi les tâches archivées')
     p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (voir `todo --help`)')
@@ -698,6 +727,11 @@ _GROUPES = [
     ('report', "Vues d'ensemble", [
         ('stats', 'stats', _args_stats, 'Tableau de bord des indicateurs', {}),
         ('agenda', 'agenda', _args_agenda, 'Tâches à faire jour par jour', {}),
+        ('tags', 'report_tags', _args_rapport_tags, 'Tags utilisés, avec le nombre de tâches', {}),
+        ('blocked', 'report_blocked', _args_sortie_rapport, 'Tâches bloquées par une dépendance, et ce qu\'elles attendent', {}),
+        ('overdue', 'report_overdue', _args_sortie_rapport, 'Tâches en retard, les plus en retard d\'abord', {}),
+        ('stale', 'report_stale', _args_rapport_stale, 'Tâches sans échéance qui traînent depuis longtemps', {}),
+        ('done', 'report_done', _args_rapport_done, 'Bilan des tâches terminées sur une période', {}),
     ]),
     ('admin', "Maintenance de la base", [
         ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
@@ -897,7 +931,8 @@ def _mode_verrou(args):
     c = args.commande
     if c == 'config':
         return None
-    if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind'):
+    if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
+             'report_stale', 'report_done'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -1131,6 +1166,20 @@ def main():
             afficher_config(args.format)
     elif args.commande == 'stats':
         afficher_stats(args.with_archive, args.format)
+    elif args.commande == 'report_tags':
+        rapport_tags(args.with_archive, args.sort, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_blocked':
+        rapport_bloquees(args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_overdue':
+        rapport_retards(args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_stale':
+        avant = _date_passee(args.older_than, '--older-than')
+        rapport_stagnantes(avant, args.older_than, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_done':
+        depuis = _date_passee(args.since, '--since')
+        jusqu_a = _date_passee(args.until, '--until') or datetime.now().date()
+        _plage_vide(depuis, jusqu_a, '--since', '--until')
+        rapport_terminees(depuis, jusqu_a, args.with_archive, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
     elif args.commande == 'reset':
         reinitialiser_base(args.include_archive)
     else:
