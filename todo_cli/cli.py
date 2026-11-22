@@ -737,6 +737,7 @@ def _args_pj_ajouter(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
     p.add_argument('fichiers', nargs='+', metavar='FICHIER', help="Fichier(s) à copier dans le stockage de la tâche")
     p.add_argument('--comment', type=str, default=None, help="Commentaire de la pièce (200 caractères au plus)")
+    p.add_argument('--link', action='store_true', help="Ne pas copier : garder un lien vers le fichier, là où il est (pas de limite de taille ; `attachment check` le surveille)")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 def _args_pj_lister(p):
@@ -817,6 +818,7 @@ _GROUPES = [
     ('attachment', "Pièces jointes des tâches (fichiers copiés dans le stockage)", [
         ('add', 'attachment_add', _args_pj_ajouter, 'Joindre un ou plusieurs fichiers à une tâche', {}),
         ('list', 'attachment_list', _args_pj_lister, "Lister les pièces jointes d'une tâche (ou de toutes)", {}),
+        ('check', 'attachment_check', _args_pj_lister, "Vérifier les pièces (fichiers manquants ou modifiés, orphelins) ; sans identifiant : toutes", {}),
         ('open', 'attachment_open', _args_pj_numero, 'Ouvrir une pièce jointe (ou afficher son chemin sans session graphique)', {}),
         ('save', 'attachment_save', _args_pj_extraire, 'Copier une pièce jointe dans un dossier', {}),
         ('remove', 'attachment_remove', _args_pj_numero, 'Détacher une pièce jointe (fichier mis en corbeille)', {}),
@@ -989,7 +991,7 @@ def _mode_verrou(args):
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
-             'report_stale', 'report_done', 'report_active', 'report_cycle', 'attachment_list', 'attachment_open', 'attachment_save'):
+             'report_stale', 'report_done', 'report_active', 'report_cycle', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -1183,9 +1185,11 @@ def main():
     elif args.commande == 'note':
         succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
     elif args.commande == 'attachment_add':
-        succes = pieces_jointes.ajouter(args.id, args.fichiers, args.comment, args.format)
+        succes = pieces_jointes.ajouter(args.id, args.fichiers, args.comment, args.format, args.link)
     elif args.commande == 'attachment_list':
         succes = pieces_jointes.lister(args.id, args.format)
+    elif args.commande == 'attachment_check':
+        succes = pieces_jointes.verifier(args.id, args.format)
     elif args.commande == 'attachment_open':
         succes = pieces_jointes.ouvrir(args.id, args.numero, args.format)
     elif args.commande == 'attachment_save':

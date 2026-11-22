@@ -78,7 +78,7 @@ plus courantes ont un **raccourci** de premier niveau.
 |---|---|
 | `task` | `add`, `list`, `show`, `edit`, `done`, `start`, `unstart`, `undone`, `remove`, `move`, `postpone`, `next` |
 | `note` | `add`, `list`, `edit`, `delete` |
-| `attachment` | `add`, `list`, `open`, `save`, `remove`, `gc` |
+| `attachment` | `add`, `list`, `check`, `open`, `save`, `remove`, `gc` |
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
@@ -332,6 +332,8 @@ projet : la tâche reste autonome si l'original disparaît ou change. Comme les 
 
 ```bash
 todo attachment add a1b2c3 facture.pdf scan.png --comment "reçu en octobre"   # copie un ou plusieurs fichiers
+todo attachment add a1b2c3 ~/Videos/demo.mkv --link   # ne copie rien : garde un lien vers le fichier
+todo attachment check                             # fichiers manquants, modifiés ou orphelins (toutes les tâches)
 todo attachment list a1b2c3                       # pièces de la tâche (sans identifiant : de toutes les tâches)
 todo attachment open a1b2c3 1                     # ouvre la pièce n°1 (xdg-open), ou affiche son chemin
 todo attachment save a1b2c3 1 --to ~/Documents    # en extrait une copie (--force pour écraser)
@@ -343,7 +345,17 @@ todo list --has-files                             # tâches qui ont des pièces 
 - **Stockage** : `<dossier du projet>/attachments/<id de la tâche>/<nom>` (voir *Stockage*), en 0600 dans des dossiers 0700.
   Les métadonnées (nom, date, taille, empreinte SHA-256, commentaire) sont dans la tâche : elles apparaissent dans
   `show`, `--format json` (`"pieces_jointes"`) et `attachment list --format json|plain|table`, où `chemin` et
-  `present` indiquent si le fichier est bien là.
+  `present` indiquent si le fichier est bien là (`lien` pour une pièce liée ; en `plain`, c'est la dernière colonne).
+- **`--link`** : pour un gros fichier ou un document qui vit ailleurs (dépôt, synchronisation), la pièce ne
+  copie rien et mémorise le **chemin absolu** (`lien`), la taille et l'empreinte du moment. Pas de limite de
+  taille ; `open` et `save` travaillent sur le fichier d'origine, `remove` et `task remove` ne le touchent jamais.
+  Contrepartie : si le fichier bouge ou change, la pièce n'est plus fiable (voir `check`).
+- **`check [ID]`** : relit chaque pièce (copies et liens, tâches archivées comprises) et la compare à ce qui a été
+  enregistré : `ok`, `manquant`, `modifie` (taille ou SHA-256) ou `en_corbeille` (copie retirée, récupérable) ;
+  signale aussi les **fichiers orphelins** de `attachments/` (aucune pièce ne les référence). Code de sortie 1 s'il
+  y a une pièce manquante ou modifiée ; orphelins et fichiers en corbeille sont des informations. `--format plain` :
+  `id`, `numero`, `nom`, `etat`, `chemin` (les orphelins ont l'état `orphelin` et un numéro vide) ; `json` :
+  `{"verifiees", "ok", "en_corbeille", "manquantes", "modifiees", "orphelins", "pieces"}`.
 - **Nom** : celui du fichier, sans dossier ; un nom déjà pris par une autre pièce de la tâche devient `nom-2.ext`,
   `nom-3.ext`… Les caractères de contrôle sont remplacés, un nom qui commence par un point reçoit un `_`.
 - **Limites** : `[attachments] max_size` (10 Mo par défaut ; 0 = pas de limite) ; commentaire de 200 caractères au
@@ -1198,7 +1210,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
-| `pieces_jointes.py` | pièces jointes : copie, corbeille, groupe `attachment` |
+| `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |

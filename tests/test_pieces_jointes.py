@@ -371,3 +371,204 @@ def test_entree_pieces_corrompue_ignoree(todo):
 def test_reglages_attachments(todo):
     assert "[attachments]" in todo("config", "show").sortie or "max_size" in todo("config", "show").sortie
     assert todo("config", "get", "attachments.max_size").sortie.strip().startswith("10")
+
+
+# ------------------------------------------------------------------ --link
+def test_link_ne_copie_rien(tache, fichiers):
+    todo, i = tache
+    r = todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    assert r.code == 0 and "liée" in r.sortie
+    assert not dossier_pj(todo).exists()                                  # rien dans le stockage
+    p = pieces(todo, i)[0]
+    assert p["lien"] == str(fichiers / "avis.txt") and p["chemin"] == p["lien"] and p["present"] is True
+    assert p["taille"] == len("avis d'imposition\n") and len(p["sha256"]) == 64
+    assert "🔗" in todo("attachment", "list", i).sortie and str(fichiers / "avis.txt") in todo("show", i).sortie
+    assert todo("attachment", "list", "--format", "plain").sortie.split("\t")[-1].strip() == str(fichiers / "avis.txt")
+
+
+def test_link_chemin_relatif_devient_absolu(tache, fichiers):
+    todo, i = tache
+    (todo.dossier / "local.txt").write_text("x")
+    todo("attachment", "add", i, "local.txt", "--link")
+    assert pieces(todo, i)[0]["lien"] == str(todo.dossier / "local.txt")
+
+
+def test_link_sans_limite_de_taille(tache, fichiers):
+    todo, i = tache
+    todo.config("[attachments]\nmax_size = 1\n")
+    (fichiers / "gros.bin").write_bytes(b"x" * (1024 * 1024 + 1))
+    assert todo("attachment", "add", i, fichiers / "gros.bin").code == 1
+    assert todo("attachment", "add", i, fichiers / "gros.bin", "--link").code == 0
+
+
+def test_link_fichier_introuvable_ou_dossier(tache, fichiers):
+    todo, i = tache
+    assert todo("attachment", "add", i, fichiers / "absent", "--link").code == 1
+    assert todo("attachment", "add", i, fichiers, "--link").code == 1
+    assert pieces(todo, i) == []
+
+
+def test_link_open_et_save(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    assert todo("attachment", "open", i, "1", env={"TODO_ATTACHMENTS_OPENER": "cat"}).sortie.count("avis d'imposition") == 1
+    assert todo("attachment", "open", i, "1", "--format", "plain", env={"DISPLAY": None, "WAYLAND_DISPLAY": None}).sortie.strip() == str(fichiers / "avis.txt")
+    sortie = todo.dossier / "sortie"
+    sortie.mkdir()
+    assert todo("attachment", "save", i, "1", "--to", sortie).code == 0
+    assert (sortie / "avis.txt").read_text() == "avis d'imposition\n"
+
+
+def test_link_fichier_deplace(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    (fichiers / "avis.txt").rename(fichiers / "autre.txt")
+    r = todo("attachment", "open", i, "1")
+    assert r.code == 1 and "introuvable" in r.sortie and str(fichiers) in r.sortie
+    assert "fichier manquant" in todo("show", i).sortie
+
+
+def test_link_remove_et_task_remove_ne_touchent_pas_l_original(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", fichiers / "scan.bin", "--link")
+    r = todo("attachment", "remove", i, "1")
+    assert r.code == 0 and "lien retiré" in r.sortie and (fichiers / "avis.txt").exists()
+    assert not (dossier_pj(todo) / ".trash").exists()
+    todo("task", "remove", i)
+    assert (fichiers / "scan.bin").exists() and not (dossier_pj(todo) / ".trash").exists()
+
+
+def test_link_suit_la_tache_dans_un_autre_projet(tache, fichiers):
+    todo, i = tache
+    todo("project", "create", "travail")
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    todo("task", "move", i, "--to", "travail")
+    assert todo("attachment", "list", i, "-p", "travail", "--format", "json").json()["pieces_jointes"][0]["lien"] == str(fichiers / "avis.txt")
+
+
+def test_link_et_copie_dans_la_meme_tache(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt")
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    assert [(p["nom"], "lien" in p) for p in pieces(todo, i)] == [("avis.txt", False), ("avis-2.txt", True)]
+
+
+# ------------------------------------------------------------------ check
+def verifier(todo, *args):
+    return todo("attachment", "check", *args, "--format", "json")
+
+
+def test_check_tout_va_bien(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt")
+    todo("attachment", "add", i, fichiers / "scan.bin", "--link")
+    r = verifier(todo)
+    assert r.code == 0 and r.json()["verifiees"] == 2 and r.json()["ok"] == 2 and r.json()["orphelins"] == []
+    assert "2 ok sur 2 pièce(s)" in todo("attachment", "check").sortie
+
+
+def test_check_sans_piece(todo):
+    todo("add", "A")
+    r = todo("attachment", "check")
+    assert r.code == 0 and "Aucune pièce jointe à vérifier" in r.sortie
+    assert verifier(todo).json()["verifiees"] == 0
+
+
+def test_check_copie_manquante_ou_modifiee(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", fichiers / "scan.bin")
+    complet = todo.une("Dossier impôts")["id"]
+    (dossier_pj(todo, complet) / "avis.txt").unlink()
+    (dossier_pj(todo, complet) / "scan.bin").write_bytes(b"autre chose")
+    r = verifier(todo)
+    etats = {p["nom"]: p["etat"] for p in r.json()["pieces"]}
+    assert r.code == 1 and etats == {"avis.txt": "manquant", "scan.bin": "modifie"}
+    assert r.json()["manquantes"] == 1 and r.json()["modifiees"] == 1
+    texte = todo("attachment", "check", "--format", "text").texte
+    assert "manquant" in texte and "modifié" in texte and "0 ok sur 2" in texte
+
+
+def test_check_meme_taille_contenu_different(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    (fichiers / "avis.txt").write_text("avis d'imposition\n".upper())      # même taille, autre contenu
+    r = verifier(todo)
+    assert r.code == 1 and r.json()["pieces"][0]["etat"] == "modifie" and "SHA-256" in r.json()["pieces"][0]["detail"]
+
+
+def test_check_lien_modifie_ou_deplace(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", fichiers / "scan.bin", "--link")
+    (fichiers / "avis.txt").write_text("plus long qu'avant, donc modifié")
+    (fichiers / "scan.bin").unlink()
+    etats = {p["nom"]: p["etat"] for p in verifier(todo).json()["pieces"]}
+    assert etats == {"avis.txt": "modifie", "scan.bin": "manquant"}
+    assert "lien :" in todo("attachment", "check", "--format", "text").texte
+
+
+def test_check_fichier_en_corbeille_n_est_pas_une_erreur(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt")
+    todo("attachment", "remove", i, "1")
+    todo("undo")                                                           # la pièce revient, son fichier est en corbeille
+    r = verifier(todo)
+    assert r.code == 0 and r.json()["pieces"][0]["etat"] == "en_corbeille" and r.json()["en_corbeille"] == 1
+    assert "en corbeille" in todo("attachment", "check", "--format", "text").texte
+    todo("attachment", "open", i, "1", env={"TODO_ATTACHMENTS_OPENER": "true"})      # l'accès remet le fichier en place
+    assert verifier(todo).json()["pieces"][0]["etat"] == "ok"
+
+
+def test_check_orphelins(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt")
+    complet = todo.une("Dossier impôts")["id"]
+    (dossier_pj(todo, complet) / "intrus.txt").write_text("x")
+    (dossier_pj(todo) / "tache-inconnue").mkdir()
+    (dossier_pj(todo) / "tache-inconnue" / "vieux.txt").write_text("x")
+    r = verifier(todo)
+    assert r.code == 0                                                     # information, pas une erreur
+    assert sorted(o["nom"] for o in r.json()["orphelins"]) == ["intrus.txt", "vieux.txt"]
+    assert [o["nom"] for o in verifier(todo, i).json()["orphelins"]] == ["intrus.txt"]       # limité à la tâche
+    assert "2 orphelin(s)" in todo("attachment", "check", "--format", "text").texte
+    assert ".trash" not in todo("attachment", "check", "--format", "plain").sortie
+
+
+def test_check_une_tache(tache, fichiers):
+    todo, i = tache
+    todo("add", "Autre")
+    autre = todo.id_de("Autre")
+    todo("attachment", "add", i, fichiers / "avis.txt")
+    todo("attachment", "add", autre, fichiers / "scan.bin")
+    (dossier_pj(todo, todo.une("Autre")["id"]) / "scan.bin").unlink()
+    assert verifier(todo, i).code == 0 and verifier(todo, autre).code == 1
+    assert verifier(todo).code == 1
+    assert todo("attachment", "check", "zzzz").code == 1
+
+
+def test_check_inclut_les_taches_archivees(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "scan.bin")
+    complet = todo.une("Dossier impôts")["id"]
+    todo("done", i)
+    todo("archive", "add")
+    assert verifier(todo).json()["verifiees"] == 1
+    (dossier_pj(todo, complet) / "scan.bin").unlink()
+    assert verifier(todo).code == 1
+
+
+def test_check_formats_plain_et_table(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    ligne = todo("attachment", "check", "--format", "plain").sortie.split("\t")
+    assert ligne[1:4] == ["1", "avis.txt", "ok"] and ligne[4].strip() == str(fichiers / "avis.txt")
+    assert todo("attachment", "check", "--format", "table").sortie.strip() == ""            # rien d'anormal : rien à montrer
+    (fichiers / "avis.txt").unlink()
+    assert "manquant" in todo("attachment", "check", "--format", "table").sortie
+
+
+def test_check_est_journalise(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt", "--link")
+    (fichiers / "avis.txt").unlink()
+    todo("attachment", "check", env={"TODO_LOG_TARGET": "file", "TODO_LOG_LEVEL": "warning"})
+    assert any("attachment_check_failed" in l and "manquantes=1" in l for l in todo.journal())
