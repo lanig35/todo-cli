@@ -92,6 +92,19 @@ REGLAGES = (
     Reglage("attachments", "opener", "texte", "",
             "Commande qui ouvre une pièce jointe (`todo attachment open`), par exemple `less` ou `evince` ; vide = xdg-open dans une "
             "session graphique, sinon le chemin du fichier est seulement affiché."),
+    Reglage("hooks", "enabled", "bool", True,
+            "Activer les hooks (commandes lancées après une modification) ; désactive tout sans effacer les réglages."),
+    Reglage("hooks", "timeout", "int", 10,
+            "Secondes accordées à un hook avant de l'interrompre (avertissement, la commande todo n'est pas affectée).", minimum=1),
+    *(Reglage("hooks", f"on_{evt}", "texte", "",
+              f"Commande lancée pour chaque tâche touchée par `{cmd}` (voir README : variables TODO_* et JSON sur l'entrée "
+              "standard ; pas de shell, utiliser `sh -c '…'` pour des variables ou des pipes).")
+      for evt, cmd in (("add", "add"), ("done", "done"), ("undone", "task undone"), ("start", "task start"),
+                       ("unstart", "task unstart"), ("edit", "task edit"), ("postpone", "postpone"),
+                       ("remove", "task remove"), ("move", "task move"))),
+    Reglage("hooks", "on_change", "texte", "",
+            "Commande lancée après toute commande qui modifie quelque chose (en plus du hook propre à la commande) ; "
+            "une seule fois si la commande ne vise aucune tâche (import, undo, archive…)."),
     Reglage("log", "level", "choix", "info",
             "Niveau du journal : off, error, warning, info (actions et erreurs) ou debug (ajoute les lectures).",
             choix=("off", "error", "warning", "info", "debug")),

@@ -26,7 +26,7 @@ from .seed import peupler_fausses_taches
 from .echange import exporter, importer
 from .formats import FORMATS, colonnes_tache, resoudre as resoudre_format
 from .notes import commande_note
-from . import pieces_jointes
+from . import hooks, pieces_jointes
 from .taches import ajouter_tache, annuler_demarrage, demarrer_taches, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
@@ -1365,10 +1365,12 @@ def executer():
         journal.terminer(0)
         sys.exit(0)
     except SystemExit as e:
+        hooks.declencher()
         journal.terminer(e.code if isinstance(e.code, int) else (0 if e.code is None else 1))
         raise
     except Exception:
         journal.critique()
         journal.terminer(1)
         raise
+    hooks.declencher()
     journal.terminer(0)

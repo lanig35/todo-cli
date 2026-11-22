@@ -3,6 +3,16 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.4.0] - 2026-11-22
+
+### Ajouté
+
+- **Hooks** : section `[hooks]` (`on_add`, `on_done`, `on_undone`, `on_start`, `on_unstart`, `on_edit`, `on_postpone`,
+  `on_remove`, `on_move`, `on_change`, `timeout`, `enabled`) ; variables `TODO_HOOKS_*`. La commande est lancée sans shell après
+  toute commande qui a modifié des tâches, une fois par tâche (une seule au-delà de 20). Les données passent par
+  l'environnement (`TODO_EVENT`, `TODO_ID`, `TODO_TITLE`, `TODO_PROJECT`, `TODO_COUNT`, `TODO_IDS`) et par l'entrée standard
+  (la tâche en JSON). Un hook n'influe jamais sur le code de sortie ; ses échecs sont signalés sur stderr et journalisés.
+
 ## [3.3.0] - 2026-11-22
 
 ### Ajouté
@@ -438,6 +448,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.4.0
 [3.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.3.0
 [3.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.2.0
 [3.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.1.0
