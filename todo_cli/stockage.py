@@ -7,7 +7,7 @@ import sys
 from .config import PRIORITES, STATUT_A_FAIRE
 from . import config
 from . import couleurs, journal
-from .dates import _parser_recurrence
+from .dates import _parser_recurrence, lire_instant
 
 
 # Lecture transverse (--all-projects, rappel) : `_lire_taches` / `_lire_archive` rassemblent alors tous les projets
@@ -86,6 +86,8 @@ def _normaliser_tache(brut):
     t['statut'] = t.get('statut') or STATUT_A_FAIRE
     t['date_echeance'] = t.get('date_echeance') or None
     t['date_terminee'] = t.get('date_terminee') or None  # absente des anciennes tâches terminées
+    demarree = t.get('demarree')   # instant de démarrage 'AAAA-MM-JJ HH:MM' (suivi du temps) ; invalide ou absent : jamais démarrée
+    t['demarree'] = demarree[:16] if isinstance(demarree, str) and lire_instant(demarree) else None
     t['tags'] = t.get('tags') or []
     # Récurrence : valeur invalide ou absente => tâche non récurrente
     t['recurrence'] = _parser_recurrence(str(t['recurrence'])) if t.get('recurrence') else None

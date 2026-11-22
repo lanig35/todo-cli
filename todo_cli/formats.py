@@ -26,6 +26,7 @@ CHAMPS_TACHES = {
     'tags': ('TAGS', lambda t, court: ",".join(t['tags'])),
     'title': ('TITRE', lambda t, court: t['titre']),
     'notes': ('NOTES', lambda t, court: len(t.get('notes') or [])),
+    'started': ('DÉMARRÉE', lambda t, court: t.get('demarree') or ""),
     'files': ('FICHIERS', lambda t, court: len(t.get('pieces_jointes') or [])),
     'created': ('CRÉÉE', lambda t, court: (t.get('date_creation') or "")[:10]),
     'done': ('TERMINÉE', lambda t, court: (t.get('date_terminee') or "")[:10]),

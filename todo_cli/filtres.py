@@ -1,6 +1,6 @@
 """Filtres communs à `list` et `archive list` : échéance absente, notes, dates de fin et d'archivage."""
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from .config import STATUT_A_FAIRE
 from .dates import _decaler, _parse_date, _resoudre_date, _sans_accents
 
@@ -31,6 +31,39 @@ def resoudre_date_passee(texte, reference=None):
     return date if date is not None and date <= ref else None
 
 
+_HEURE = re.compile(r"(\d{1,2}):(\d{2})")
+MSG_FORMAT_INSTANT = ("HH:MM (aujourd'hui), ou une date passée suivie de HH:MM : hier 9:15, 2026-11-20 16:00, 2d 10:00 "
+                      "(il y a 2 jours)")
+
+
+def parser_instant(texte, maintenant=None):
+    """Instant saisi par `--at` : `HH:MM` (aujourd'hui), ou une date du passé (formats de --done-after) suivie de `HH:MM`.
+
+    Retourne un datetime (secondes à zéro) ; lève ValueError (message lisible) si le texte est incompris ou si
+    l'instant est dans le futur : on ne peut pas avoir démarré plus tard que maintenant.
+    """
+    maintenant = maintenant or datetime.now()
+    brut = (texte or "").strip()
+    mots = brut.rsplit(None, 1)
+    m = _HEURE.fullmatch(mots[-1]) if mots else None
+    if m is None:
+        raise ValueError(f"instant non reconnu : '{brut}' (formats : {MSG_FORMAT_INSTANT})")
+    heure, minute = int(m.group(1)), int(m.group(2))
+    if heure > 23 or minute > 59:
+        raise ValueError(f"heure invalide : '{mots[-1]}'")
+    jour = maintenant.date()
+    if len(mots) == 2:
+        jour = resoudre_date_passee(mots[0], maintenant.date())
+        if jour is None and _resoudre_date(mots[0], maintenant.date()) is not None:
+            raise ValueError(f"'{mots[0]}' est dans le futur : on ne peut pas avoir démarré plus tard que maintenant")
+        if jour is None:
+            raise ValueError(f"date non reconnue : '{mots[0]}' (formats : {MSG_FORMATS_DATE_PASSEE})")
+    instant = datetime(jour.year, jour.month, jour.day, heure, minute)
+    if instant > maintenant:
+        raise ValueError(f"{instant:%Y-%m-%d %H:%M} est dans le futur : on ne peut pas avoir démarré plus tard que maintenant")
+    return instant
+
+
 def _jour(valeur):
     """Date (sans l'heure) d'un champ 'AAAA-MM-JJ' ou 'AAAA-MM-JJ HH:MM', ou None."""
     return _parse_date((valeur or "")[:10])
@@ -38,7 +71,7 @@ def _jour(valeur):
 
 def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None, archive_apres=None, archive_avant=None,
            anciennete=None, tags=None, un_tag=None, sans_tag=False, pas_tags=None, prios=None, pas_prios=None,
-           recurrente=None, cree_apres=None, cree_avant=None, ids=None, bloquee=None, fichiers=None):
+           recurrente=None, cree_apres=None, cree_avant=None, ids=None, bloquee=None, fichiers=None, demarree=None):
     """Vrai si la tâche satisfait tous les filtres donnés (les filtres absents ne retiennent rien).
 
     sans_echeance : seulement les tâches sans échéance ; notes : True = au moins une note,
@@ -49,7 +82,7 @@ def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None,
     tags ; prios / pas_prios : priorité dans / hors de ces valeurs ; recurrente : True/False ; cree_* : bornes
     incluses sur la date de création ; ids : début de l'identifiant (l'un d'eux suffit) ; bloquee : True =
     à faire et en attente d'une dépendance, False = à faire et prête (voir dependances.annoter) ; fichiers : True = au moins
-    une pièce jointe, False = aucune.
+    une pièce jointe, False = aucune ; demarree : True = démarrée (champ `demarree` renseigné), False = jamais démarrée.
     """
     if tags and not all(x in t['tags'] for x in tags):
         return False
@@ -78,6 +111,8 @@ def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None,
     if notes is not None and bool(t.get('notes')) != notes:
         return False
     if fichiers is not None and bool(t.get('pieces_jointes')) != fichiers:
+        return False
+    if demarree is not None and bool(t.get('demarree')) != demarree:
         return False
     for champ, apres, avant in (("date_terminee", fini_apres, fini_avant), ("date_archivage", archive_apres, archive_avant)):
         if apres is None and avant is None:

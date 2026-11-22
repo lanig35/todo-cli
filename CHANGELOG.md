@@ -3,6 +3,25 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.2.0] - 2026-11-22
+
+### Ajouté
+
+- **Suivi du temps** : champ `demarree` (instant de démarrage, `AAAA-MM-JJ HH:MM`) à côté de la date de complétion.
+  `task start ID… [--at HEURE]` (une ou plusieurs tâches, ou par filtre comme `done`) et `task unstart` ; plusieurs tâches
+  peuvent être en cours en même temps. `--at` rattrape un oubli (`14:30`, `hier 9:15`, `2026-11-20 16:00`), jamais dans le futur.
+- Pas de nouveau statut : « en cours » = démarrée et pas terminée. `task undone` efface le démarrage ; l'occurrence suivante
+  d'une tâche récurrente repart sans démarrage ; démarrer une tâche bloquée donne un avertissement.
+- Filtres `--started` / `--not-started`, colonne `started`, marque `▶ durée` dans `list`, date de démarrage, temps écoulé et délai
+  dans `show` ; `demarree` dans les sorties JSON, `show --format plain`, l'export et l'import.
+- Rapports **`report active`** (tâches en cours et temps écoulé) et **`report cycle`** (délai démarrage → fin : nombre, moyenne,
+  médiane, min, max, par tag ou par priorité, sur une période) en text, table, plain et json.
+- Les notes peuvent porter l'action `start` / `unstart` (`-m`).
+
+### Limite assumée
+
+- Les délais sont **calendaires**, pas un temps de travail effectif.
+
 ## [3.1.0] - 2026-11-22
 
 ### Ajouté
@@ -404,6 +423,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.2.0
 [3.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.1.0
 [3.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.0.0
 [2.20.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.20.0
