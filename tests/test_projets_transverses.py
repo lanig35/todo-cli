@@ -111,7 +111,7 @@ def test_stats_transverses(deux):
     seul = deux("report", "stats", "--format", "json").json()
     tout = deux("report", "stats", "--all-projects", "--format", "json").json()
     assert tout["total"] == seul["total"] + 2
-    avec = deux("stats", "--all-projects", "--with-archive", "--format", "json").json()
+    avec = deux("report", "stats", "--all-projects", "--with-archive", "--format", "json").json()
     assert avec["total"] == tout["total"] + 1
 
 
@@ -155,8 +155,8 @@ def test_rappel_couvre_tous_les_projets_par_defaut(deux):
 
 def test_rappel_malgre_un_projet_courant(deux):
     deux("project", "use", "travail")
-    assert sorted(l[4] for l in plain(deux, "remind") if l[0] == "retard") == ["Perso", "Pro"]
-    assert sorted(l[4] for l in plain(deux, "remind", env={"TODO_PROJECT": "default"}) if l[0] == "retard") == ["Perso", "Pro"]
+    assert sorted(l[4] for l in plain(deux, "reminder", "check") if l[0] == "retard") == ["Perso", "Pro"]
+    assert sorted(l[4] for l in plain(deux, "reminder", "check", env={"TODO_PROJECT": "default"}) if l[0] == "retard") == ["Perso", "Pro"]
 
 
 def test_rappel_restreint_par_project(deux):

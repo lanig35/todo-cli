@@ -6,7 +6,7 @@ import pytest
 def garni(todo):
     todo("add", "Réunion budget", "--literal", "--desc", "Préparer l'ÉTÉ", "--tags", "équipe")
     todo("add", "Courses", "--literal")
-    todo("note", todo.id_de("Courses"), "penser à la réunion de demain")
+    todo("note", "add", todo.id_de("Courses"), "penser à la réunion de demain")
     todo("add", "Garage", "--literal")
     return todo
 
@@ -68,7 +68,7 @@ def test_archive_search_accents_et_champs(garni):
     garni("archive", "add")
     assert titres(garni("archive", "list", "--search", "REUNION", "--format", "json")) == {"Réunion budget", "Courses"}
     assert titres(garni("archive", "list", "--search", "reunion", "--search-in", "notes", "--format", "json")) == {"Courses"}
-    assert titres(garni("archive", "--search", "reunion", "--search-in", "title", "--format", "json")) == {"Réunion budget"}
+    assert titres(garni("archive", "list", "--search", "reunion", "--search-in", "title", "--format", "json")) == {"Réunion budget"}
 
 
 def test_archive_search_in_sans_search(garni):

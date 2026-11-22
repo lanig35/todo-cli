@@ -44,11 +44,11 @@ def test_add(jr):
 def test_pas_de_titre_par_defaut(jr):
     jr("add", "SECRET-TITRE", "--desc", "SECRET-DESC", "--tags", "SECRET-TAG")
     i = court(jr, "SECRET-TITRE")
-    jr("edit", i, "--title", "SECRET-AUTRE")
+    jr("task", "edit", i, "--title", "SECRET-AUTRE")
     jr("done", i)
-    jr("archive")
-    jr("unarchive", i)
-    jr("remove", i)
+    jr("archive", "add")
+    jr("archive", "restore", i)
+    jr("task", "remove", i)
     tout = jr.fichier_log.read_text()
     assert tout and not re.search(r"SECRET", tout)
 
@@ -75,50 +75,50 @@ def test_done_recurrente_et_undone(jr):
     i = court(jr, "R")
     jr("done", i)
     assert jr.derniere().startswith(f"INFO done ids={i}")
-    jr("undone", i)
+    jr("task", "undone", i)
     assert jr.derniere() == f"INFO undone ids={i} exit=0"
 
 
 def test_edit_nomme_les_champs_sans_les_valeurs(jr):
     jr("add", "A")
     i = court(jr, "A")
-    jr("edit", i, "--title", "Nouveau", "--prio", "high", "--tags", "x")
+    jr("task", "edit", i, "--title", "Nouveau", "--prio", "high", "--tags", "x")
     assert jr.derniere() == f"INFO edit ids={i} fields=titre,priorité,tags exit=0"
 
 
 def test_remove_postpone_archive(jr):
     jr.seed(dict(cle="jrnl0001-0", titre="T", echeance=jour(1)), dict(cle="jrnl0002-0", titre="U", statut="TERMINE"))
-    jr("postpone", "jrnl0001")
+    jr("task", "postpone", "jrnl0001")
     assert jr.derniere() == "INFO postpone ids=jrnl0001 total=1 failed=0 exit=0"
-    jr("archive")
+    jr("archive", "add")
     assert jr.derniere() == "INFO archive ids=jrnl0002 total=1 failed=0 exit=0".replace(" total=1 failed=0", "")
-    jr("unarchive", "jrnl0002")
+    jr("archive", "restore", "jrnl0002")
     assert jr.derniere() == "INFO unarchive ids=jrnl0002 total=1 failed=0 exit=0"
-    jr("remove", "jrnl0001")
+    jr("task", "remove", "jrnl0001")
     assert jr.derniere() == "INFO remove ids=jrnl0001 total=1 failed=0 exit=0"
 
 
 def test_purge_reset_restore_undo(jr):
     jr("add", "A"); jr("add", "B")
     jr("done", court(jr, "A"))
-    jr("archive")
-    jr("archive", "--purge", "-y")
+    jr("archive", "add")
+    jr("archive", "purge", "-y")
     assert re.fullmatch(r"INFO archive ids=\S+ purged=1 exit=0", jr.derniere())
     jr("done", court(jr, "B"))
     jr("add", "C")
-    jr("remove", court(jr, "C"))
-    jr("restore", "2", "-y")
+    jr("task", "remove", court(jr, "C"))
+    jr("admin", "restore", "2", "-y")
     assert re.fullmatch(r"INFO restore backup=\d{8}_\d{6}_\d+ exit=0", jr.derniere())
     jr("undo")
     assert re.fullmatch(r"INFO undo backup=\d{8}_\d{6}_\d+ exit=0", jr.derniere())
-    jr("reset", entree="y\n")
+    jr("admin", "reset", entree="y\n")
     assert jr.derniere() == "INFO reset exit=0"
 
 
 def test_reset_annule_ne_journalise_pas(jr):
     jr("add", "A")
     avant = jr.lignes()
-    jr("reset", entree="n\n")
+    jr("admin", "reset", entree="n\n")
     assert jr.lignes() == avant
 
 
@@ -126,15 +126,15 @@ def test_config_init_et_remind(jr, tmp_path):
     cible = tmp_path / "c" / "config.ini"
     jr("config", "init", env={"TODO_CONFIG": str(cible)})
     assert jr.derniere() == f"INFO config file={cible} exit=0"
-    jr("remind", "--disable")
+    jr("reminder", "disable")
     assert jr.derniere() == "INFO remind state=disabled exit=0"
-    jr("remind", "--enable")
+    jr("reminder", "enable")
     assert jr.derniere() == "INFO remind state=enabled exit=0"
 
 
 def test_seed_resume_les_identifiants(jr):
     pytest.importorskip("faker")
-    jr("seed", "30")
+    jr("admin", "seed", "30")
     [ligne] = jr.lignes()
     assert "count=30" in ligne and ligne.count(",") == 19           # 20 identifiants au plus, le total est donné
 
@@ -144,8 +144,8 @@ def test_lectures_silencieuses(jr):
     jr("done", "zzzz")
     avant = jr.lignes()
     i = court(jr, "A")
-    for cmd in (["list"], ["show", i], ["stats"], ["agenda"], ["next"], ["remind"], ["archive", "--list"], ["config", "show"],
-                ["restore"], ["config", "path"]):
+    for cmd in (["list"], ["show", i], ["report", "stats"], ["agenda"], ["next"], ["reminder", "check"], ["archive", "list"],
+                ["config", "show"], ["admin", "restore"], ["config", "path"]):
         assert jr(*cmd).code == 0
     assert jr.lignes() == avant
 
@@ -154,7 +154,7 @@ def test_lectures_silencieuses(jr):
 def test_niveau_debug_ajoute_les_lectures(jr):
     jr("list", "--log-level", "debug")
     assert jr.derniere() == "DEBUG list exit=0"
-    jr("--log-level", "debug", "remind")
+    jr("--log-level", "debug", "reminder", "check")
     assert jr.derniere() == "DEBUG remind exit=0"
 
 
@@ -188,9 +188,9 @@ def test_precedence_du_niveau(jr):
     (["add", "X", "--repeat", "foo"], "invalid_repeat"),
     (["list", "--due-before", "blabla"], "invalid_date"),
     (["done", "zzzz"], "unknown_id"),
-    (["restore", "99", "-y"], "invalid_backup_number"),
-    (["archive", "abcd", "--older-than", "1d"], "invalid_combination"),
-    (["archive", "--older-than", "xyz"], "invalid_duration"),
+    (["admin", "restore", "99", "-y"], "invalid_backup_number"),
+    (["archive", "add", "abcd", "--older-than", "1d"], "invalid_combination"),
+    (["archive", "add", "--older-than", "xyz"], "invalid_duration"),
     (["agenda", "--days", "400"], "days_limit"),
 ])
 def test_refus(jr, args, raison):
@@ -240,7 +240,7 @@ def test_sortie_en_erreur_sans_detail(jr):
 
 def test_exception_inattendue(jr, tmp_path):
     code = ("import sys\nsys.path.insert(0, sys.argv[1])\nfrom todo_cli import cli\n"
-            "cli.purger_archive = lambda *a, **k: 1 / 0\nsys.argv = ['todo', 'archive', '--purge', '-y']\ncli.executer()\n")
+            "cli.purger_archive = lambda *a, **k: 1 / 0\nsys.argv = ['todo', 'archive', 'purge', '-y']\ncli.executer()\n")
     p = subprocess.run([sys.executable, "-B", "-c", code, str(RACINE)], capture_output=True, text=True, cwd=tmp_path,
                        env={**jr.env, **FICHIER})
     assert p.returncode == 1 and "ZeroDivisionError" in p.stderr               # la trace reste visible sur stderr

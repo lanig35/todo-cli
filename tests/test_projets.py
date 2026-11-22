@@ -200,11 +200,11 @@ def test_les_dependances_ne_traversent_pas_les_projets(pro):
 
 
 def test_export_et_import_visent_le_projet_choisi(pro, tmp_path):
-    sortie = pro("export", "-p", "travail")
+    sortie = pro("data", "export", "-p", "travail")
     assert sortie.code == 0 and "Pro" in sortie.out and "Perso" not in sortie.out
     fichier = tmp_path / "perso.json"
-    fichier.write_text(pro("export").out, encoding="utf-8")
-    assert pro("import", str(fichier), "-p", "travail").code == 0
+    fichier.write_text(pro("data", "export").out, encoding="utf-8")
+    assert pro("data", "import", str(fichier), "-p", "travail").code == 0
     assert sorted(titres(pro, "-p", "travail")) == ["Perso", "Pro"] and titres(pro) == ["Perso"]
 
 

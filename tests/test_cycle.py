@@ -23,7 +23,7 @@ def test_undone(todo):
     todo("add", "A")
     i = todo.id_de("A")
     todo("done", i)
-    r = todo("undone", i)
+    r = todo("task", "undone", i)
     assert r.code == 0 and "rouverte" in r.texte
     t = todo.une("A")
     assert t["statut"] == "A FAIRE" and t["date_terminee"] is None
@@ -50,7 +50,7 @@ def test_show(todo):
 def test_edit(todo):
     todo("add", "Ancien", "--due", jour(3), "--tags", "a", "--desc", "d")
     i = todo.id_de("Ancien")
-    r = todo("edit", i, "--title", "Nouveau", "--prio", "low", "--due", "demain", "--tags", "b,c", "--desc", "e")
+    r = todo("task", "edit", i, "--title", "Nouveau", "--prio", "low", "--due", "demain", "--tags", "b,c", "--desc", "e")
     assert r.code == 0 and "modifiée" in r.texte
     t = todo.une("Nouveau")
     assert (t["priorite"], t["date_echeance"], t["tags"], t["description"]) == ("low", jour(1), ["b", "c"], "e")
@@ -58,37 +58,37 @@ def test_edit(todo):
 
 def test_edit_efface_les_champs(todo):
     todo("add", "T", "--due", jour(3), "--tags", "a", "--desc", "d", "--repeat", "weekly")
-    todo("edit", todo.id_de("T"), "--due", "none", "--tags", "", "--desc", "", "--repeat", "none")
+    todo("task", "edit", todo.id_de("T"), "--due", "none", "--tags", "", "--desc", "", "--repeat", "none")
     t = todo.une("T")
     assert (t["date_echeance"], t["tags"], t["description"], t["recurrence"]) == (None, [], "", None)
 
 
 def test_edit_sans_option(todo):
     todo("add", "T")
-    r = todo("edit", todo.id_de("T"))
+    r = todo("task", "edit", todo.id_de("T"))
     assert "modifiée" not in r.texte
 
 
 def test_edit_valeurs_invalides_ne_modifient_rien(todo):
     todo("add", "T", "--due", jour(3))
     i = todo.id_de("T")
-    assert todo("edit", i, "--due", "blabla").code == 1
-    assert todo("edit", i, "--title", " ").code == 1
+    assert todo("task", "edit", i, "--due", "blabla").code == 1
+    assert todo("task", "edit", i, "--title", " ").code == 1
     assert todo.echeance("T") == jour(3) and todo.une("T")["titre"] == "T"
 
 
 def test_remove(todo):
     todo("add", "A")
-    r = todo("remove", todo.id_de("A"))
+    r = todo("task", "remove", todo.id_de("A"))
     assert r.code == 0 and "supprimée" in r.texte
     assert todo.taches() == {}
 
 
 def test_reset_demande_confirmation(todo):
     todo("add", "A")
-    assert "annulée" in todo("reset", entree="n\n").texte
+    assert "annulée" in todo("admin", "reset", entree="n\n").texte
     assert len(todo.taches()) == 1
-    todo("reset", entree="y\n")
+    todo("admin", "reset", entree="y\n")
     assert todo.taches() == {}
 
 
@@ -115,7 +115,7 @@ def test_remove_plusieurs_avec_doublon(todo):
     for n in "ABC":
         todo("add", n)
     a = todo.id_de("A")
-    r = todo("remove", a, a[:6], todo.id_de("B"))
+    r = todo("task", "remove", a, a[:6], todo.id_de("B"))
     assert r.code == 0
     assert [t["titre"] for t in todo.taches().values()] == ["C"]
 
@@ -129,7 +129,7 @@ def test_doublon_ne_cree_qu_une_occurrence(todo):
 
 def test_lot_ambigu_ne_modifie_rien_pour_cet_id(todo):
     todo.seed(dict(cle="abcd1111-0", titre="A"), dict(cle="abcd2222-0", titre="B"), dict(cle="ffff0000-0", titre="C"))
-    r = todo("remove", "abcd", "ffff")
+    r = todo("task", "remove", "abcd", "ffff")
     assert r.code == 1
     assert {t["titre"] for t in todo.taches().values()} == {"A", "B"}
 
@@ -182,7 +182,7 @@ def test_undone_supprime_l_occurrence_creee(todo):
     todo("add", "R", "--repeat", "daily")
     todo("done", todo.id_de("R"))
     assert len(todo.taches()) == 2
-    todo("undone", todo.id_de("R", "TERMINE"))
+    todo("task", "undone", todo.id_de("R", "TERMINE"))
     taches = list(todo.taches().values())
     assert len(taches) == 1 and taches[0]["statut"] == "A FAIRE"
 
@@ -193,7 +193,7 @@ def test_undone_refuse_si_la_suivante_est_terminee(todo):
     suivante = todo.une("R", "A FAIRE")["id"][:8]
     todo("done", suivante)
     nb = len(todo.taches())
-    r = todo("undone", "rrrr0001")
+    r = todo("task", "undone", "rrrr0001")
     assert len(todo.taches()) == nb
     assert todo.taches()["rrrr0001-0"]["statut"] == "TERMINE"
     assert "rouverte" not in r.texte
@@ -202,5 +202,5 @@ def test_undone_refuse_si_la_suivante_est_terminee(todo):
 def test_remove_n_arrete_pas_la_serie(todo):
     todo("add", "R", "--repeat", "daily")
     todo("done", todo.id_de("R"))
-    todo("remove", todo.id_de("R", "A FAIRE"))
+    todo("task", "remove", todo.id_de("R", "A FAIRE"))
     assert todo.par_titre("R", "A FAIRE") == []

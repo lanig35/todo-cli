@@ -3,6 +3,43 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.0.0] - 2026-11-21
+
+Version majeure : seule la suppression de la syntaxe 1.x, annoncée depuis la 2.0, est incompatible. Les projets
+(2.18 à 2.20), les actions en lot (2.16) et les rapports (2.17) sont arrivés en 2.x ; les données, les sorties
+(`--format json`, `plain`), les codes de sortie, les réglages et le vocabulaire du journal ne changent pas.
+
+### Supprimé
+
+- **Syntaxe 1.x** : les commandes plates `edit`, `undone`, `remove`, `postpone`, `note ID…`, `archive` (avec ou sans
+  options), `unarchive`, `remind`, `stats`, `reset`, `restore`, `seed`, `export` et `import` ne s'exécutent plus. Elles
+  s'arrêtent avec le code 2 et un message qui indique la commande actuelle, sans rien modifier ni lire.
+- Variable `TODO_NO_DEPRECATION` : il n'y a plus d'avertissement de dépréciation à masquer (elle est ignorée).
+
+### Migration depuis la 2.x
+
+| Supprimé en 3.0 | À utiliser |
+|---|---|
+| `todo edit`, `undone`, `remove`, `postpone` | `todo task edit`, `task undone`, `task remove`, `task postpone` |
+| `todo note ID texte` / `todo note ID` | `todo note add ID texte` / `todo note list ID` |
+| `todo note ID --edit N texte` / `--delete N` | `todo note edit ID N texte` / `todo note delete ID N` |
+| `todo archive` / `archive --list` / `archive --search X` | `todo archive add` / `archive list` / `archive list --search X` |
+| `todo archive --purge` | `todo archive purge` |
+| `todo unarchive` | `todo archive restore` |
+| `todo remind` | `todo reminder check` |
+| `todo remind --enable` / `--disable` / `--status` | `todo reminder enable` / `disable` / `status` |
+| `todo stats` | `todo report stats` |
+| `todo reset`, `restore`, `seed` | `todo admin reset`, `admin restore`, `admin seed` |
+| `todo export`, `import` | `todo data export`, `data import` |
+
+Inchangés : `add`, `list`, `show`, `done`, `next`, `agenda`, `undo` (raccourcis) et `config`. À vérifier dans vos
+crontabs, `~/.bashrc`, alias et scripts, par exemple : `grep -nE 'todo +(edit|undone|remove|postpone|stats|reset|restore|seed|export|import|unarchive|remind|archive|note)' ~/.bashrc ~/bin/*`.
+
+### Modifié
+
+- Retrait du parseur de la syntaxe 1.x et de ses avertissements (code plus simple, `todo --help` et la complétion
+  ne décrivent plus que les groupes).
+
 ## [2.20.0] - 2026-11-21
 
 ### Ajouté
@@ -347,6 +384,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.0.0
 [2.20.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.20.0
 [2.19.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.19.0
 [2.18.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.18.0

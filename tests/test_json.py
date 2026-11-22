@@ -20,7 +20,7 @@ def taches(todo):
 
 
 def test_remind_json_structure(taches):
-    r = taches("remind", "--format", "json")
+    r = taches("reminder", "check", "--format", "json")
     assert r.code == 0
     d = r.json()
     assert d["actif"] is True and d["desactive_par"] == []
@@ -32,47 +32,47 @@ def test_remind_json_structure(taches):
 
 
 def test_remind_json_soon(taches):
-    d = taches("remind", "--format", "json", "--soon", "3").json()
+    d = taches("reminder", "check", "--format", "json", "--soon", "3").json()
     assert d["bientot_jours"] == 3
     assert [t["titre"] for t in d["a_venir"]] == ["bientot"]
 
 
 def test_remind_json_sans_limite(todo):
     todo.seed(*[{"cle": f"{i:08d}", "titre": f"t{i}", "echeance": jour(-1)} for i in range(8)])
-    d = todo("remind", "--format", "json", "--limit", "2").json()
+    d = todo("reminder", "check", "--format", "json", "--limit", "2").json()
     assert d["compteurs"]["retards"] == 8 and len(d["retards"]) == 8
 
 
 def test_remind_json_toujours_un_document(todo):
-    d = todo("remind", "--format", "json").json()
+    d = todo("reminder", "check", "--format", "json").json()
     assert d["compteurs"]["total"] == 0 and d["retards"] == []
-    assert todo("remind").out == ""  # le texte reste muet
+    assert todo("reminder", "check").out == ""  # le texte reste muet
 
 
 def test_remind_json_desactive(taches):
-    taches("remind", "--disable")
-    d = taches("remind", "--format", "json").json()
+    taches("reminder", "disable")
+    d = taches("reminder", "check", "--format", "json").json()
     assert d["actif"] is False and d["compteurs"]["total"] == 0
     assert d["desactive_par"] == ["commande remind --disable"]
 
 
 def test_remind_json_desactive_par_variable(taches):
-    d = taches("remind", "--format", "json", env={"TODO_NO_REMIND": "1"}).json()
+    d = taches("reminder", "check", "--format", "json", env={"TODO_NO_REMIND": "1"}).json()
     assert d["actif"] is False and d["compteurs"]["total"] == 0
 
 
 def test_remind_etat_json(todo):
-    assert todo("remind", "--status", "--format", "json").json()["actif"] is True
-    d = todo("remind", "--disable", "--format", "json").json()
+    assert todo("reminder", "status", "--format", "json").json()["actif"] is True
+    d = todo("reminder", "disable", "--format", "json").json()
     assert d["actif"] is False and d["desactive_par"]
-    assert todo("remind", "--status", "--format", "json").json()["actif"] is False
-    d = todo("remind", "--enable", "--format", "json").json()
+    assert todo("reminder", "status", "--format", "json").json()["actif"] is False
+    d = todo("reminder", "enable", "--format", "json").json()
     assert d["actif"] is True and d["desactive_par"] == []
 
 
 @pytest.mark.parametrize("option", ["--once-a-day", "--write-status"])
 def test_remind_json_incompatible_options(todo, option):
-    r = todo("remind", "--format", "json", option)
+    r = todo("reminder", "check", "--format", "json", option)
     assert r.code == 1 and "{" not in r.out
     assert "--format json" in r.texte
 
@@ -121,7 +121,7 @@ def test_config_show_json_inchange(todo):
 
 @pytest.mark.skipif(not shutil.which("jq"), reason="jq absent")
 def test_jq_consomme_les_sorties(taches):
-    sortie = taches("remind", "--format", "json", "--soon", "3").out
+    sortie = taches("reminder", "check", "--format", "json", "--soon", "3").out
     r = subprocess.run(["jq", "-r", ".retards[].titre"], input=sortie, capture_output=True, text=True)
     assert r.returncode == 0 and r.stdout.split() == ["retard"]
     sortie = taches("config", "path", "--format", "json").out
