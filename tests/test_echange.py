@@ -19,9 +19,9 @@ def source(todo):
         {"cle": "bbbbbbbb-2", "titre": "Beta", "creation": "2026-01-02 10:00"},
         {"cle": "cccccccc-3", "titre": "Gamma", "statut": "TERMINE", "terminee": "2026-02-01 09:00", "creation": "2026-01-03 10:00"},
     )
-    todo("note", "aaaaaaaa", "une note")
+    todo("note", "add", "aaaaaaaa", "une note")
     todo("done", "cccccccc")
-    todo("archive")
+    todo("archive", "add")
     return todo
 
 
@@ -32,7 +32,7 @@ def destination(tmp_path):
 
 
 def export(todo, *args):
-    return todo("export", *args)
+    return todo("data", "export", *args)
 
 
 # ------------------------------------------------------------------ export
@@ -98,28 +98,28 @@ def test_export_tiret_est_la_sortie_standard(source):
 def test_aller_retour_complet(source, destination, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    r = destination("import", str(cible))
+    r = destination("data", "import", str(cible))
     assert r.code == 0 and "3 ajoutée(s)" in r.sortie
     assert destination.taches() == source.taches()
-    assert destination("archive", "--list", "--format", "json").json() == source("archive", "--list", "--format", "json").json()
+    assert destination("archive", "list", "--format", "json").json() == source("archive", "list", "--format", "json").json()
 
 
 def test_reexport_identique(source, destination, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    destination("import", str(cible))
+    destination("data", "import", str(cible))
     a, b = export(source).json(), export(destination).json()
     a.pop("exporte_le"), b.pop("exporte_le")
     assert a == b
 
 
 def test_import_depuis_l_entree_standard(source, destination):
-    r = destination("import", "-", entree=export(source).out)
+    r = destination("data", "import", "-", entree=export(source).out)
     assert r.code == 0 and len(destination.taches()) == 2
 
 
 def test_import_sortie_de_list_json(source, destination):
-    r = destination("import", "-", entree=source("list", "--format", "json").out)
+    r = destination("data", "import", "-", entree=source("list", "--format", "json").out)
     assert r.code == 0 and "2 ajoutée(s)" in r.sortie
     assert {t["titre"] for t in destination.taches().values()} == {"Alpha", "Beta"}
 
@@ -128,8 +128,8 @@ def test_import_sortie_de_list_json(source, destination):
 def test_import_ignore_les_identifiants_existants(source, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    source("edit", "aaaaaaaa", "--title", "Modifié localement")
-    r = source("import", str(cible))
+    source("task", "edit", "aaaaaaaa", "--title", "Modifié localement")
+    r = source("data", "import", str(cible))
     assert r.code == 0 and "0 ajoutée(s)" in r.sortie and "3 ignorée(s)" in r.sortie
     assert source.une("Modifié localement")
 
@@ -137,8 +137,8 @@ def test_import_ignore_les_identifiants_existants(source, tmp_path):
 def test_import_update_remplace_par_la_version_du_fichier(source, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    source("edit", "aaaaaaaa", "--title", "Modifié localement")
-    r = source("import", str(cible), "--update")
+    source("task", "edit", "aaaaaaaa", "--title", "Modifié localement")
+    r = source("data", "import", str(cible), "--update")
     assert r.code == 0 and "3 mise(s) à jour" in r.sortie
     assert source.une("Alpha") and not source.par_titre("Modifié localement")
 
@@ -146,25 +146,25 @@ def test_import_update_remplace_par_la_version_du_fichier(source, tmp_path):
 def test_import_update_deplace_entre_liste_et_archive(source, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    source("unarchive", "cccccccc")               # Gamma revient dans la liste ; le fichier la veut archivée
-    source("import", str(cible), "--update")
+    source("archive", "restore", "cccccccc")               # Gamma revient dans la liste ; le fichier la veut archivée
+    source("data", "import", str(cible), "--update")
     assert not source.par_titre("Gamma")
-    assert [t["titre"] for t in source("archive", "--list", "--format", "json").json()] == ["Gamma"]
+    assert [t["titre"] for t in source("archive", "list", "--format", "json").json()] == ["Gamma"]
 
 
 def test_import_ne_cree_pas_de_doublon_liste_archive(source, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    source("unarchive", "cccccccc")
-    source("import", str(cible))                   # Gamma existe (dans la liste) : ignorée, pas dupliquée
-    assert source("archive", "--list", "--format", "json").json() == []
+    source("archive", "restore", "cccccccc")
+    source("data", "import", str(cible))                   # Gamma existe (dans la liste) : ignorée, pas dupliquée
+    assert source("archive", "list", "--format", "json").json() == []
 
 
 def test_import_replace(source, destination, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
     destination("add", "À écraser")
-    r = destination("import", str(cible), "--replace", "-y")
+    r = destination("data", "import", str(cible), "--replace", "-y")
     assert r.code == 0 and "supprimée(s) avant import" in r.sortie
     assert not destination.par_titre("À écraser") and len(destination.taches()) == 2
 
@@ -173,34 +173,34 @@ def test_import_replace_demande_confirmation(source, destination, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
     destination("add", "Garder")
-    r = destination("import", str(cible), "--replace", entree="n\n")
+    r = destination("data", "import", str(cible), "--replace", entree="n\n")
     assert "annulée" in r.sortie and destination.par_titre("Garder")
-    r = destination("import", str(cible), "--replace", entree="y\n")
+    r = destination("data", "import", str(cible), "--replace", entree="y\n")
     assert not destination.par_titre("Garder") and len(destination.taches()) == 2
 
 
 def test_import_replace_avec_stdin_exige_y(source, destination):
-    r = destination("import", "-", "--replace", entree=export(source).out)
+    r = destination("data", "import", "-", "--replace", entree=export(source).out)
     assert r.code == 1 and "-y" in r.texte
 
 
 def test_update_et_replace_exclusifs(source, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    assert source("import", str(cible), "--update", "--replace").code != 0
+    assert source("data", "import", str(cible), "--update", "--replace").code != 0
 
 
 def test_import_dry_run(source, destination, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
-    r = destination("import", str(cible), "--dry-run")
+    r = destination("data", "import", str(cible), "--dry-run")
     assert r.code == 0 and "Simulation" in r.sortie and "3 ajoutée(s)" in r.sortie
     assert destination.taches() == {} and destination.sauvegardes() == []
 
 
 # ------------------------------------------------------------------ validation
 def test_import_fichier_inexistant(todo, tmp_path):
-    r = todo("import", str(tmp_path / "absent.json"))
+    r = todo("data", "import", str(tmp_path / "absent.json"))
     assert r.code == 1 and "Impossible de lire" in r.texte
 
 
@@ -215,7 +215,7 @@ def test_import_fichier_inexistant(todo, tmp_path):
 def test_import_fichier_inutilisable(todo, tmp_path, contenu, attendu):
     cible = tmp_path / "x.json"
     cible.write_text(contenu, encoding="utf-8")
-    r = todo("import", str(cible))
+    r = todo("data", "import", str(cible))
     assert r.code == 1 and attendu in r.texte and todo.taches() == {}
 
 
@@ -234,7 +234,7 @@ def test_import_fichier_inutilisable(todo, tmp_path, contenu, attendu):
 def test_import_entree_invalide(todo, tmp_path, entree, raison):
     cible = tmp_path / "x.json"
     cible.write_text(json.dumps([{"titre": "bonne"}, entree]), encoding="utf-8")
-    r = todo("import", str(cible))
+    r = todo("data", "import", str(cible))
     assert r.code == 1 and raison in r.texte and "taches[1]" in r.texte
     assert "1 ajoutée(s)" in r.sortie and "1 invalide(s)" in r.sortie
     assert [t["titre"] for t in todo.taches().values()] == ["bonne"]     # les entrées valides passent quand même
@@ -242,31 +242,31 @@ def test_import_entree_invalide(todo, tmp_path, entree, raison):
 
 def test_import_identifiant_en_double_dans_le_fichier(todo):
     entree = json.dumps([{"id": "zz", "titre": "a"}, {"id": "zz", "titre": "b"}])
-    r = todo("import", "-", entree=entree)
+    r = todo("data", "import", "-", entree=entree)
     assert r.code == 1 and "double" in r.texte and [t["titre"] for t in todo.taches().values()] == ["a"]
 
 
 def test_import_sans_identifiant_en_genere_un(todo):
-    todo("import", "-", entree=json.dumps([{"titre": "a"}, {"titre": "a"}]))
+    todo("data", "import", "-", entree=json.dumps([{"titre": "a"}, {"titre": "a"}]))
     assert len(todo.par_titre("a")) == 2
 
 
 def test_import_valeurs_par_defaut_et_normalisation(todo):
-    todo("import", "-", entree=json.dumps([{"titre": " Sobre ", "priorite": "HIGH", "tags": [" A ", ""], "recurrence": "weekly"}]))
+    todo("data", "import", "-", entree=json.dumps([{"titre": " Sobre ", "priorite": "HIGH", "tags": [" A ", ""], "recurrence": "weekly"}]))
     t = todo.une("Sobre")
     assert t["priorite"] == "high" and t["tags"] == ["a"] and t["recurrence"] == "1w"
     assert t["statut"] == "A FAIRE" and t["notes"] == [] and t["date_creation"]
 
 
 def test_import_notes_invalides_ignorees(todo):
-    todo("import", "-", entree=json.dumps([{"titre": "t", "notes": ["x", {"texte": ""}, {"texte": "ok", "date": "2026-01-01 10:00"}]}]))
+    todo("data", "import", "-", entree=json.dumps([{"titre": "t", "notes": ["x", {"texte": ""}, {"texte": "ok", "date": "2026-01-01 10:00"}]}]))
     assert [n["texte"] for n in todo.une("t")["notes"]] == ["ok"]
 
 
 def test_import_bilan_json(source, destination):
-    d = destination("import", "-", "--format", "json", entree=export(source).out).json()
+    d = destination("data", "import", "-", "--format", "json", entree=export(source).out).json()
     assert d["ajoutees"] == 3 and d["ignorees"] == 0 and d["invalides"] == [] and d["simulation"] is False
-    d = destination("import", "-", "--format", "json", entree=json.dumps([{"titre": ""}])).json()
+    d = destination("data", "import", "-", "--format", "json", entree=json.dumps([{"titre": ""}])).json()
     assert d["invalides"][0]["position"] == "taches[0]"
 
 
@@ -274,7 +274,7 @@ def test_import_bilan_json(source, destination):
 def test_import_cree_une_sauvegarde_et_undo_l_annule(source, destination):
     destination("add", "Existante")
     avant = len(destination.sauvegardes())
-    destination("import", "-", entree=export(source).out)
+    destination("data", "import", "-", entree=export(source).out)
     assert len(destination.sauvegardes()) == avant + 1 and len(destination.taches()) == 3
     destination("undo")
     assert [t["titre"] for t in destination.taches().values()] == ["Existante"]
@@ -284,15 +284,15 @@ def test_import_sans_changement_ne_sauvegarde_pas(source, tmp_path):
     cible = tmp_path / "x.json"
     export(source, str(cible))
     avant = source.sauvegardes()
-    source("import", str(cible))
+    source("data", "import", str(cible))
     assert source.sauvegardes() == avant
 
 
 def test_import_au_journal_et_export_en_lecture_seule(source, destination, tmp_path):
     cible = tmp_path / "x.json"
-    source("export", str(cible), env=JOURNAL)
+    source("data", "export", str(cible), env=JOURNAL)
     assert source.journal() == []                    # l'export ne modifie rien : rien à tracer en INFO
-    destination("import", str(cible), env=JOURNAL)
+    destination("data", "import", str(cible), env=JOURNAL)
     ligne = next(l for l in destination.journal() if l.startswith("INFO import"))
     assert "imported=3" in ligne and "Alpha" not in ligne
 

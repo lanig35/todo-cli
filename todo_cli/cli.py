@@ -187,14 +187,13 @@ def _filtres_communs(args, archive=False, sans_prio=False):
     return {k: v for k, v in f.items() if v is not None}
 
 
-def _args_archive_filtres(p, ancien=False):
-    """Filtres, tri et tranche de `archive list` (et de `archive --list`)."""
+def _args_archive_filtres(p):
+    """Filtres, tri et tranche de `archive list`."""
     _args_filtres_selection(p)
     _args_filtres_notes(p)
     _args_filtres_fin(p, archive=True)
-    if not ancien:
-        p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
-                       help="Seulement les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)")
+    p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+                   help="Seulement les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)")
     p.add_argument('--sort', choices=['done', 'archived', 'alpha', 'priority'], default=None,
                    help="Critère de tri : done (défaut, la plus récemment terminée d'abord), archived, alpha, priority")
     p.add_argument('--limit', type=_entier_positif, default=None, metavar='N', help="N'afficher que N tâches (après filtres et tri)")
@@ -559,23 +558,6 @@ def _args_remind(p):
                                     "sans limite de tâches ; avec --enable, --disable ou --status, il décrit l'état des rappels")
 
 
-def _args_archive(p):
-    p.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
-    p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
-                                help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
-    p.add_argument('--purge', action='store_true',
-                                help="Supprime DÉFINITIVEMENT des tâches de l'archive (identifiants, ou --older-than, ou toute l'archive) ; "
-                                     "confirmation demandée, annulable avec undo")
-    p.add_argument('-y', '--yes', action='store_true', help="Avec --purge : ne pas demander de confirmation")
-    p.add_argument('--list', dest='lister', action='store_true', help="Affiche l'archive au lieu d'archiver")
-    p.add_argument('--search', type=str, default=None, help="Recherche dans l'archive (titre, description, tags, notes), sans accents ni casse ; implique --list")
-    p.add_argument('--search-in', type=_champs_recherche, default=None, metavar='CHAMPS', help=_AIDE_SEARCH_IN)
-    p.add_argument('--pager', action=argparse.BooleanOptionalAction, default=None,
-                                help="Utilise (--pager) ou non (--no-pager) un pager (less) quand l'affichage dépasse l'écran. Réglage : [general] pager")
-    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie de --list")
-    _args_archive_filtres(p, ancien=True)   # filtres de --list (--older-than existe déjà ci-dessus)
-
-
 def _args_unarchive(p):
     p.add_argument('ids', nargs='+', help="Identifiants (ou préfixes) des tâches archivées à récupérer")
 
@@ -686,6 +668,7 @@ def _args_projet_supprimer(p):
 def _args_note_ajouter(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
     p.add_argument('texte', nargs='+', help="Texte de la note (500 caractères au plus)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 def _args_note_lister(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
@@ -695,10 +678,12 @@ def _args_note_modifier(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
     p.add_argument('edit', type=int, metavar='N', help="Numéro de la note (voir `todo note list ID`)")
     p.add_argument('texte', nargs='+', help="Nouveau texte (la date de la note est conservée)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 def _args_note_supprimer(p):
     p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
     p.add_argument('delete', type=int, metavar='N', help="Numéro de la note à supprimer (numérotées de 1, la plus ancienne)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 def _args_archive_ajouter(p):
     p.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
@@ -723,15 +708,6 @@ def _args_archive_purger(p):
     p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation")
 
 def _args_format(p):
-    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
-
-
-def _args_note_ancien(p):
-    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
-    p.add_argument('texte', nargs='*', help="Texte de la note (500 caractères au plus) ; sans texte : liste les notes de la tâche")
-    groupe_note = p.add_mutually_exclusive_group()
-    groupe_note.add_argument('--edit', type=int, metavar='N', help="Remplace le texte de la note n°N (la date est conservée) ; le nouveau texte suit l'identifiant")
-    groupe_note.add_argument('--delete', type=int, metavar='N', help="Supprime la note n°N (numérotées de 1, la plus ancienne, dans `todo note list ID`)")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 
@@ -804,13 +780,6 @@ _GROUPES = [
 # Raccourcis de premier niveau (même syntaxe que dans le groupe) : nom -> (groupe, verbe)
 _RACCOURCIS = {'add': 'task', 'list': 'task', 'show': 'task', 'done': 'task', 'next': 'task',
                'agenda': 'report', 'undo': 'admin'}
-# Anciennes commandes (syntaxe 1.x, dépréciées) : nom -> constructeur d'arguments
-_ANCIENNES = {
-    'edit': _args_edit, 'undone': _args_undone, 'remove': _args_remove, 'postpone': _args_postpone,
-    'note': _args_note_ancien, 'archive': _args_archive, 'unarchive': _args_unarchive, 'remind': _args_remind,
-    'stats': _args_stats, 'reset': _args_reset, 'restore': _args_restore, 'seed': _args_seed,
-    'export': _args_export, 'import': _args_import,
-}
 _VERBES = {g: {v[0] for v in verbes} for g, _, verbes in _GROUPES}
 _OPTIONS_A_VALEUR = {'--color', '--log-level', '--config', '--project', '-p'}
 
@@ -828,23 +797,40 @@ def _mots(argv):
     return mots
 
 
-def _syntaxe_ancienne(mots):
-    """Vrai si la ligne de commande utilise la syntaxe 1.x (plate) plutôt que les groupes."""
+# Commandes de la syntaxe 1.x, supprimées en 3.0 : nom -> ce qui les remplace (pour le message d'erreur)
+_SUPPRIMEES = {
+    'edit': 'task edit', 'undone': 'task undone', 'remove': 'task remove', 'postpone': 'task postpone',
+    'note': 'note add|list|edit|delete',
+    'archive': 'archive add|list|purge', 'unarchive': 'archive restore',
+    'remind': 'reminder check|enable|disable|status',
+    'stats': 'report stats', 'reset': 'admin reset', 'restore': 'admin restore', 'seed': 'admin seed',
+    'export': 'data export', 'import': 'data import',
+}
+
+
+def _syntaxe_supprimee(mots):
+    """Vrai si la ligne de commande utilise la syntaxe 1.x (plate), supprimée en 3.0, plutôt que les groupes."""
     if not mots:
         return False
     if mots[0] == 'archive':
         return len(mots) == 1 or mots[1] not in _VERBES['archive']
     if mots[0] == 'note':
         return len(mots) > 1 and mots[1] not in _VERBES['note']
-    return mots[0] in _ANCIENNES
+    return mots[0] in _SUPPRIMEES
 
 
-def _commande_visee(mots, ancien):
+def _refuser_syntaxe_supprimee(nom):
+    """Erreur d'usage (code 2) qui indique la commande actuelle équivalente ; rien n'est exécuté."""
+    journal.echec("removed_command", command=nom)
+    print(f"todo : la commande `todo {nom}` a été supprimée en 3.0 : utilisez `todo {_SUPPRIMEES[nom]}` "
+          f"(table de correspondance : « Migration depuis la 2.x » dans le CHANGELOG).", file=sys.stderr)
+    sys.exit(2)
+
+
+def _commande_visee(mots):
     """Nom de commande (vocabulaire du journal) deviné avant l'analyse, pour tracer aussi les erreurs d'usage."""
     if not mots:
         return None
-    if ancien:
-        return mots[0] if mots[0] in _ANCIENNES else None
     if mots[0] in _RACCOURCIS:
         return mots[0]
     for groupe, _, verbes in _GROUPES:
@@ -853,43 +839,8 @@ def _commande_visee(mots, ancien):
     return mots[0] if mots[0] == 'config' else None
 
 
-def _options_note_en_tete(argv):
-    """Syntaxe 1.x `note ID --edit N texte` : place les options de `note` avant les positionnels.
-
-    Avec un positionnel `nargs='*'` suivi d'une option, argparse (Python < 3.12) range le texte hors du
-    positionnel et refuse la ligne ; mettre `--edit N`, `--delete N` et `--format F` juste après `note` suffit.
-    """
-    sortie, deplaces, saute, trouve = [], [], False, False
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-        if saute:
-            saute = False
-        elif a in _OPTIONS_A_VALEUR and not trouve:
-            saute = True
-        elif not trouve and not a.startswith('-'):
-            trouve = True
-            sortie.append(a)
-            i += 1
-            continue
-        elif trouve and a in ('--edit', '--delete', '--format') and i + 1 < len(argv):
-            deplaces += [a, argv[i + 1]]
-            i += 2
-            continue
-        elif trouve and a.startswith(('--edit=', '--delete=', '--format=')):
-            deplaces.append(a)
-            i += 1
-            continue
-        sortie.append(a)
-        i += 1
-    if not trouve:
-        return argv
-    k = next(j for j, a in enumerate(sortie) if not a.startswith('-') and (j == 0 or sortie[j - 1] not in _OPTIONS_A_VALEUR))
-    return sortie[:k + 1] + deplaces + sortie[k + 1:]
-
-
-def _construire(ancien):
-    """Construit le parseur : arbre de groupes (défaut) ou syntaxe plate 1.x (dépréciée)."""
+def _construire():
+    """Construit le parseur : arbre de groupes (task, note, archive, reminder, project, report, admin, data) et raccourcis."""
     parser = _Parseur(description="Gestionnaire de tâches (To-Do List) CLI avancé et persistant.",
                       epilog="Formats de sortie (--format, réglage [general] format, variable TODO_FORMAT) : "
                              "text (affichage décoré), table (tableau aligné), plain (une ligne par enregistrement, "
@@ -906,48 +857,19 @@ def _construire(ancien):
         tous.append(p)
         return p
 
-    if ancien:
-        for nom, constructeur in _ANCIENNES.items():
-            feuille(sub, nom, constructeur, nom, argparse.SUPPRESS)
-        for nom, groupe in _RACCOURCIS.items():
-            ligne = next(v for g, _, vs in _GROUPES if g == groupe for v in vs if v[0] == nom)
-            feuille(sub, nom, ligne[2], ligne[1], ligne[3], ligne[4])
-        feuille(sub, 'config', _args_config, 'config', argparse.SUPPRESS)
-    else:
-        for groupe, aide, verbes in _GROUPES:
-            g = sub.add_parser(groupe, help=aide, description=aide)
-            tous.append(g)
-            sg = g.add_subparsers(dest="verbe", metavar="ACTION", required=True)
-            for verbe, canon, constructeur, aide_v, defauts in verbes:
-                feuille(sg, verbe, constructeur, canon, aide_v, defauts)
-        for nom, groupe in _RACCOURCIS.items():
-            ligne = next(v for g, _, vs in _GROUPES if g == groupe for v in vs if v[0] == nom)
-            feuille(sub, nom, ligne[2], ligne[1], f"Raccourci de `{groupe} {nom}` : {ligne[3]}", ligne[4])
-        feuille(sub, 'config', _args_config, 'config', 'Voir les réglages effectifs ou créer un fichier de configuration')
+    for groupe, aide, verbes in _GROUPES:
+        g = sub.add_parser(groupe, help=aide, description=aide)
+        tous.append(g)
+        sg = g.add_subparsers(dest="verbe", metavar="ACTION", required=True)
+        for verbe, canon, constructeur, aide_v, defauts in verbes:
+            feuille(sg, verbe, constructeur, canon, aide_v, defauts)
+    for nom, groupe in _RACCOURCIS.items():
+        ligne = next(v for g, _, vs in _GROUPES if g == groupe for v in vs if v[0] == nom)
+        feuille(sub, nom, ligne[2], ligne[1], f"Raccourci de `{groupe} {nom}` : {ligne[3]}", ligne[4])
+    feuille(sub, 'config', _args_config, 'config', 'Voir les réglages effectifs ou créer un fichier de configuration')
     for p in tous:
         _ajouter_options_couleur(p)
     return parser
-
-
-def _remplacement(args):
-    """Syntaxe actuelle équivalente à une commande 1.x (pour le message de dépréciation)."""
-    c = args.canon
-    if c == 'archive':
-        return "archive purge" if args.purge else ("archive list" if (args.lister or args.search is not None) else "archive add")
-    if c == 'remind':
-        return "reminder " + ("disable" if args.disable else "enable" if args.enable else "status" if args.status else "check")
-    if c == 'note':
-        return "note " + ("edit" if args.edit is not None else "delete" if args.delete is not None else "add" if args.texte else "list")
-    return {'edit': 'task edit', 'undone': 'task undone', 'remove': 'task remove', 'postpone': 'task postpone',
-            'unarchive': 'archive restore', 'stats': 'report stats', 'reset': 'admin reset', 'restore': 'admin restore',
-            'seed': 'admin seed', 'export': 'data export', 'import': 'data import'}[c]
-
-
-def _avertir_depreciation(args):
-    if os.environ.get('TODO_NO_DEPRECATION'):
-        return
-    print(f"todo : la syntaxe `todo {args.groupe}` est dépréciée, utilisez `todo {_remplacement(args)}` "
-          f"(supprimée en 3.0 ; TODO_NO_DEPRECATION=1 masque ce message).", file=sys.stderr)
 
 
 def _completer_ligne():
@@ -960,18 +882,7 @@ def _completer_ligne():
     journal.desactiver()
     try:
         import argcomplete
-        import shlex
-        ligne = os.environ.get('COMP_LINE', '')
-        try:
-            mots = shlex.split(ligne)[1:]
-        except ValueError:                       # guillemet non fermé : on complète avec la syntaxe courante
-            mots = []
-        if mots and not ligne.endswith(' '):     # le dernier mot est en cours de saisie : il ne choisit pas la syntaxe
-            mots = mots[:-1]
-        mots = _mots(mots)
-        # `todo archive <Tab>` propose les actions du groupe (seule l'exécution de `todo archive` seul garde l'ancien sens)
-        saisie_ancienne = ligne.split()[-1:] and ligne.split()[-1].startswith('-') and not ligne.endswith(' ')
-        argcomplete.autocomplete(_construire(_syntaxe_ancienne(mots) and (mots != ['archive'] or saisie_ancienne)))
+        argcomplete.autocomplete(_construire())
     except BaseException:
         if os.environ.get('_ARC_DEBUG'):
             import traceback
@@ -1052,16 +963,13 @@ def main():
         _completer_ligne()
     journal.initialiser()
     mots = _mots(sys.argv[1:])
-    # `todo archive --help` décrit le groupe, pas l'ancienne commande
-    ancien = _syntaxe_ancienne(mots) and not (mots == ['archive'] and {'-h', '--help'} & set(sys.argv[1:]))
-    parser = _construire(ancien)
+    if _syntaxe_supprimee(mots) and not (mots == ['archive'] and {'-h', '--help'} & set(sys.argv[1:])):
+        _refuser_syntaxe_supprimee(mots[0])             # `todo archive --help` décrit le groupe
+    parser = _construire()
 
     # La commande est connue du journal avant l'analyse, pour tracer aussi les erreurs d'usage
-    journal.definir_commande(_commande_visee(mots, ancien))
-    argv = _options_note_en_tete(sys.argv[1:]) if ancien and mots[:1] == ['note'] else None
-    args = parser.parse_args(argv)
-    if ancien and getattr(args, 'canon', None) in _ANCIENNES:
-        _avertir_depreciation(args)
+    journal.definir_commande(_commande_visee(mots))
+    args = parser.parse_args()
     args.commande = getattr(args, 'canon', None)
     if args.commande == 'config' and args.action == 'list':
         args.action = 'show'

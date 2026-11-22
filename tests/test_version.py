@@ -38,10 +38,10 @@ def test_readme_cite_le_changelog_et_la_version():
 
 
 def test_export_indique_la_version_du_programme(todo):
-    assert todo("export").json()["genere_par"] == f"todo {version_du_code()}"
+    assert todo("data", "export").json()["genere_par"] == f"todo {version_du_code()}"
 
 
 def test_import_accepte_un_export_d_une_autre_version(todo):
     import json
     document = {"format": "todo-cli", "version": 1, "genere_par": "todo 0.9.0", "taches": [{"titre": "ancienne"}]}
-    assert todo("import", "-", entree=json.dumps(document)).code == 0 and todo.une("ancienne")
+    assert todo("data", "import", "-", entree=json.dumps(document)).code == 0 and todo.une("ancienne")

@@ -148,7 +148,6 @@ def test_columns_sur_next_et_archive_list(base):
     assert champs(base("next", "--format", "plain", "--columns", "title"))[0] == ["a" * 8 + "-0", "Appeler Paul"]
     base("archive", "add")
     assert champs(base("archive", "list", "--format", "plain", "--columns", "title"))[0][1] == "Fini"
-    assert champs(base("archive", "--format", "plain", "--columns", "title"))[0][1] == "Fini"   # ancienne syntaxe : implique --list
 
 
 def test_columns_avec_les_groupes(base):

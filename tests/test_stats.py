@@ -2,7 +2,7 @@ from outils import jour
 
 
 def test_stats_base_vide(todo):
-    r = todo("stats")
+    r = todo("report", "stats")
     assert r.code == 0
 
 
@@ -13,7 +13,7 @@ def test_stats_contenu(todo):
         dict(cle="ssss0003-0", titre="C", priorite="low"),
         dict(cle="ssss0004-0", titre="D", statut="TERMINE", terminee=jour(0) + " 08:00"),
     )
-    r = todo("stats")
+    r = todo("report", "stats")
     assert r.code == 0
     assert "4 tâche(s) au total" in r.texte and "25% terminées (1/4)" in r.texte
     assert "#pro : 2" in r.texte and "#dev : 1" in r.texte

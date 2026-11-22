@@ -14,8 +14,8 @@ def garni(todo):
         dict(cle="aaaa0005-0", titre="Finie recente", statut="TERMINE", terminee=jour(0) + " 08:00", tags=["pro"], priorite="low"),
         dict(cle="aaaa0006-0", titre="Finie sans date", statut="TERMINE", terminee=None),
     )
-    todo("note", "aaaa0001", "une note")
-    todo("note", "aaaa0003", "autre note")
+    todo("note", "add", "aaaa0001", "une note")
+    todo("note", "add", "aaaa0003", "autre note")
     return todo
 
 
@@ -157,10 +157,9 @@ def test_archive_aucun_resultat(archive_garnie):
     assert "ne correspond à vos critères" in r.texte
 
 
-def test_archive_ancienne_syntaxe_et_filtres(archive_garnie):
-    assert titres(archive_garnie("archive", "--list", "--tag", "pro", "--format", "json")) == {"Finie vieille", "Finie recente"}
-    assert titres(archive_garnie("archive", "--tag", "pro", "--format", "json")) == {"Finie vieille", "Finie recente"}   # un filtre implique --list
+def test_archive_list_et_filtres(archive_garnie):
+    assert titres(archive_garnie("archive", "list", "--tag", "pro", "--format", "json")) == {"Finie vieille", "Finie recente"}
 
 
 def test_archive_purge_refuse_les_filtres(archive_garnie):
-    assert archive_garnie("archive", "--purge", "--tag", "pro", "-y").code == 1
+    assert archive_garnie("archive", "purge", "--tag", "pro", "-y").code == 2       # `purge` n'a pas ces filtres

@@ -63,7 +63,7 @@ def test_done_recurrente_cree_une_occurrence_par_tache(todo):
 # ------------------------------------------------------------------ postpone
 def test_postpone_overdue_vers_demain(todo):
     peupler(todo)
-    r = todo("postpone", "--overdue", "--to", "demain")
+    r = todo("task", "postpone", "--overdue", "--to", "demain")
     assert r.code == 0 and "Bilan : 2 tâche(s) reportée(s)" in r.sortie
     e = echeances(todo)
     assert e["Rapport"] == e["Facture"] == jour(1)
@@ -72,28 +72,28 @@ def test_postpone_overdue_vers_demain(todo):
 
 def test_postpone_ignore_les_taches_terminees(todo):
     peupler(todo)
-    todo("postpone", "--tag", "courses", "--to", "+2d")
+    todo("task", "postpone", "--tag", "courses", "--to", "+2d")
     assert echeances(todo)["Archivable"] is None
 
 
 # ------------------------------------------------------------------ undone / remove / edit
 def test_undone_cible_les_taches_terminees(todo):
     peupler(todo)
-    r = todo("undone", "--tag", "courses")
+    r = todo("task", "undone", "--tag", "courses")
     assert r.code == 0 and "Bilan" not in r.sortie and "Archivable" in r.sortie     # une seule tâche : pas de bilan
     assert statuts(todo)["Archivable"] == "A FAIRE"
 
 
 def test_remove_par_filtre_avec_statut(todo):
     peupler(todo)
-    r = todo("remove", "--status", "done")
+    r = todo("task", "remove", "--status", "done")
     assert r.code == 0
     assert "Archivable" not in statuts(todo) and len(todo.taches()) == 4
 
 
 def test_remove_tout_apres_confirmation_automatique(todo):
     peupler(todo)
-    r = todo("remove", "--all", "-y")
+    r = todo("task", "remove", "--all", "-y")
     assert r.code == 0 and "Bilan : 5 tâche(s) supprimée(s)" in r.sortie
     assert todo.taches() == {}
 
@@ -151,7 +151,7 @@ def test_edit_plusieurs_identifiants(todo):
 def test_sans_identifiant_ni_filtre_la_commande_refuse(todo):
     peupler(todo)
     for commande in ("done", "undone", "postpone", "remove"):
-        r = todo(commande)
+        r = todo("task", commande)
         assert r.code == 2 and "Indiquez au moins un identifiant, ou un filtre" in r.texte, commande
     assert len(todo.taches()) == 5
 
@@ -186,13 +186,13 @@ def test_search_in_exige_search(todo):
 
 def test_no_due_et_bornes_incompatibles(todo):
     peupler(todo)
-    assert todo("postpone", "--no-due", "--due-before", "demain").code == 1
+    assert todo("task", "postpone", "--no-due", "--due-before", "demain").code == 1
 
 
 # ------------------------------------------------------------------ simulation
 def test_dry_run_ne_modifie_rien(todo):
     peupler(todo)
-    r = todo("postpone", "--overdue", "--dry-run")
+    r = todo("task", "postpone", "--overdue", "--dry-run")
     assert r.code == 0 and "2 tâche(s) seraient reportées" in r.sortie
     assert "Rapport" in r.sortie and "Facture" in r.sortie and "Lait" not in r.sortie
     assert echeances(todo)["Rapport"] == jour(-10) and todo.sauvegardes() == []
@@ -296,7 +296,7 @@ def test_la_confirmation_ne_concerne_pas_les_identifiants_explicites(todo):
 def test_un_seul_undo_pour_tout_le_lot(todo):
     peupler(todo)
     todo("add", "Initiale")                       # une première modification : sinon `undo` n'a pas d'état antérieur
-    todo("postpone", "--overdue", "--to", "+5d")
+    todo("task", "postpone", "--overdue", "--to", "+5d")
     assert len(todo.sauvegardes()) == 2
     assert todo("undo").code == 0
     e = echeances(todo)
@@ -331,13 +331,13 @@ def test_la_selection_est_figee_avant_toute_modification(todo):
 
 def test_filtre_bloque_et_pret(todo):
     todo.seed(dict(cle="p1", titre="Parent"), dict(cle="e1", titre="Enfant", apres=["p1"]))
-    r = todo("postpone", "--blocked", "--dry-run", "--format", "json").json()
+    r = todo("task", "postpone", "--blocked", "--dry-run", "--format", "json").json()
     assert [t["titre"] for t in r] == ["Enfant"]
-    r = todo("postpone", "--ready", "--dry-run", "--format", "json").json()
+    r = todo("task", "postpone", "--ready", "--dry-run", "--format", "json").json()
     assert [t["titre"] for t in r] == ["Parent"]
 
 
 def test_recherche_texte_en_lot(todo):
     peupler(todo)
-    todo("remove", "--search", "FACTURE")                   # sans accent ni casse
+    todo("task", "remove", "--search", "FACTURE")                   # sans accent ni casse
     assert "Facture" not in statuts(todo)

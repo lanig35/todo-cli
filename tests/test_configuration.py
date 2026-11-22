@@ -160,33 +160,33 @@ def retard(todo):
 
 
 def test_remind_reglages(retard):
-    r = retard("remind").texte
+    r = retard("reminder", "check").texte
     assert "R3" in r and "R0" in r and "Bientot" not in r                         # défauts : limit 5, soon 0
     retard.config("[remind]\nlimit = 2\nsoon = 3\n")
-    r = retard("remind").texte
+    r = retard("reminder", "check").texte
     assert "… et 3 autre(s)" in r and "1 dans les prochains jours" in r
-    r = retard("remind", "--limit", "10").texte
+    r = retard("reminder", "check", "--limit", "10").texte
     assert "autre(s)" not in r and "Bientot" in r
-    assert "autre(s)" not in retard("remind", env={"TODO_REMIND_LIMIT": "10"}).texte
+    assert "autre(s)" not in retard("reminder", "check", env={"TODO_REMIND_LIMIT": "10"}).texte
 
 
 def test_remind_enabled(retard):
     retard.config("[remind]\nenabled = false\n")
-    assert retard("remind").out == "" and retard("remind", "--once-a-day").out == ""
-    assert "[remind] enabled" in retard("remind", "--status").texte
-    assert "fichier" in retard("remind", "--status").texte
-    retard("remind", "--write-status")
+    assert retard("reminder", "check").out == "" and retard("reminder", "check", "--once-a-day").out == ""
+    assert "[remind] enabled" in retard("reminder", "status").texte
+    assert "fichier" in retard("reminder", "status").texte
+    retard("reminder", "check", "--write-status")
     assert (retard.db_dir / "remind_status").read_text() == ""
-    assert "R0" in retard("remind", env={"TODO_REMIND_ENABLED": "true"}).texte       # variable > fichier
-    assert retard("remind", env={"TODO_REMIND_ENABLED": "true", "TODO_NO_REMIND": "1"}).out == ""   # NO_REMIND coupe toujours
-    assert "attention" in retard("remind", "--enable").texte.lower()                   # --enable ne passe pas outre le réglage
+    assert "R0" in retard("reminder", "check", env={"TODO_REMIND_ENABLED": "true"}).texte       # variable > fichier
+    assert retard("reminder", "check", env={"TODO_REMIND_ENABLED": "true", "TODO_NO_REMIND": "1"}).out == ""   # NO_REMIND coupe toujours
+    assert "attention" in retard("reminder", "enable").texte.lower()                   # --enable ne passe pas outre le réglage
 
 
 def test_remind_les_interrupteurs_se_cumulent(retard):
-    retard("remind", "--disable")                                                  # fichier d'état
-    assert retard("remind", env={"TODO_REMIND_ENABLED": "true"}).out == ""
-    retard("remind", "--enable")
-    assert "R0" in retard("remind", env={"TODO_REMIND_ENABLED": "true"}).texte
+    retard("reminder", "disable")                                                  # fichier d'état
+    assert retard("reminder", "check", env={"TODO_REMIND_ENABLED": "true"}).out == ""
+    retard("reminder", "enable")
+    assert "R0" in retard("reminder", "check", env={"TODO_REMIND_ENABLED": "true"}).texte
 
 
 # ---------------------------------------------------------------- le fichier lui-même
@@ -315,7 +315,7 @@ def test_config_show_json(todo):
     assert par_cle["general.db_dir"]["origine"] == "variable TODO_DB_DIR"
     assert par_cle["general.pager"]["valeur"] is True
     assert d["rappels_coupes_par_commande"] is False
-    todo("remind", "--disable")
+    todo("reminder", "disable")
     assert todo("config", "show", "--format", "json").json()["rappels_coupes_par_commande"] is True
     assert "reminder disable" in todo("config", "show").texte
 

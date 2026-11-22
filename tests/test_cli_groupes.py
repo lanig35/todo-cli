@@ -1,4 +1,4 @@
-"""Arbre de commandes 2.0 : groupes, raccourcis, anciennes syntaxes dépréciées."""
+"""Arbre de commandes : groupes, raccourcis, et refus de la syntaxe 1.x (supprimée en 3.0)."""
 import pytest
 
 from outils import jour
@@ -90,47 +90,72 @@ def test_config_list_alias_de_show(todo):
     assert todo("config", "list", "--format", "json").json() == todo("config", "show", "--format", "json").json()
 
 
-# --- anciennes syntaxes -------------------------------------------------------------------------------
-ANCIENNES = [
-    (("edit", "{id}", "--title", "X"), "task edit"),
-    (("remove", "{id}"), "task remove"),
-    (("postpone", "{id}"), "task postpone"),
-    (("note", "{id}", "texte"), "note add"),
-    (("note", "{id}"), "note list"),
-    (("archive",), "archive add"),
-    (("archive", "--list"), "archive list"),
-    (("archive", "--purge", "-y"), "archive purge"),
-    (("remind",), "reminder check"),
-    (("remind", "--disable"), "reminder disable"),
-    (("stats",), "report stats"),
-    (("restore",), "admin restore"),
-    (("export", "-"), "data export"),
+# --- syntaxe 1.x supprimée en 3.0 ----------------------------------------------------------------------
+SUPPRIMEES = [
+    (("edit", "{id}", "--title", "X"), "todo edit", "todo task edit"),
+    (("undone", "{id}"), "todo undone", "todo task undone"),
+    (("remove", "{id}"), "todo remove", "todo task remove"),
+    (("postpone", "{id}", "--to", "+1d"), "todo postpone", "todo task postpone"),
+    (("note", "{id}", "texte"), "todo note", "todo note add|list|edit|delete"),
+    (("note", "{id}"), "todo note", "todo note add|list|edit|delete"),
+    (("archive",), "todo archive", "todo archive add|list|purge"),
+    (("archive", "--list"), "todo archive", "todo archive add|list|purge"),
+    (("archive", "--purge", "-y"), "todo archive", "todo archive add|list|purge"),
+    (("unarchive", "abcd"), "todo unarchive", "todo archive restore"),
+    (("remind",), "todo remind", "todo reminder check|enable|disable|status"),
+    (("remind", "--disable"), "todo remind", "todo reminder check|enable|disable|status"),
+    (("stats",), "todo stats", "todo report stats"),
+    (("reset",), "todo reset", "todo admin reset"),
+    (("restore",), "todo restore", "todo admin restore"),
+    (("seed", "3"), "todo seed", "todo admin seed"),
+    (("export", "-"), "todo export", "todo data export"),
+    (("import", "-"), "todo import", "todo data import"),
 ]
 
 
-@pytest.mark.parametrize("ligne, attendu", ANCIENNES)
-def test_ancienne_syntaxe_avertit(base, ligne, attendu):
-    ident = base.id_de("retard")
-    r = base(*[a.format(id=ident) for a in ligne], env={"TODO_NO_DEPRECATION": None})
-    assert r.code == 0
-    assert "dépréciée" in r.err and f"`todo {attendu}`" in r.err
-    assert "dépréciée" not in r.out
+@pytest.mark.parametrize("ligne, ancienne, nouvelle", SUPPRIMEES)
+def test_ancienne_syntaxe_est_refusee_avec_la_nouvelle(base, ligne, ancienne, nouvelle):
+    avant = base("list", "--format", "json").out
+    r = base(*[a.format(id=base.id_de("retard")) for a in ligne])
+    assert r.code == 2 and r.out == ""
+    assert f"`{ancienne}`" in r.err and "supprimée en 3.0" in r.err and f"`{nouvelle}`" in r.err
+    assert "CHANGELOG" in r.err
+    assert base("list", "--format", "json").out == avant and base.sauvegardes() == []
 
 
-def test_avertissement_masquable(base):
-    r = base("stats", env={"TODO_NO_DEPRECATION": "1"})
-    assert r.code == 0 and "dépréciée" not in r.err
+def test_ancienne_syntaxe_refusee_meme_avec_options_globales(base):
+    r = base("-p", "default", "--color", "never", "stats")
+    assert r.code == 2 and "`todo report stats`" in r.err
+    assert base("stats", "--project", "default").code == 2
 
 
-@pytest.mark.parametrize("ligne", [("list",), ("task", "list"), ("config",), ("add", "x"), ("next",), ("undo",)])
-def test_syntaxes_courantes_sans_avertissement(base, ligne):
-    r = base(*ligne, env={"TODO_NO_DEPRECATION": None})
-    assert "dépréciée" not in r.err
+def test_ancienne_syntaxe_est_journalisee(base):
+    base("edit", "{id}", env={"TODO_LOG_TARGET": "file", "TODO_LOG_LEVEL": "warning"})
+    assert any("removed_command" in l and "edit" in l for l in base.journal())
 
 
-def test_ancienne_et_nouvelle_equivalentes(base):
-    assert base("archive", "--list", "--format", "json").out == base("archive", "list", "--format", "json").out
-    assert base("remind", "--status", "--format", "json").out == base("reminder", "status", "--format", "json").out
+def test_deprecation_n_existe_plus(base):
+    """TODO_NO_DEPRECATION est ignorée : plus d'avertissement à masquer."""
+    assert base("report", "stats", env={"TODO_NO_DEPRECATION": None}).err == ""
+    assert base("report", "stats", env={"TODO_NO_DEPRECATION": "1"}).code == 0
+
+
+@pytest.mark.parametrize("ligne", [("list",), ("task", "list"), ("config",), ("add", "x"), ("next",), ("undo",), ("archive", "list"),
+                                   ("note", "list", "aaaaaaaa"), ("reminder", "status"), ("archive", "--help"), ("note", "--help")])
+def test_syntaxes_actuelles_acceptees(base, ligne):
+    r = base(*ligne)
+    assert "supprimée en 3.0" not in r.err and r.code in (0, 1)
+
+
+def test_archive_sans_action_demande_laquelle(base):
+    r = base("archive", "--help")
+    assert r.code == 0 and "add" in r.sortie and "purge" in r.sortie
+
+
+def test_aide_generale_ne_liste_plus_les_anciennes_commandes(base):
+    aide = base("--help").sortie
+    for nom in ("undone", "unarchive", "postpone", "remind"):
+        assert f" {nom} " not in aide.replace("\n", " ")
 
 
 def test_journal_garde_le_vocabulaire(base):

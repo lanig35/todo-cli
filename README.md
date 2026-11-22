@@ -11,7 +11,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Tâches avec titre, description, priorité (`low`, `medium`, `high`), échéance et tags
 - Dates relatives : `demain`, `+3d`, `+2w`, `vendredi`…
 - Report d'échéance en une commande (`postpone`), sur une ou plusieurs tâches
-- Actions en lot par filtre : `todo done --tag courses`, `todo postpone --overdue --to demain` (aperçu `--dry-run`, confirmation)
+- Actions en lot par filtre : `todo done --tag courses`, `todo task postpone --overdue --to demain` (aperçu `--dry-run`, confirmation)
 - Tâches récurrentes (quotidiennes, hebdomadaires, mensuelles, annuelles)
 - Dépendances entre tâches (`--after`) : une tâche attend que d'autres soient terminées
 - Formats de sortie `text`, `table`, `plain` (pipes) et `json`, choisis automatiquement selon le terminal
@@ -87,12 +87,15 @@ plus courantes ont un **raccourci** de premier niveau.
 Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo` (= `task add`, `task list`, … `report agenda`,
 `admin undo`). `todo GROUPE --help` détaille un groupe.
 
-### Migration depuis la 1.x
+### Migration depuis la 1.x et la 2.x
 
-Les anciennes commandes fonctionnent encore, avec un avertissement sur la sortie d'erreur (leur suppression est
-prévue en 3.0). `TODO_NO_DEPRECATION=1` masque l'avertissement, par exemple dans un script ou une crontab.
+Les commandes de la syntaxe 1.x ont été **supprimées en 3.0**. Elles ne font plus rien : `todo edit …`, `todo remind`,
+`todo archive --list`… s'arrêtent avec le code 2 et un message qui indique la commande actuelle
+(« la commande `todo edit` a été supprimée en 3.0 : utilisez `todo task edit` »). Les scripts, crontabs et alias
+qui les appellent doivent être mis à jour avec la table ci-dessous ; les sorties (`--format json`), les codes de
+sortie, les réglages et le vocabulaire du journal sont inchangés. `TODO_NO_DEPRECATION` n'a plus d'effet.
 
-| 1.x | 2.0 |
+| 1.x (supprimé) | à utiliser |
 |---|---|
 | `edit`, `undone`, `remove`, `postpone` | `task edit`, `task undone`, `task remove`, `task postpone` |
 | `note ID texte` / `note ID` | `note add ID texte` / `note list ID` |
@@ -105,8 +108,6 @@ prévue en 3.0). `TODO_NO_DEPRECATION=1` masque l'avertissement, par exemple dan
 | `stats` | `report stats` |
 | `reset`, `restore`, `seed` | `admin reset`, `admin restore`, `admin seed` |
 | `export`, `import` | `data export`, `data import` |
-
-Les sorties (`--format json`), les codes de sortie, les réglages et le vocabulaire du journal sont inchangés.
 
 ### Ajouter une tâche
 
@@ -250,12 +251,12 @@ Plutôt que de recopier des identifiants, `done`, `undone`, `postpone`, `remove`
 `list` pour désigner les tâches visées :
 
 ```bash
-todo postpone --overdue --to demain          # tout ce qui est en retard, reporté à demain
+todo task postpone --overdue --to demain     # tout ce qui est en retard, reporté à demain
 todo done --tag courses                      # toutes les tâches « courses » à faire sont terminées
 todo task edit --tag pro --add-tag urgent --prio high     # ajoute un tag et change la priorité de toutes les tâches « pro »
 todo task remove --status done --done-before 6m -y        # supprime les tâches terminées depuis plus de 6 mois
 todo done --tag courses --dry-run            # montre les tâches visées, sans rien modifier
-todo undone --all                            # rouvre toutes les tâches terminées
+todo task undone --all                       # rouvre toutes les tâches terminées
 ```
 
 - **Filtres** : ceux de `list` (`--tag`, `--any-tag`, `--no-tag`, `--not-tag`, `--prio`, `--not-prio`,
@@ -306,12 +307,12 @@ todo task remove a1b2c3 -m "doublon de a9f8e7"
   déjà terminée, ni à celle dont l'échéance ne change pas). Une note vide est refusée avant toute
   modification.
 - `done` sur une tâche récurrente : la note reste sur l'occurrence terminée ; la suivante repart sans note.
-- Les notes font partie de la tâche : elles suivent l'archivage (`archive`, `unarchive`), les
+- Les notes font partie de la tâche : elles suivent l'archivage (`archive`, `archive restore`), les
   sauvegardes et `undo`, apparaissent dans les sorties `--format json` (`"notes": [...]`) et sont
-  incluses dans `list --search` et `archive --search`.
-- Les notes sont **numérotées** à partir de 1 (la plus ancienne) dans `todo note ID` et `show`. `--edit N`
+  incluses dans `list --search` et `archive list --search`.
+- Les notes sont **numérotées** à partir de 1 (la plus ancienne) dans `todo note list ID` et `show`. `note edit ID N texte`
   remplace le texte de la note N : elle garde sa date et son origine, et reçoit une marque
-  `[modifiée AAAA-MM-JJ HH:MM]` (champ `modifiee` en JSON). `--delete N` la supprime ; les suivantes sont
+  `[modifiée AAAA-MM-JJ HH:MM]` (champ `modifiee` en JSON). `note delete ID N` la supprime ; les suivantes sont
   renumérotées. Les deux sont annulables avec `undo`, et tracés au journal (`note_edited`, `note_deleted`,
   sans le texte sauf `[log] titles = true`).
 - **`remove -m`** : la tâche disparaît, ses notes aussi. Le motif est donc écrit **au journal**
@@ -566,8 +567,7 @@ avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les
 précédence habituelle (option > variable > fichier > défaut `id,status,prio,due,tags,title,notes`), est
 validé à l'écriture et normalisé (l'`id` est ajouté en tête s'il manque). Il ne change que les colonnes : il
 n'impose pas le format tableau dans un terminal (seul `--columns` le fait) et il est sans effet sur `text`
-et `json`. Avec `archive
---columns…`, l'ancienne syntaxe en déduit la consultation de l'archive.
+et `json`.
 
 Le format `plain` est un contrat stable (colonnes et ordre ne changent pas) :
 
@@ -622,8 +622,7 @@ todo report stats --with-archive         # statistiques incluant l'historique ar
 - **Archiver par tag** : `archive add --tag TAGS` (répétable ou séparé par des virgules : tous les tags)
   archive les tâches **terminées** portant ce tag, par exemple à la fin d'un projet. Les tâches à faire qui le
   portent restent dans la liste (leur nombre est indiqué) : seules les tâches terminées s'archivent. Il se
-  combine avec `--older-than` (ET) mais pas avec des identifiants. Avec l'ancienne syntaxe
-  `todo archive --tag x`, l'option reste un filtre de consultation.
+  combine avec `--older-than` (ET) mais pas avec des identifiants.
 - **Archivage automatique** : avec `todo config set archive.auto_days 30` (variable
   `TODO_ARCHIVE_AUTO_DAYS`), les tâches terminées depuis au moins 30 jours sont archivées **une fois par
   jour**, à la première commande qui modifie la base (`add`, `done`, `edit`…). Les commandes de lecture
@@ -637,8 +636,7 @@ todo report stats --with-archive         # statistiques incluant l'historique ar
   `--has-notes` / `--no-notes`, `--done-after` / `--done-before` (date de fin), `--archived-after` /
   `--archived-before` (date d'archivage, mêmes formats), `--older-than` (terminées depuis au moins cette
   durée, comme pour `archive add`), `--sort done|archived|alpha|priority` (défaut `done`, la plus récemment
-  terminée d'abord) et `--limit` / `--start`. Ils se combinent (ET) ; sans `--list`, l'ancienne syntaxe en
-  déduit la consultation. `--purge` les refuse.
+  terminée d'abord) et `--limit` / `--start`. Ils se combinent (ET).
 - Les tâches archivées disparaissent de `list`, `agenda` et `stats` (sauf `--with-archive`).
 - `--older-than` accepte `30d`, `2w`, `6m`, `1y` et se base sur la date de complétion. Une ancienne
   tâche terminée sans date de complétion est ignorée (son âge est inconnu) : archivez-la par
@@ -654,7 +652,7 @@ todo report stats --with-archive         # statistiques incluant l'historique ar
   de la liste) : archivez-les d'abord (`todo archive add`), puis purgez l'archive selon l'âge voulu ; pour
   supprimer des tâches précises sans passer par l'archive, `todo task remove`.
 - Seules les tâches terminées s'archivent. Pour une tâche récurrente, l'occurrence suivante reste
-  dans la liste ; rouvrir l'ancienne (`undone`) demande de la récupérer d'abord avec `unarchive`.
+  dans la liste ; rouvrir l’ancienne (`task undone`) demande de la récupérer d’abord avec `archive restore`.
 - Archive et liste sont **sauvegardées et restaurées ensemble** : `restore` ramène les deux à l'état
   de la sauvegarde, de sorte qu'une tâche n'apparaisse jamais des deux côtés. `reset` ne vide que la
   liste et conserve l'archive, sauf avec `reset --include-archive`.

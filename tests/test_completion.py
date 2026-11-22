@@ -85,10 +85,10 @@ def test_formats(todo, argcomplete_utilisable):
     assert completer(todo, "todo list --format ")[0] == ["auto", "text", "table", "plain", "json"]
 
 
-def test_ancienne_syntaxe_reste_completable(todo, argcomplete_utilisable):
-    assert "--disable" in completer(todo, "todo remind --")[0]
-    assert "--purge" in completer(todo, "todo archive --")[0]
-    assert "add" in completer(todo, "todo archive ")[0]                              # groupe, pas ancienne commande
+def test_options_des_groupes_completables(todo, argcomplete_utilisable):
+    assert "--disable" in completer(todo, "todo reminder check --")[0] or "disable" in completer(todo, "todo reminder ")[0]
+    assert "purge" in completer(todo, "todo archive ")[0]
+    assert "add" in completer(todo, "todo archive ")[0]
 
 
 def test_fichier_de_config_choisi_par_option(todo, tmp_path, argcomplete_utilisable):

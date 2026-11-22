@@ -171,7 +171,7 @@ def test_occurrence_suivante_restee_n_est_plus_reliee(pro):
     assert pro("show", ident[:8], "--format", "json").json()["suivante"]
     pro("task", "move", ident[:8], "--to", "travail")
     assert pro("show", ident[:8], "-p", "travail", "--format", "json").json()["suivante"] is None
-    assert pro("undone", ident[:8], "-p", "travail").code == 0         # ne cherche pas une occurrence qui n'est pas là
+    assert pro("task", "undone", ident[:8], "-p", "travail").code == 0         # ne cherche pas une occurrence qui n'est pas là
 
 
 # ------------------------------------------------------------------ sauvegardes, undo, journal, verrous

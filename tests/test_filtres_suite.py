@@ -134,7 +134,7 @@ def test_archive_selection(archive):
     assert arch(archive, "--no-recurring") == {"Finie pro"} and arch(archive, "--recurring") == set()
 
 
-def test_archive_ancienne_syntaxe_implique_la_liste(archive):
-    assert titres(archive("archive", "--any-tag", "pro", "--format", "json")) == {"Finie pro"}
-    assert titres(archive("archive", "--list", "--prio", "low", "--format", "json")) == {"Finie pro"}
-    assert archive("archive", "--purge", "--any-tag", "pro", "-y").code == 1
+def test_archive_list_filtres_et_purge_sans_filtres(archive):
+    assert titres(archive("archive", "list", "--any-tag", "pro", "--format", "json")) == {"Finie pro"}
+    assert titres(archive("archive", "list", "--prio", "low", "--format", "json")) == {"Finie pro"}
+    assert archive("archive", "purge", "--any-tag", "pro", "-y").code == 2

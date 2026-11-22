@@ -25,7 +25,7 @@ def test_annuler_un_ajout(todo):
 
 def test_annuler_une_suppression(todo):
     todo("add", "A"); todo("add", "B")
-    todo("remove", todo.id_de("B"))
+    todo("task", "remove", todo.id_de("B"))
     r = todo("undo")
     assert r.code == 0 and "rétablir 'B'" in r.texte
     assert titres(todo) == {"A", "B"}
@@ -33,7 +33,7 @@ def test_annuler_une_suppression(todo):
 
 def test_annuler_une_modification(todo):
     todo("add", "A", "--prio", "low")
-    todo("edit", todo.id_de("A"), "--title", "Nouveau", "--prio", "high")
+    todo("task", "edit", todo.id_de("A"), "--title", "Nouveau", "--prio", "high")
     r = todo("undo")
     assert "remettre dans leur état précédent 'A'" in r.texte
     t = todo.une("A")
@@ -69,7 +69,7 @@ def test_un_second_undo_retablit(todo):
 
 def test_undo_annule_aussi_un_restore(todo):
     todo("add", "A"); todo("add", "B"); todo("add", "C")
-    todo("restore", "3", "-y")            # retour à {A}
+    todo("admin", "restore", "3", "-y")            # retour à {A}
     assert titres(todo) == {"A"}
     todo("undo")
     assert titres(todo) == {"A", "B", "C"}
@@ -92,14 +92,14 @@ def test_resume_tronque(todo):
     todo("add", "Base")
     todo.seed(*[dict(cle=f"undo{i:04d}-0", titre=f"Lot{i}") for i in range(8)])
     todo("add", "Dernier")
-    todo("reset", entree="y\n")
+    todo("admin", "reset", entree="y\n")
     r = todo("undo")
     assert "rétablir" in r.texte and "et 5 autre(s)" in r.texte
 
 
 def test_undo_apres_reset(todo):
     todo("add", "A"); todo("add", "B")
-    todo("reset", entree="y\n")
+    todo("admin", "reset", entree="y\n")
     assert todo.taches() == {}
     r = todo("undo")
     assert r.code == 0 and titres(todo) == {"A", "B"}              # et non {A} : le reset est annulé, pas l'ajout de B
@@ -118,18 +118,18 @@ def test_undo_apres_une_modification_hors_programme(todo):
 def test_annuler_un_archivage(todo):
     todo("add", "A"); todo("add", "B")
     todo("done", todo.id_de("A"))
-    todo("archive")
+    todo("archive", "add")
     assert titres(todo) == {"B"}
     r = todo("undo")
     assert r.code == 0 and "rétablir 'A'" in r.texte and "(archive)" in r.texte
     assert titres(todo) == {"A", "B"}
-    assert todo("archive", "--list", "--format", "json").json() == []
+    assert todo("archive", "list", "--format", "json").json() == []
 
 
 def test_commandes_de_lecture_ne_changent_rien(todo):
     todo("add", "A"); todo("add", "B")
     n = todo.sauvegardes()
-    todo("list"); todo("next"); todo("agenda"); todo("stats"); todo("archive", "--list")
+    todo("list"); todo("next"); todo("agenda"); todo("report", "stats"); todo("archive", "list")
     assert todo.sauvegardes() == n
     todo("undo")
     assert titres(todo) == {"A"}

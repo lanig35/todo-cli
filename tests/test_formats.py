@@ -89,9 +89,9 @@ def test_note_list_plain(base):
 
 
 def test_stats_plain_et_json(base):
-    mesures = dict(champs(base("stats", "--format", "plain").out))
+    mesures = dict(champs(base("report", "stats", "--format", "plain").out))
     assert mesures["total"] == "3" and mesures["terminees"] == "1" and mesures["priorite_high"] == "1"
-    d = base("stats", "--format", "json").json()
+    d = base("report", "stats", "--format", "json").json()
     assert d["total"] == 3 and d["tag.pro"] == 1
 
 
@@ -114,7 +114,7 @@ def test_table_vide_garde_le_message(todo):
 
 def test_show_stats_note_table(base):
     assert "CHAMP" in base("show", "a" * 8, "--format", "table").out
-    assert "INDICATEUR" in base("stats", "--format", "table").out
+    assert "INDICATEUR" in base("report", "stats", "--format", "table").out
     base("note", "add", "a" * 8, "x")
     assert "NOTE" in base("note", "list", "a" * 8, "--format", "table").out
 
