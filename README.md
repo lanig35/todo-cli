@@ -405,6 +405,64 @@ on_change = rsync -a ~/.local/share/todo/ serveur:todo/
 - **Confiance** : un hook s'exécute avec vos droits ; il vient de votre configuration ou de votre environnement, jamais du contenu
   des tâches.
 
+#### Exemples
+
+Commande directe (texte fixe, aucune donnée de la tâche) :
+
+```ini
+[hooks]
+on_done = notify-send "todo" "Une tâche est terminée"
+```
+
+Avec `sh -c`, pour lire les variables ; les apostrophes simples empêchent le shell *appelant* de les développer, c'est le
+`sh` lancé par le hook qui le fait, et le titre reste une simple donnée :
+
+```ini
+[hooks]
+on_done = sh -c 'notify-send "Terminée" "$TODO_TITLE"'
+on_add  = sh -c 'echo "$(date +%F) [$TODO_PROJECT] $TODO_TITLE" >> ~/todo-ajouts.log'
+```
+
+Script shell lisant la tâche en JSON sur l'entrée standard (ici avec `jq`), `~/bin/todo-hook.sh` (à rendre exécutable) :
+
+```sh
+#!/bin/sh
+priorite=$(jq -r '.priorite')
+echo "$TODO_EVENT: $TODO_TITLE (priorité $priorite)" >> ~/todo-activite.log
+```
+
+```ini
+[hooks]
+on_change = /home/vous/bin/todo-hook.sh
+```
+
+Programme Python, `~/bin/todo_hook.py` :
+
+```python
+#!/usr/bin/env python3
+import json, os, sys
+
+evenement = os.environ["TODO_EVENT"]       # add, done, remove…
+projet = os.environ["TODO_PROJECT"]
+if int(os.environ["TODO_COUNT"]) > 20:     # lot : {"event": …, "ids": […]}
+    print(f"{evenement}: {len(json.load(sys.stdin)['ids'])} tâches dans {projet}", file=sys.stderr)
+else:
+    tache = json.load(sys.stdin)           # la tâche complète (ou {"id", "titre"} si elle n'existe plus)
+    print(f"{evenement}: {tache['titre']} (échéance {tache.get('date_echeance')})", file=sys.stderr)
+```
+
+```ini
+[hooks]
+on_add = python3 /home/vous/bin/todo_hook.py
+```
+
+Quelques rappels : donnez des **chemins absolus** (`~` n'est développé que par un shell) ; ce que le hook affiche part sur
+stderr ; pour garder une trace, écrivez dans un fichier. Pour voir ce que reçoit un hook, sans rien écrire :
+
+```bash
+TODO_HOOKS_ON_ADD="sh -c 'env | grep TODO_'" todo add Essai
+```
+
 ### Suivi du temps
 
 `todo` retient le moment où une tâche est **démarrée** et celui où elle est **terminée**. Ce n'est pas un chronomètre :
