@@ -3,6 +3,21 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.3.0] - 2026-11-22
+
+### Ajouté
+
+- **`attachment add --link`** : référence un fichier sans le copier. La pièce mémorise le chemin absolu (`lien`), la taille et
+  l'empreinte SHA-256 ; pas de limite de taille ; `open` et `save` travaillent sur le fichier d'origine, que `attachment remove`
+  et `task remove` ne touchent jamais.
+- **`attachment check [ID]`** : vérifie les pièces (copies et liens, tâches archivées comprises) : manquantes, modifiées (taille ou
+  SHA-256), en corbeille, et fichiers orphelins du dossier `attachments/`. Code de sortie 1 s'il y a une pièce manquante ou
+  modifiée ; formats text, table, plain et json.
+
+### Modifié
+
+- `attachment list --format plain` gagne une dernière colonne : `lien` (vide pour une copie). `show` et `list --format json` portent `lien`.
+
 ## [3.2.0] - 2026-11-22
 
 ### Ajouté
@@ -423,6 +438,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.3.0
 [3.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.2.0
 [3.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.1.0
 [3.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.0.0

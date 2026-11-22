@@ -68,6 +68,8 @@ def _normaliser_pieces(brutes):
                  "sha256": str(p.get('sha256') or "")}
         if p.get('commentaire'):
             piece["commentaire"] = str(p['commentaire'])
+        if isinstance(p.get('lien'), str) and os.path.isabs(p['lien']):     # pièce liée : fichier gardé là où il est
+            piece["lien"] = p['lien']
         pieces.append(piece)
     return pieces
 

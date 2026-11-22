@@ -3,7 +3,9 @@
 Chaque tâche porte une liste `pieces_jointes` (comme les notes) : `{"nom", "date", "taille", "sha256"}` et un
 `commentaire` facultatif. Les fichiers eux-mêmes vivent hors de la base DBM, dans
 `<dossier du projet>/attachments/<id de la tâche>/<nom>`. On **copie** : la tâche reste autonome si l'original
-disparaît. Une pièce se désigne par son numéro (à partir de 1), comme une note.
+disparaît. Avec `--link`, on ne copie rien : la pièce porte `lien` (chemin absolu) et le fichier reste où il est ;
+`attachment check` signale alors un fichier déplacé, supprimé ou modifié. Une pièce se désigne par son numéro
+(à partir de 1), comme une note.
 
 Les sauvegardes et `undo` ne portent que sur la base, pas sur ces fichiers (voir le README). Pour que `undo`
 reste cohérent, rien n'est jamais supprimé tout de suite : `attachment remove`, `task remove` et
@@ -31,7 +33,7 @@ from . import config, couleurs, journal, reglages
 from .dates import _decaler
 from .formats import imprimer_plain, tableau
 from .sauvegardes import sauvegarder_base
-from .stockage import _base_existe, _lire_taches, _normaliser_tache, _resoudre_id
+from .stockage import _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 DOSSIER = "attachments"
 CORBEILLE = ".trash"
@@ -194,11 +196,12 @@ def lignes_pieces(t, indent="    "):
     lignes = []
     for n, p in enumerate(pieces, 1):
         manque = ""
-        if not _present(t['id'], p['nom']):
+        if not _present_piece(t, p):
             manque = f" {couleurs.CLR_DEL}[fichier manquant]{couleurs.CLR_RESET}"
         comm = f"  {couleurs.CLR_DIM}{p['commentaire']}{couleurs.CLR_RESET}" if p.get('commentaire') else ""
+        lien = f" {couleurs.CLR_DIM}🔗 {p['lien']}{couleurs.CLR_RESET}" if p.get('lien') else ""
         lignes.append(f"{indent}{couleurs.CLR_DIM}{n:>{largeur}}.{couleurs.CLR_RESET} {p['nom']} "
-                      f"{couleurs.CLR_DIM}({taille_lisible(p['taille'])}, {p['date'] or '?'}){couleurs.CLR_RESET}{comm}{manque}")
+                      f"{couleurs.CLR_DIM}({taille_lisible(p['taille'])}, {p['date'] or '?'}){couleurs.CLR_RESET}{lien}{comm}{manque}")
     return lignes
 
 
@@ -206,6 +209,30 @@ def _present(id_complet, nom):
     """Le fichier est-il en place, ou récupérable dans la corbeille ? (lecture seule : ne déplace rien)"""
     return (os.path.isfile(os.path.join(_dossier_tache(id_complet), nom))
             or _depuis_la_corbeille(id_complet, nom) is not None)
+
+
+def _present_piece(t, p):
+    """Le fichier de la pièce est-il disponible ? (lien : au chemin indiqué ; copie : en place ou en corbeille)"""
+    if p.get('lien'):
+        return os.path.isfile(p['lien'])
+    return _present(t['id'], p['nom'])
+
+
+def _fichier(t, p):
+    """Chemin du fichier d'une pièce (un fichier copié absent est remis en place depuis la corbeille), ou None."""
+    if p.get('lien'):
+        return p['lien'] if os.path.isfile(p['lien']) else None
+    return retrouver(t['id'], p['nom'])
+
+
+def _empreinte(chemin):
+    """(taille, sha256) d'un fichier, lu par blocs."""
+    empreinte, taille = hashlib.sha256(), 0
+    with open(chemin, 'rb') as f:
+        for bloc in iter(lambda: f.read(_BLOC), b""):
+            empreinte.update(bloc)
+            taille += len(bloc)
+    return taille, empreinte.hexdigest()
 
 
 def _erreur(raison, message, **champs):
@@ -285,12 +312,13 @@ def _numero_valide(t, numero):
     return f"Pièce n°{numero} introuvable : '{t['titre']}' {quoi}."
 
 
-def ajouter(id_recherche, fichiers, commentaire=None, fmt="text"):
-    """Copie `fichiers` dans la tâche ; tout est vérifié avant la première copie. Retourne False en cas d'échec."""
+def ajouter(id_recherche, fichiers, commentaire=None, fmt="text", lien=False):
+    """Copie `fichiers` dans la tâche (ou, avec `lien`, les référence sans les copier) ; tout est vérifié avant la première
+    copie. Retourne False en cas d'échec."""
     commentaire = " ".join((commentaire or "").split()) or None
     if commentaire and len(commentaire) > 200:
         return _erreur("comment_too_long", f"Commentaire trop long ({len(commentaire)} caractères, maximum 200).")
-    maximum = _taille_max()
+    maximum = 0 if lien else _taille_max()       # un lien ne prend pas de place : pas de limite de taille
     for f in fichiers:
         probleme = _verifier_source(f, maximum)
         if probleme:
@@ -301,15 +329,21 @@ def ajouter(id_recherche, fichiers, commentaire=None, fmt="text"):
     db, cle, t = ouverte
     ajoutees, copies = [], []
     try:
-        _creer_dossier(_dossier_tache(t['id']))
+        if not lien:
+            _creer_dossier(_dossier_tache(t['id']))
         pris = {p['nom'] for p in t['pieces_jointes']}
         for f in fichiers:
             nom = _nom_libre(nom_sur(f), pris)
             pris.add(nom)
-            destination = os.path.join(_dossier_tache(t['id']), nom)
-            taille, empreinte = _copier(f, destination)
-            copies.append(destination)
+            if lien:
+                taille, empreinte = _empreinte(f)
+            else:
+                destination = os.path.join(_dossier_tache(t['id']), nom)
+                taille, empreinte = _copier(f, destination)
+                copies.append(destination)
             piece = {"nom": nom, "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "taille": taille, "sha256": empreinte}
+            if lien:
+                piece["lien"] = os.path.abspath(f)
             if commentaire:
                 piece["commentaire"] = commentaire
             t['pieces_jointes'].append(piece)
@@ -320,13 +354,13 @@ def ajouter(id_recherche, fichiers, commentaire=None, fmt="text"):
             if os.path.lexists(c):
                 os.unlink(c)
         db.close()
-        return _erreur("attachment_copy_failed", f"Copie impossible : {e.strerror or e}.")
+        return _erreur("attachment_copy_failed", f"{'Lecture' if lien else 'Copie'} impossible : {e.strerror or e}.")
     finally:
         try:
             db.close()
         except Exception:
             pass
-    journal.noter(ids=[cle], titres=[t['titre']], modifie=True, attached=len(ajoutees))
+    journal.noter(ids=[cle], titres=[t['titre']], modifie=True, attached=len(ajoutees), linked=len(ajoutees) if lien else 0)
     sauvegarder_base()
     total = len(t['pieces_jointes'])
     if fmt == "json":
@@ -334,14 +368,14 @@ def ajouter(id_recherche, fichiers, commentaire=None, fmt="text"):
     else:
         for p in ajoutees:
             print(f" {couleurs.CLR_DONE}📎{couleurs.CLR_RESET} '{couleurs.CLR_BOLD}{p['nom']}{couleurs.CLR_RESET}' "
-                  f"({taille_lisible(p['taille'])}) jointe à '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' ({total} au total).")
+                  f"({taille_lisible(p['taille'])}) {'liée' if lien else 'jointe'} à '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' ({total} au total).")
     return True
 
 
 def _enregistrement(t, p, numero):
     """Description JSON d'une pièce : métadonnées, chemin et présence du fichier."""
-    chemin = os.path.join(_dossier_tache(t['id']), p['nom'])
-    return {"numero": numero, **p, "chemin": chemin, "present": _present(t['id'], p['nom'])}
+    chemin = p.get('lien') or os.path.join(_dossier_tache(t['id']), p['nom'])
+    return {"numero": numero, **p, "chemin": chemin, "present": _present_piece(t, p)}
 
 
 def lister(id_recherche=None, fmt="text"):
@@ -363,7 +397,7 @@ def lister(id_recherche=None, fmt="text"):
         return True
     lignes = [(t, n, p) for t in taches for n, p in enumerate(t['pieces_jointes'], 1)]
     if fmt == "plain":
-        imprimer_plain((t['id'], n, p['nom'], p['taille'], p['date'], p['sha256'], p.get('commentaire', "")) for t, n, p in lignes)
+        imprimer_plain((t['id'], n, p['nom'], p['taille'], p['date'], p['sha256'], p.get('commentaire', ""), p.get('lien', "")) for t, n, p in lignes)
     elif fmt == "table":
         if lignes:
             print(tableau(("ID", "N°", "NOM", "TAILLE", "DATE", "COMMENTAIRE"),
@@ -394,10 +428,10 @@ def _piece(id_recherche, numero):
         _erreur("invalid_attachment_number", probleme, index=numero)
         return None
     p = t['pieces_jointes'][numero - 1]
-    chemin = retrouver(t['id'], p['nom'])
+    chemin = _fichier(t, p)
     if chemin is None:
         _erreur("attachment_missing", f"Le fichier de la pièce n°{numero} ('{p['nom']}') est introuvable dans "
-                                      f"{_dossier_tache(t['id'])}.", index=numero)
+                                      f"{p.get('lien') and os.path.dirname(p['lien']) or _dossier_tache(t['id'])}.", index=numero)
         return None
     return t, p, chemin
 
@@ -481,14 +515,17 @@ def detacher(id_recherche, numero, fmt="text"):
         db[cle] = json.dumps(t)
     finally:
         db.close()
-    mettre_a_la_corbeille(t['id'], [p['nom']])
+    if not p.get('lien'):
+        mettre_a_la_corbeille(t['id'], [p['nom']])
     journal.noter(ids=[cle], titres=[t['titre']], modifie=True, detached=p['nom'])
     sauvegarder_base()
     if fmt == "json":
         print(json.dumps({"id": t['id'], "titre": t['titre'], "detachee": p, "total": len(t['pieces_jointes'])}, indent=2, ensure_ascii=False))
     else:
+        suite = ("lien retiré, le fichier d'origine n'est pas touché" if p.get('lien')
+                 else "fichier en corbeille : `todo attachment gc` la vide")
         print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} Pièce n°{numero} '{p['nom']}' détachée de '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' "
-              f"{couleurs.CLR_DIM}(fichier en corbeille : `todo attachment gc` la vide).{couleurs.CLR_RESET}")
+              f"{couleurs.CLR_DIM}({suite}).{couleurs.CLR_RESET}")
     return True
 
 
@@ -549,3 +586,111 @@ def vider_corbeille(anciennete=None, confirmer=True, fmt="text"):
     else:
         print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} {nb} fichier(s) supprimé(s) ({taille_lisible(octets)}).")
     return True
+
+
+# ----------------------------------------------------------------------------------------- check
+ETATS = ("ok", "en_corbeille", "manquant", "modifie")
+
+
+def _etat(t, p):
+    """État d'une pièce : ok, en_corbeille (copie retirée mais récupérable), manquant, modifie ; avec un détail lisible."""
+    lien = p.get('lien')
+    chemin = lien or os.path.join(_dossier_tache(t['id']), p['nom'])
+    if not os.path.isfile(chemin):
+        if not lien and _depuis_la_corbeille(t['id'], p['nom']) is not None:
+            return "en_corbeille", "dans la corbeille (remise en place à l'accès)"
+        return "manquant", ("fichier lié introuvable" if lien else "fichier introuvable dans le stockage")
+    try:
+        taille, empreinte = _empreinte(chemin)
+    except OSError as e:
+        return "manquant", f"illisible : {e.strerror or e}"
+    if taille != p['taille']:
+        return "modifie", f"taille {taille_lisible(taille)} au lieu de {taille_lisible(p['taille'])}"
+    if p['sha256'] and empreinte != p['sha256']:
+        return "modifie", "contenu différent (empreinte SHA-256)"
+    return "ok", ""
+
+
+def _orphelins(taches, restreint_a=None):
+    """Fichiers de `attachments/` qu'aucune pièce ne référence (ni tâche connue) ; `restreint_a` : id d'une seule tâche."""
+    base = dossier()
+    if not os.path.isdir(base):
+        return []
+    connues = {t['id']: {p['nom'] for p in t['pieces_jointes'] if not p.get('lien')} for t in taches}
+    trouves = []
+    for id_tache in sorted(os.listdir(base)):
+        chemin_tache = os.path.join(base, id_tache)
+        if id_tache == CORBEILLE or not os.path.isdir(chemin_tache) or (restreint_a and id_tache != restreint_a):
+            continue
+        for nom in sorted(os.listdir(chemin_tache)):
+            if nom not in connues.get(id_tache, ()):
+                trouves.append((id_tache, nom, os.path.join(chemin_tache, nom)))
+    return trouves
+
+
+def verifier(id_recherche=None, fmt="text"):
+    """Vérifie les pièces jointes : fichiers manquants ou modifiés (copies et liens), fichiers orphelins.
+
+    Sans identifiant : toutes les tâches, archivées comprises. Retourne False s'il y a une pièce manquante ou modifiée
+    (les orphelins et les fichiers en corbeille sont signalés mais ne sont pas des erreurs).
+    """
+    if id_recherche is not None:
+        ouverte = _ouvrir_tache(id_recherche, False)
+        if ouverte is None:
+            return False
+        db, _, t = ouverte
+        db.close()
+        taches, restreint = [t], t['id']
+    else:
+        taches, restreint = _lire_taches() + _lire_archive(), None
+    taches = sorted((t for t in taches), key=lambda t: (t['titre'].lower(), t['id']))
+    resultats = []
+    for t in taches:
+        for n, p in enumerate(t['pieces_jointes'], 1):
+            etat, detail = _etat(t, p)
+            resultats.append({"id": t['id'], "titre": t['titre'], "numero": n, "nom": p['nom'], "lien": p.get('lien'),
+                              "chemin": p.get('lien') or os.path.join(_dossier_tache(t['id']), p['nom']), "etat": etat, "detail": detail})
+    orphelins = _orphelins(taches, restreint)
+    comptes = {e: sum(1 for r in resultats if r["etat"] == e) for e in ETATS}
+    succes = comptes["manquant"] == 0 and comptes["modifie"] == 0
+    journal.noter(checked=len(resultats), problems=comptes["manquant"] + comptes["modifie"])
+    if not succes:
+        journal.echec("attachment_check_failed", manquantes=comptes["manquant"], modifiees=comptes["modifie"])
+
+    if fmt == "json":
+        print(json.dumps({"verifiees": len(resultats), "ok": comptes["ok"], "en_corbeille": comptes["en_corbeille"],
+                          "manquantes": comptes["manquant"], "modifiees": comptes["modifie"],
+                          "orphelins": [{"id": i, "nom": n, "chemin": c} for i, n, c in orphelins], "pieces": resultats},
+                         indent=2, ensure_ascii=False))
+        return succes
+    if fmt == "plain":
+        imprimer_plain([(r["id"], r["numero"], r["nom"], r["etat"], r["chemin"]) for r in resultats]
+                       + [(i, "", n, "orphelin", c) for i, n, c in orphelins])
+        return succes
+    if fmt == "table":
+        lignes = [(r["id"][:8], r["numero"], r["nom"], r["etat"], r["detail"]) for r in resultats if r["etat"] != "ok"]
+        lignes += [(i[:8], "", n, "orphelin", c) for i, n, c in orphelins]
+        if lignes:
+            print(tableau(("ID", "N°", "NOM", "ÉTAT", "DÉTAIL"), lignes))
+        return succes
+    icones = {"manquant": f"{couleurs.CLR_DEL}❌ manquant{couleurs.CLR_RESET}", "modifie": f"{couleurs.CLR_DEL}⚠️  modifié{couleurs.CLR_RESET}",
+              "en_corbeille": f"{couleurs.CLR_DIM}🗑️  en corbeille{couleurs.CLR_RESET}"}
+    for r in resultats:
+        if r["etat"] != "ok":
+            print(f" {icones[r['etat']]}  {r['nom']}  {couleurs.CLR_DIM}(pièce {r['numero']} de '{r['titre']}', id: {r['id'][:8]}) : {r['detail']}{couleurs.CLR_RESET}")
+            if r["lien"]:
+                print(f"     {couleurs.CLR_DIM}lien : {r['lien']}{couleurs.CLR_RESET}")
+    for i, n, c in orphelins:
+        print(f" {couleurs.CLR_DIM}❔ orphelin  {c}  (aucune pièce ne le référence){couleurs.CLR_RESET}")
+    if not resultats and not orphelins:
+        print(f" 📎 {couleurs.CLR_DIM}Aucune pièce jointe à vérifier.{couleurs.CLR_RESET}")
+        return True
+    bilan = f"{comptes['ok']} ok sur {len(resultats)} pièce(s)"
+    for e, libelle in (("manquant", "manquante(s)"), ("modifie", "modifiée(s)"), ("en_corbeille", "en corbeille")):
+        if comptes[e]:
+            bilan += f", {comptes[e]} {libelle}"
+    if orphelins:
+        bilan += f", {len(orphelins)} orphelin(s)"
+    marque = f"{couleurs.CLR_DONE}✔{couleurs.CLR_RESET}" if succes else f"{couleurs.CLR_DEL}✘{couleurs.CLR_RESET}"
+    print(f" {marque} {bilan}.")
+    return succes

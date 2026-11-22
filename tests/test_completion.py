@@ -210,3 +210,8 @@ def test_start_unstart_et_rapports_completables(todo, argcomplete_utilisable):
     assert "--at" in completer(todo, "todo task start --a")[0]
     assert "--started" in completer(todo, "todo list --star")[0]
     assert "--by" in [c.strip() for c in completer(todo, "todo report cycle --b")[0]]
+
+
+def test_attachment_check_et_link_completables(todo, argcomplete_utilisable):
+    assert "check" in completer(todo, "todo attachment ")[0]
+    assert "--link" in [c.strip() for c in completer(todo, "todo attachment add --li")[0]]
