@@ -16,6 +16,7 @@ from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import config
 from .dates import _decaler, _parse_date
 from .formats import sortie_taches
+from . import pieces_jointes
 from .sauvegardes import sauvegarder_base
 from .stockage import _afficher_bilan_lot, _archive_existe, _base_existe, _charger_taches, _lire_archive, _normaliser_tache, _resoudre_ids
 
@@ -217,6 +218,7 @@ def purger_archive(ids=None, anciennete=None, confirmer=True):
     with dbm.open(config.ARCHIVE_NAME, 'w') as archive:
         for cle, titre in cibles:
             del archive[cle]
+            pieces_jointes.mettre_a_la_corbeille(cle.decode('utf-8', errors='replace'))
             journal.noter(ids=[cle], titres=[titre], modifie=True)
     journal.noter(purged=len(cibles))
     sauvegarder_base()                              # APRÈS fermeture de l'archive : la purge reste annulable

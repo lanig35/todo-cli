@@ -31,7 +31,7 @@ COMPLETION = bool(os.environ.get("_ARGCOMPLETE"))   # le shell complète une lig
 class Reglage(NamedTuple):
     section: str
     cle: str
-    type: str                 # "bool", "int", "choix", "chemin" ou "colonnes"
+    type: str                 # "bool", "int", "choix", "chemin", "texte", "colonnes" ou "projet"
     defaut: object
     aide: str
     choix: Optional[tuple] = None
@@ -87,6 +87,11 @@ REGLAGES = (
             "Nombre maximal de tâches listées par remind.", minimum=1),
     Reglage("remind", "soon", "int", 0,
             "Signaler aussi les échéances des N prochains jours ; 0 = retards et aujourd'hui seulement.", minimum=0),
+    Reglage("attachments", "max_size", "int", 10,
+            "Taille maximale d'une pièce jointe, en Mo (todo attachment add) ; 0 = pas de limite.", minimum=0),
+    Reglage("attachments", "opener", "texte", "",
+            "Commande qui ouvre une pièce jointe (`todo attachment open`), par exemple `less` ou `evince` ; vide = xdg-open dans une "
+            "session graphique, sinon le chemin du fichier est seulement affiché."),
     Reglage("log", "level", "choix", "info",
             "Niveau du journal : off, error, warning, info (actions et erreurs) ou debug (ajoute les lectures).",
             choix=("off", "error", "warning", "info", "debug")),
@@ -201,6 +206,8 @@ def convertir(reglage, texte):
     if reglage.type == "projet":
         from .config import valider_nom
         return valider_nom(brut)
+    if reglage.type == "texte":
+        return brut
     if not brut:
         raise ValueError("valeur vide")
     return os.path.abspath(os.path.expanduser(brut))  # chemin

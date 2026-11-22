@@ -10,6 +10,7 @@ from . import config
 from . import couleurs, dependances, journal
 from .dates import MSG_FORMATS_DATE, MSG_FORMATS_REPETITION, _decaler, _libelle_recurrence, _parse_date, _parser_recurrence, _prochaine_echeance, _resoudre_date, _sans_accents
 from . import notes as carnet
+from . import pieces_jointes
 from .sauvegardes import sauvegarder_base
 from .stockage import _afficher_bilan_lot, _base_existe, _normaliser_tache, _resoudre_id, _resoudre_ids
 
@@ -402,6 +403,7 @@ def supprimer_tache(ids, note=None):
         return False
 
     nb_ok = 0
+    supprimees = []
     with dbm.open(config.DB_NAME, 'w') as db:
         cles, echecs = _resoudre_ids(db, ids)
         for key in cles:
@@ -410,6 +412,7 @@ def supprimer_tache(ids, note=None):
             except ValueError:
                 titre = None  # entrée corrompue : on peut quand même la supprimer
             del db[key]
+            supprimees.append(key.decode('utf-8', errors='replace'))
             journal.noter(ids=[key], titres=[titre] if titre else None, modifie=True)
             detail = f" : '{couleurs.CLR_BOLD}{titre}{couleurs.CLR_RESET}'" if titre else ""
             print(f" {couleurs.CLR_DEL}🗑️{couleurs.CLR_RESET} Tâche supprimée{detail}.")
@@ -417,6 +420,8 @@ def supprimer_tache(ids, note=None):
                 print(f"    {couleurs.CLR_DIM}📝 Motif transmis au journal.{couleurs.CLR_RESET}")
             nb_ok += 1
 
+    for identifiant in supprimees:      # fichiers joints : à la corbeille (récupérables par `undo`), pas effacés
+        pieces_jointes.mettre_a_la_corbeille(identifiant)
     # Une seule sauvegarde pour tout le lot, APRÈS fermeture de la base
     if nb_ok:
         sauvegarder_base()

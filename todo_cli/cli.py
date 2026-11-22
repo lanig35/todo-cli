@@ -26,6 +26,7 @@ from .seed import peupler_fausses_taches
 from .echange import exporter, importer
 from .formats import FORMATS, colonnes_tache, resoudre as resoudre_format
 from .notes import commande_note
+from . import pieces_jointes
 from .taches import ajouter_tache, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
@@ -110,6 +111,9 @@ def _args_filtres_notes(p):
     g = p.add_mutually_exclusive_group()
     g.add_argument('--has-notes', action='store_true', help="Seulement les tâches qui ont au moins une note")
     g.add_argument('--no-notes', action='store_true', help="Seulement les tâches sans note")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument('--has-files', action='store_true', help="Seulement les tâches qui ont au moins une pièce jointe")
+    g.add_argument('--no-files', action='store_true', help="Seulement les tâches sans pièce jointe")
 
 
 def _args_filtres_fin(p, archive=False):
@@ -169,6 +173,8 @@ def _filtres_communs(args, archive=False, sans_prio=False):
         f['bloquee'] = bool(args.blocked)
     if args.has_notes or args.no_notes:
         f['notes'] = bool(args.has_notes)
+    if args.has_files or args.no_files:
+        f['fichiers'] = bool(args.has_files)
     f['fini_apres'] = _date_passee(args.done_after, '--done-after')
     f['fini_avant'] = _date_passee(args.done_before, '--done-before')
     _plage_vide(f['fini_apres'], f['fini_avant'], '--done-after', '--done-before')
@@ -202,12 +208,12 @@ def _args_archive_filtres(p):
 
 
 def _filtres_archive_actifs(args):
-    return any([*(getattr(args, a) for a in _ATTRS_SELECTION), args.has_notes, args.no_notes, args.done_after, args.done_before,
+    return any([*(getattr(args, a) for a in _ATTRS_SELECTION), args.has_notes, args.no_notes, args.has_files, args.no_files, args.done_after, args.done_before,
                 args.archived_after, args.archived_before, args.sort, args.limit, args.start, args.columns])
 
 
 _ATTRS_LOT = ('status', 'search', 'search_in', 'overdue', 'today', 'due_before', 'due_after', 'no_due', 'blocked', 'ready',
-              'has_notes', 'no_notes', 'done_after', 'done_before', *_ATTRS_SELECTION)
+              'has_notes', 'no_notes', 'has_files', 'no_files', 'done_after', 'done_before', *_ATTRS_SELECTION)
 
 
 def _args_lot(p, statut=False, prio=True):
@@ -309,7 +315,7 @@ def _colonnes(valeur):
 def _args_colonnes(p):
     p.add_argument('--columns', type=_colonnes, default=None, metavar='COLONNES',
                    help="Colonnes des formats table et plain, séparées par des virgules, dans cet ordre : id, status, prio, due, "
-                        "tags, title, notes, created, done, archived, recurrence, description, after, blocked. L'id est toujours présent "
+                        "tags, title, notes, files, created, done, archived, recurrence, description, after, blocked. L'id est toujours présent "
                         "(placé en tête s'il manque). Défaut : id,status,prio,due,tags,title,notes (ou [general] columns)")
 
 
@@ -685,6 +691,34 @@ def _args_note_supprimer(p):
     p.add_argument('delete', type=int, metavar='N', help="Numéro de la note à supprimer (numérotées de 1, la plus ancienne)")
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
+# --- Groupe ``attachment`` : fichiers joints aux tâches ------------------------------------------------------------
+def _args_pj_ajouter(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('fichiers', nargs='+', metavar='FICHIER', help="Fichier(s) à copier dans le stockage de la tâche")
+    p.add_argument('--comment', type=str, default=None, help="Commentaire de la pièce (200 caractères au plus)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
+
+def _args_pj_lister(p):
+    p.add_argument('id', type=str, nargs='?', default=None, help="UUID de la tâche (préfixe unique accepté) ; sans identifiant : toutes les tâches qui ont des pièces")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
+
+def _args_pj_numero(p):
+    p.add_argument('id', type=str, help="UUID cible (préfixe unique accepté)")
+    p.add_argument('numero', type=int, metavar='N', help="Numéro de la pièce (voir `todo attachment list ID`)")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
+
+def _args_pj_extraire(p):
+    _args_pj_numero(p)
+    p.add_argument('--to', dest='vers', type=str, default=None, metavar='DOSSIER', help="Dossier de destination (défaut : le dossier courant)")
+    p.add_argument('--force', action='store_true', help="Écrase un fichier existant")
+
+def _args_pj_gc(p):
+    p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
+                   help="Ne supprime que ce qui est en corbeille depuis au moins cette durée (30d, 2w, 6m, 1y)")
+    p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation")
+    p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
+
+
 def _args_archive_ajouter(p):
     p.add_argument('ids', nargs='*', help='Identifiants (ou préfixes) de tâches terminées à archiver ; sans identifiant : toutes les tâches terminées')
     p.add_argument('--older-than', dest='anciennete', type=str, default=None, metavar='DUREE',
@@ -714,7 +748,7 @@ def _args_format(p):
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
 _ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, tags_archive=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
                      tag=None, any_tag=None, no_tag=False, not_tag=None, prio=None, not_prio=None, recurring=False,
-                     no_recurring=False, created_after=None, created_before=None, filtre_id=None, has_notes=False, no_notes=False, done_after=None, done_before=None,
+                     no_recurring=False, created_after=None, created_before=None, filtre_id=None, has_notes=False, no_notes=False, has_files=False, no_files=False, done_after=None, done_before=None,
                      archived_after=None, archived_before=None, sort=None, limit=None, start=None, columns=None)
 
 # (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
@@ -736,6 +770,14 @@ _GROUPES = [
         ('list', 'note', _args_note_lister, "Lister les notes d'une tâche", dict(texte=[], edit=None, delete=None)),
         ('edit', 'note', _args_note_modifier, "Remplacer le texte d'une note", dict(delete=None, format=None)),
         ('delete', 'note', _args_note_supprimer, 'Supprimer une note', dict(texte=[], edit=None, format=None)),
+    ]),
+    ('attachment', "Pièces jointes des tâches (fichiers copiés dans le stockage)", [
+        ('add', 'attachment_add', _args_pj_ajouter, 'Joindre un ou plusieurs fichiers à une tâche', {}),
+        ('list', 'attachment_list', _args_pj_lister, "Lister les pièces jointes d'une tâche (ou de toutes)", {}),
+        ('open', 'attachment_open', _args_pj_numero, 'Ouvrir une pièce jointe (ou afficher son chemin sans session graphique)', {}),
+        ('save', 'attachment_save', _args_pj_extraire, 'Copier une pièce jointe dans un dossier', {}),
+        ('remove', 'attachment_remove', _args_pj_numero, 'Détacher une pièce jointe (fichier mis en corbeille)', {}),
+        ('gc', 'attachment_gc', _args_pj_gc, 'Vider la corbeille des pièces jointes (définitif)', {}),
     ]),
     ('archive', "Archive des tâches terminées", [
         ('add', 'archive', _args_archive_ajouter, 'Archiver les tâches terminées', _ARCHIVE_DEFAUTS),
@@ -891,7 +933,7 @@ def _completer_ligne():
 
 
 # Commandes qui ne déclenchent pas l'archivage automatique (elles gèrent déjà l'archive ou l'historique)
-_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete')
+_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete', 'attachment_gc')
 
 
 def _mode_verrou(args):
@@ -902,7 +944,7 @@ def _mode_verrou(args):
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
-             'report_stale', 'report_done'):
+             'report_stale', 'report_done', 'attachment_list', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -1089,6 +1131,26 @@ def main():
                                 apres=args.after, tags_ajout=args.add_tag, tags_retrait=args.remove_tag) if ids is not None else True
     elif args.commande == 'note':
         succes = commande_note(args.id, args.texte, args.format, args.edit, args.delete)
+    elif args.commande == 'attachment_add':
+        succes = pieces_jointes.ajouter(args.id, args.fichiers, args.comment, args.format)
+    elif args.commande == 'attachment_list':
+        succes = pieces_jointes.lister(args.id, args.format)
+    elif args.commande == 'attachment_open':
+        succes = pieces_jointes.ouvrir(args.id, args.numero, args.format)
+    elif args.commande == 'attachment_save':
+        succes = pieces_jointes.extraire(args.id, args.numero, args.vers, args.force, args.format)
+    elif args.commande == 'attachment_remove':
+        succes = pieces_jointes.detacher(args.id, args.numero, args.format)
+    elif args.commande == 'attachment_gc':
+        anciennete = None
+        if args.anciennete is not None:
+            anciennete = _parser_anciennete(args.anciennete)
+            if anciennete is None:
+                journal.echec("invalid_duration")
+                print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} Durée non reconnue pour --older-than : '{args.anciennete}'. "
+                      f"Format : {MSG_FORMAT_ANCIENNETE}.")
+                sys.exit(1)
+        succes = pieces_jointes.vider_corbeille(anciennete, not args.yes, args.format)
     elif args.commande == 'export':
         succes = exporter(args.fichier, not args.no_archive, args.force)
     elif args.commande == 'import':
