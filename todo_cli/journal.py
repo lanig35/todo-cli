@@ -191,6 +191,16 @@ def noter(ids=None, titres=None, modifie=False, **champs):
     _etat["champs"].update({k: v for k, v in champs.items() if v is not None})
 
 
+def bilan():
+    """Ce que la commande en cours a noté : commande, identifiants (abrégés), titres, modification faite ? (pour les hooks)."""
+    return {"commande": _etat["commande"], "ids": list(_etat["ids"]), "titres": list(_etat["titres"]), "modifie": _etat["modifie"]}
+
+
+def avertir(evenement, **champs):
+    """Avertissement hors refus d'utilisation (WARNING) : un hook qui échoue, par exemple."""
+    _emettre("warning", evenement, champs)
+
+
 def definir_projet(nom):
     """Projet visé par la commande : ajouté à chaque message du journal, sauf pour `default` (comme avant les projets)."""
     _etat["projet"] = nom if nom and nom != "default" else None

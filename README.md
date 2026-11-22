@@ -25,6 +25,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
+- Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…)
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
 - Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
 - Date de complétion et statistiques
@@ -373,6 +374,36 @@ todo list --has-files                             # tâches qui ont des pièces 
 - **Sauvegardes** : le dossier `attachments/` n'est **pas** dans les sauvegardes de la base ; sauvegardez-le avec
   `rsync` ou l'outil de votre choix. `data export` n'emporte que les métadonnées (aucun fichier) et `data import
   --update` conserve les pièces de la tâche existante.
+
+### Hooks
+
+Un **hook** est une commande de votre choix lancée automatiquement **après** une commande qui a modifié des tâches
+(notification, synchronisation, journal personnel…). Rien n'est lancé tant qu'aucun hook n'est défini.
+
+```ini
+[hooks]
+on_done = notify-send "todo" "Terminée"
+on_add = sh -c 'echo "$TODO_PROJECT: $TODO_TITLE" >> ~/todo-ajouts.log'
+on_change = rsync -a ~/.local/share/todo/ serveur:todo/
+```
+
+- **Événements** : `on_add`, `on_done`, `on_undone`, `on_start`, `on_unstart`, `on_edit`, `on_postpone`, `on_remove`, `on_move`
+  (une exécution par tâche touchée) et `on_change` (après toute commande qui modifie quelque chose, y compris `undo`, `import`
+  ou `archive` ; une seule exécution si la commande ne vise aucune tâche). Le hook propre à la commande passe avant `on_change`.
+- **Pas de shell** : la commande est découpée comme le fait un shell, puis lancée directement. Pour des variables, des pipes ou
+  des redirections, écrivez `sh -c '…'`.
+- **Données** : jamais insérées dans la commande (un titre ne peut donc pas injecter de code), mais fournies par l'environnement
+  — `TODO_EVENT`, `TODO_ID`, `TODO_TITLE`, `TODO_PROJECT`, `TODO_COUNT`, `TODO_IDS` (liste séparée par des virgules) — et par
+  l'entrée standard, qui reçoit la tâche en JSON (comme `show --format json`) ; pour une tâche supprimée ou déplacée, seulement
+  `{"id", "titre"}`.
+- **Lots** : au-delà de 20 tâches touchées, une seule exécution a lieu, avec `TODO_COUNT` et `TODO_IDS` (entrée standard :
+  `{"event", "ids"}`).
+- **Garde-fous** : un hook ne change jamais le code de sortie de `todo` ; un échec, une commande introuvable ou un dépassement de
+  `timeout` donnent seulement un avertissement sur stderr (et une ligne `WARNING … hook` dans le journal). La sortie standard du
+  hook est renvoyée sur stderr, pour ne pas polluer `--format json`. Un hook qui appelle `todo` ne déclenche pas d'autre hook
+  (`TODO_IN_HOOK=1`). Rien n'est lancé pour une lecture ni pour `--dry-run`. `TODO_HOOKS_ENABLED=0` coupe tout.
+- **Confiance** : un hook s'exécute avec vos droits ; il vient de votre configuration ou de votre environnement, jamais du contenu
+  des tâches.
 
 ### Suivi du temps
 
@@ -988,6 +1019,13 @@ batch_confirm = 5       # actions en lot par filtre : confirmation à partir de 
 max_size = 10           # taille maximale d'une pièce jointe, en Mo (0 = pas de limite)
 opener =                # commande d'ouverture (less, evince…) ; vide = xdg-open, sinon seul le chemin est affiché
 
+[hooks]
+enabled = true          # false : aucun hook n'est lancé
+timeout = 10            # secondes accordées à un hook
+on_add =                # commande lancée pour chaque tâche ajoutée (idem on_done, on_undone, on_start, on_unstart,
+                        # on_edit, on_postpone, on_remove, on_move) ; vide = rien
+on_change =             # commande lancée après toute commande qui modifie quelque chose
+
 [list]
 limit = 30              # 0 = pas de limite
 overdue_first = true
@@ -1015,6 +1053,9 @@ soon = 0
 | `general` | `batch_confirm` | `5` (0 = jamais de confirmation) | `TODO_BATCH_CONFIRM` | `-y` |
 | `attachments` | `max_size` | `10` (Mo ; 0 = pas de limite) | `TODO_ATTACHMENTS_MAX_SIZE` | — |
 | `attachments` | `opener` | *(vide : `xdg-open` en session graphique, sinon affiche le chemin)* | `TODO_ATTACHMENTS_OPENER` | — |
+| `hooks` | `enabled` | `true` | `TODO_HOOKS_ENABLED` | — |
+| `hooks` | `timeout` | `10` (secondes) | `TODO_HOOKS_TIMEOUT` | — |
+| `hooks` | `on_add`, `on_done`, `on_undone`, `on_start`, `on_unstart`, `on_edit`, `on_postpone`, `on_remove`, `on_move`, `on_change` | *(vide)* | `TODO_HOOKS_ON_DONE`… | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
 | `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
@@ -1210,6 +1251,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
+| `hooks.py` | hooks : commandes lancées après une modification |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
