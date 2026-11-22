@@ -3,6 +3,26 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.1.0] - 2026-11-22
+
+### Ajouté
+
+- **Pièces jointes** : groupe `attachment` (`add`, `list`, `open`, `save`, `remove`, `gc`). Les fichiers sont copiés
+  dans `<dossier du projet>/attachments/<id>/` (droits 0600/0700) ; la tâche garde leurs métadonnées (nom, date,
+  taille, SHA-256, commentaire) dans `pieces_jointes`.
+- `show` liste les pièces ; `list` marque les tâches `📎N`, gagne la colonne `files` et les filtres `--has-files` /
+  `--no-files` ; le JSON de `show`, `list` et `attachment list` les contient.
+- Réglages `[attachments] max_size` (10 Mo, 0 = illimité) et `opener` ; variables `TODO_ATTACHMENTS_MAX_SIZE` et
+  `TODO_ATTACHMENTS_OPENER`.
+- **Corbeille** `attachments/.trash/` : `attachment remove`, `task remove` et `archive purge` n'effacent jamais un fichier ;
+  `undo` redevient complet (le fichier absent est remis en place à l'accès). `attachment gc [--older-than DURÉE]` la vide.
+- `task move` emmène les fichiers dans le projet cible.
+
+### Modifié
+
+- `data import --update` conserve les pièces jointes de la tâche remplacée (l'export ne contient que leurs
+  métadonnées, pas les fichiers, qui ne font pas partie des sauvegardes de la base).
+
 ## [3.0.0] - 2026-11-21
 
 Version majeure : seule la suppression de la syntaxe 1.x, annoncée depuis la 2.0, est incompatible. Les projets
@@ -384,6 +404,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.1.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.1.0
 [3.0.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.0.0
 [2.20.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.20.0
 [2.19.0]: https://github.com/lanig35/todo-cli/releases/tag/v2.19.0

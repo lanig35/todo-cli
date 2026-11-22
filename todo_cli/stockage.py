@@ -54,6 +54,23 @@ def _normaliser_notes(brutes):
                 notes[-1]["modifiee"] = str(n['modifiee'])
     return notes
 
+def _normaliser_pieces(brutes):
+    """Liste de pièces jointes valides ({nom, date, taille, sha256, commentaire?}) ; le reste est ignoré (voir pieces_jointes.py)."""
+    pieces, vus = [], set()
+    for p in brutes if isinstance(brutes, list) else []:
+        nom = p.get('nom') if isinstance(p, dict) else None
+        if not isinstance(nom, str) or not nom or nom in vus or nom.startswith('.') or '/' in nom or '\\' in nom or '\x00' in nom:
+            continue
+        vus.add(nom)
+        taille = p.get('taille')
+        piece = {"nom": nom, "date": str(p.get('date') or ""),
+                 "taille": taille if isinstance(taille, int) and not isinstance(taille, bool) and taille >= 0 else 0,
+                 "sha256": str(p.get('sha256') or "")}
+        if p.get('commentaire'):
+            piece["commentaire"] = str(p['commentaire'])
+        pieces.append(piece)
+    return pieces
+
 def _normaliser_tache(brut):
     """Décode une entrée DBM et complète les champs manquants (compatibilité ascendante).
 
@@ -79,6 +96,7 @@ def _normaliser_tache(brut):
     apres = t.get('apres')       # ids des tâches dont celle-ci dépend (voir dependances.py)
     t['apres'] = list(dict.fromkeys(x for x in apres if isinstance(x, str) and x)) if isinstance(apres, list) else []
     t['notes'] = _normaliser_notes(t.get('notes'))  # journal daté de la tâche (absent des anciennes tâches)
+    t['pieces_jointes'] = _normaliser_pieces(t.get('pieces_jointes'))  # fichiers joints (absents des anciennes tâches)
     return t
 
 def _charger_taches(db):

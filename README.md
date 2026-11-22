@@ -25,6 +25,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
+- Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
 - Sauvegardes automatiques et restauration
@@ -76,6 +77,7 @@ plus courantes ont un **raccourci** de premier niveau.
 |---|---|
 | `task` | `add`, `list`, `show`, `edit`, `done`, `undone`, `remove`, `move`, `postpone`, `next` |
 | `note` | `add`, `list`, `edit`, `delete` |
+| `attachment` | `add`, `list`, `open`, `save`, `remove`, `gc` |
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
@@ -188,6 +190,7 @@ Options de `list` :
 | `--blocked`, `--ready` | tâches à faire qui attendent une dépendance (`--after`), ou qui sont libres |
 | `--no-due` | tâches sans échéance (ne se combine pas avec `--due-before` / `--due-after`) |
 | `--has-notes`, `--no-notes` | tâches qui ont au moins une note, ou aucune |
+| `--has-files`, `--no-files` | tâches qui ont au moins une pièce jointe, ou aucune |
 | `--done-after DATE`, `--done-before DATE` | terminées à partir de / au plus tard à cette date, **incluse** (voir ci-dessous) |
 | `--sort alpha\|status\|priority\|due` | critère de tri |
 | `--overdue-first`, `--no-overdue-first` | regroupe (par défaut) ou non les retards en tête |
@@ -319,6 +322,43 @@ todo task remove a1b2c3 -m "doublon de a9f8e7"
   (`journalctl -t todo`), avec le titre, seul souvenir de la suppression.
 - Journal : l'ajout d'une note est tracé sans son texte (seulement sa longueur `note_len`), sauf si
   `[log] titles = true`.
+
+### Pièces jointes
+
+Une tâche peut porter des **fichiers** (contrat, facture, capture d'écran…). Ils sont **copiés** dans le stockage du
+projet : la tâche reste autonome si l'original disparaît ou change. Comme les notes, les pièces sont numérotées à partir de 1.
+
+```bash
+todo attachment add a1b2c3 facture.pdf scan.png --comment "reçu en octobre"   # copie un ou plusieurs fichiers
+todo attachment list a1b2c3                       # pièces de la tâche (sans identifiant : de toutes les tâches)
+todo attachment open a1b2c3 1                     # ouvre la pièce n°1 (xdg-open), ou affiche son chemin
+todo attachment save a1b2c3 1 --to ~/Documents    # en extrait une copie (--force pour écraser)
+todo attachment remove a1b2c3 1                   # la détache : le fichier va à la corbeille
+todo attachment gc --older-than 30d               # vide la corbeille (définitif ; sans durée : tout)
+todo list --has-files                             # tâches qui ont des pièces ; `list` les marque 📎N
+```
+
+- **Stockage** : `<dossier du projet>/attachments/<id de la tâche>/<nom>` (voir *Stockage*), en 0600 dans des dossiers 0700.
+  Les métadonnées (nom, date, taille, empreinte SHA-256, commentaire) sont dans la tâche : elles apparaissent dans
+  `show`, `--format json` (`"pieces_jointes"`) et `attachment list --format json|plain|table`, où `chemin` et
+  `present` indiquent si le fichier est bien là.
+- **Nom** : celui du fichier, sans dossier ; un nom déjà pris par une autre pièce de la tâche devient `nom-2.ext`,
+  `nom-3.ext`… Les caractères de contrôle sont remplacés, un nom qui commence par un point reçoit un `_`.
+- **Limites** : `[attachments] max_size` (10 Mo par défaut ; 0 = pas de limite) ; commentaire de 200 caractères au
+  plus. Tous les fichiers sont vérifiés avant la première copie : un seul invalide et rien n'est joint.
+  Un lien symbolique est suivi à la copie, jamais à l'ouverture.
+- **`open`** : lance `[attachments] opener` s'il est défini (`less`, `evince`… ; la commande garde le terminal),
+  sinon `xdg-open` dans une session graphique, sinon affiche seulement le chemin du fichier (utile en terminal seul :
+  `less "$(todo attachment open ID 1 --format plain)"`).
+- **Corbeille et `undo`** : les sauvegardes et `undo` ne portent que sur la base, pas sur les fichiers. Pour que
+  `undo` reste cohérent, rien n'est effacé tout de suite : `attachment remove`, `task remove` et `archive purge`
+  déplacent les fichiers dans `attachments/.trash/`, et un fichier absent y est cherché et remis en place à
+  l'accès (`open`, `save`). Seul `attachment gc` vide la corbeille (confirmation, `-y` pour la passer) ; après
+  cela, `undo` rend la tâche mais plus ses fichiers. L'archivage laisse les fichiers en place.
+- **Projets** : chaque projet a ses pièces ; `task move` emmène les fichiers avec la tâche.
+- **Sauvegardes** : le dossier `attachments/` n'est **pas** dans les sauvegardes de la base ; sauvegardez-le avec
+  `rsync` ou l'outil de votre choix. `data export` n'emporte que les métadonnées (aucun fichier) et `data import
+  --update` conserve les pièces de la tâche existante.
 
 ### Reporter une échéance
 
@@ -557,7 +597,7 @@ todo list --format plain --columns id,title | grep -i budget
 
 **Choisir les colonnes** (`--columns`, sur `list`, `next` et `archive list`, pour `table` et `plain`) : noms
 séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponibles : `id`, `status`, `prio`,
-`due`, `tags`, `title`, `notes`, `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked`, `project` (vide hors `--all-projects` ; les trois
+`due`, `tags`, `title`, `notes`, `files` (nombre de pièces jointes), `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked`, `project` (vide hors `--all-projects` ; les trois
 dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
 manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
 avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs).
@@ -892,6 +932,10 @@ columns = id,status,prio,due,tags,title,notes   # colonnes de table/plain (list,
 lock_timeout = 10       # secondes d'attente si la base est utilisée par une autre instance
 batch_confirm = 5       # actions en lot par filtre : confirmation à partir de ce nombre de tâches (0 = jamais)
 
+[attachments]
+max_size = 10           # taille maximale d'une pièce jointe, en Mo (0 = pas de limite)
+opener =                # commande d'ouverture (less, evince…) ; vide = xdg-open, sinon seul le chemin est affiché
+
 [list]
 limit = 30              # 0 = pas de limite
 overdue_first = true
@@ -917,6 +961,8 @@ soon = 0
 | `general` | `columns` | `id,status,prio,due,tags,title,notes` | `TODO_COLUMNS` | `--columns` |
 | `general` | `lock_timeout` | `10` (secondes, 0 = pas d'attente) | `TODO_LOCK_TIMEOUT` | — |
 | `general` | `batch_confirm` | `5` (0 = jamais de confirmation) | `TODO_BATCH_CONFIRM` | `-y` |
+| `attachments` | `max_size` | `10` (Mo ; 0 = pas de limite) | `TODO_ATTACHMENTS_MAX_SIZE` | — |
+| `attachments` | `opener` | *(vide : `xdg-open` en session graphique, sinon affiche le chemin)* | `TODO_ATTACHMENTS_OPENER` | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
 | `add` | `priority` | `medium` | `TODO_ADD_PRIORITY` | `--prio` (et `+`/`!priorité` dans le titre) |
@@ -1112,6 +1158,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
+| `pieces_jointes.py` | pièces jointes : copie, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
@@ -1170,6 +1217,7 @@ status checks to pass* (cocher `pytest (Python`3.13`).
 | Base (projet `default`) | `~/.local/share/todo/todo_db*` |
 | Autres projets | `~/.local/share/todo/projects/<nom>/` (mêmes fichiers : base, archive, sauvegardes, verrou) |
 | Projets supprimés | `~/.local/share/todo/.trash/<nom>-AAAAMMJJ-HHMMSS/` |
+| Pièces jointes | `<dossier du projet>/attachments/<id de la tâche>/<nom>` ; corbeille : `attachments/.trash/<id>/<horodatage>/` |
 | Journal (cible `file`) | `~/.local/state/todo/todo.log` |
 | État du rappel | `~/.local/share/todo/remind_off`, `remind_last`, `remind_status` |
 | Archive (projet `default`) | `~/.local/share/todo/todo_archive*` |

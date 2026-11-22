@@ -221,8 +221,10 @@ def importer(source, mode="ajouter", simuler=False, confirmer=True, fmt="text"):
                 vus.add(identifiant)
                 valides.append((magasin, identifiant, resultat))
 
-    existantes_taches = {t['id'] for t in _lire_taches()}
-    existantes_archive = {t['id'] for t in _lire_archive()}
+    lues_taches, lues_archive = _lire_taches(), _lire_archive()
+    existantes_taches = {t['id'] for t in lues_taches}
+    existantes_archive = {t['id'] for t in lues_archive}
+    pieces = {t['id']: t['pieces_jointes'] for t in lues_taches + lues_archive}
     ajoutees = mises_a_jour = ignorees = 0
     plan = []
     for magasin, identifiant, enregistrement in valides:
@@ -231,6 +233,7 @@ def importer(source, mode="ajouter", simuler=False, confirmer=True, fmt="text"):
             plan.append(("ajouter", magasin, identifiant, enregistrement))
             ajoutees += 1
         elif mode == "mettre_a_jour":
+            enregistrement["pieces_jointes"] = pieces.get(identifiant, [])     # les fichiers ne s'échangent pas : on garde ceux d'ici
             plan.append(("mettre_a_jour", magasin, identifiant, enregistrement))
             mises_a_jour += 1
         else:

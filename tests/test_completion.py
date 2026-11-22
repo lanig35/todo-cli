@@ -193,3 +193,11 @@ def test_noms_de_projets_proposes_sans_rien_creer(todo, argcomplete_utilisable):
 def test_completion_avec_un_projet_inexistant_ne_cree_rien(todo, argcomplete_utilisable):
     propositions, code, err, _ = completer(todo, "todo -p fantome list --", env=None)
     assert err == "" and not (todo.db_dir / "projects").exists()
+
+
+# --- pièces jointes ------------------------------------------------------------------------------------------------------
+def test_groupe_attachment_et_options(todo, argcomplete_utilisable):
+    assert "attachment" in completer(todo, "todo ")[0]
+    assert {"add", "list", "open", "save", "remove", "gc"} <= set(completer(todo, "todo attachment ")[0])
+    assert "--has-files" in completer(todo, "todo list --has-")[0]
+    assert "--older-than" in completer(todo, "todo attachment gc --")[0]

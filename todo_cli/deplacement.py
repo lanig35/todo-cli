@@ -7,6 +7,8 @@ Les dépendances (`--after`) ne traversent pas les projets : la tâche déplacé
 source, et ce qui l'attendait dans la source ne l'attend plus (avertissement dans les deux cas). Des tâches
 déplacées ensemble gardent leurs liens. Une occurrence suivante restée dans la source n'est plus reliée.
 
+Les pièces jointes (fichiers) suivent la tâche dans le projet cible.
+
 Limite assumée : `undo` ne défait un déplacement que dans un projet à la fois (chaque projet a ses sauvegardes).
 Annuler dans la source remet la tâche dans la source, sans la retirer de la cible, et inversement.
 """
@@ -14,7 +16,7 @@ import dbm
 import json
 import os
 
-from . import config, couleurs, journal
+from . import config, couleurs, journal, pieces_jointes
 from .stockage import _afficher_bilan_lot, _base_existe, _normaliser_tache, _resoudre_ids
 from .sauvegardes import sauvegarder_base
 
@@ -117,6 +119,7 @@ def deplacer_taches(ids, cible):
                 db_source[identifiant] = json.dumps(r)
             for identifiant, t in a_deplacer.items():
                 del db_source[identifiant]
+                pieces_jointes.deplacer_vers_projet(identifiant, cible)
                 print(f" {couleurs.CLR_DONE}➡️ {couleurs.CLR_RESET} Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' déplacée "
                       f"vers le projet {couleurs.CLR_BOLD}{cible}{couleurs.CLR_RESET} {couleurs.CLR_DIM}(id: {identifiant[:8]}){couleurs.CLR_RESET}")
             deplacees = len(a_deplacer)

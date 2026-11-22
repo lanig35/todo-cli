@@ -38,7 +38,7 @@ def _jour(valeur):
 
 def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None, archive_apres=None, archive_avant=None,
            anciennete=None, tags=None, un_tag=None, sans_tag=False, pas_tags=None, prios=None, pas_prios=None,
-           recurrente=None, cree_apres=None, cree_avant=None, ids=None, bloquee=None):
+           recurrente=None, cree_apres=None, cree_avant=None, ids=None, bloquee=None, fichiers=None):
     """Vrai si la tâche satisfait tous les filtres donnés (les filtres absents ne retiennent rien).
 
     sans_echeance : seulement les tâches sans échéance ; notes : True = au moins une note,
@@ -48,7 +48,8 @@ def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None,
     tags : TOUS ces tags ; un_tag : AU MOINS UN de ces tags ; sans_tag : aucun tag ; pas_tags : aucun de ces
     tags ; prios / pas_prios : priorité dans / hors de ces valeurs ; recurrente : True/False ; cree_* : bornes
     incluses sur la date de création ; ids : début de l'identifiant (l'un d'eux suffit) ; bloquee : True =
-    à faire et en attente d'une dépendance, False = à faire et prête (voir dependances.annoter).
+    à faire et en attente d'une dépendance, False = à faire et prête (voir dependances.annoter) ; fichiers : True = au moins
+    une pièce jointe, False = aucune.
     """
     if tags and not all(x in t['tags'] for x in tags):
         return False
@@ -75,6 +76,8 @@ def garder(t, sans_echeance=False, notes=None, fini_apres=None, fini_avant=None,
     if sans_echeance and _parse_date(t.get('date_echeance')) is not None:
         return False
     if notes is not None and bool(t.get('notes')) != notes:
+        return False
+    if fichiers is not None and bool(t.get('pieces_jointes')) != fichiers:
         return False
     for champ, apres, avant in (("date_terminee", fini_apres, fini_avant), ("date_archivage", archive_apres, archive_avant)):
         if apres is None and avant is None:

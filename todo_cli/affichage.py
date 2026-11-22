@@ -15,6 +15,7 @@ from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _par
 from .filtres import garder
 from .formats import imprimer_plain, sortie_taches, tableau
 from .notes import lignes_notes
+from .pieces_jointes import lignes_pieces
 from .stockage import etiquette_projet, _base_existe, _lire_archive, _lire_taches, _normaliser_tache, _resoudre_id
 
 
@@ -39,6 +40,8 @@ def champs_tache(t, id_complet):
     champs.append(("description", "Description", t['description'] or ""))
     for i, n in enumerate(t['notes'], start=1):
         champs.append(("note", f"Note {i}", (n['date'], n['texte'])))
+    for i, p in enumerate(t['pieces_jointes'], start=1):
+        champs.append(("piece", f"Pièce {i}", (p['nom'], str(p['taille']))))
     return champs
 
 
@@ -66,6 +69,7 @@ def afficher_tache(id_recherche, fmt="text"):
             print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être affichée.")
             return False
         id_complet = key.decode('utf-8', errors='replace')
+        t['id'] = id_complet
         attentes = [(d, _lire_dep(db, d)) for d in t['apres']] if fmt == "text" else []
         if fmt == "json":       # comme `list --format json` : les dépendances qui bloquent encore la tâche
             t['bloquee_par'] = [d for d, _ in dependances.en_attente(db, t)] if t['statut'] == STATUT_A_FAIRE else []
@@ -121,6 +125,9 @@ def afficher_tache(id_recherche, fmt="text"):
     if t['notes']:
         print(f"  {couleurs.CLR_BOLD}Notes ({len(t['notes'])}){couleurs.CLR_RESET}")
         print("\n".join(lignes_notes(t['notes'])))
+    if t['pieces_jointes']:
+        print(f"  {couleurs.CLR_BOLD}Pièces jointes ({len(t['pieces_jointes'])}){couleurs.CLR_RESET}")
+        print("\n".join(lignes_pieces(t)))
     print(f" {couleurs.CLR_CYAN}─────────────────────────────{couleurs.CLR_RESET}\n")
     return True
 
@@ -320,6 +327,8 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
         display_tags = f" {couleurs.CLR_TAG}" + " ".join([f"#{tg}" for tg in t['tags']]) + f"{couleurs.CLR_RESET}" if t['tags'] else ""
         rec_str = f" {couleurs.CLR_DIM}↻ {_libelle_recurrence(t['recurrence'])}{couleurs.CLR_RESET}" if (t['recurrence'] and a_faire) else ""
         nb_notes = f" {couleurs.CLR_DIM}📝{len(t['notes'])}{couleurs.CLR_RESET}" if t['notes'] else ""
+        if t['pieces_jointes']:
+            nb_notes += f" {couleurs.CLR_DIM}📎{len(t['pieces_jointes'])}{couleurs.CLR_RESET}"
         if t.get('bloquee_par'):
             nb_notes += f" {couleurs.CLR_DEL}🔒{couleurs.CLR_RESET}{couleurs.CLR_DIM} après {', '.join(d[:8] for d in t['bloquee_par'])}{couleurs.CLR_RESET}"
         numero = f"{couleurs.CLR_DIM}{position:>{largeur}}.{couleurs.CLR_RESET}"
