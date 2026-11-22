@@ -19,14 +19,14 @@ from . import __version__
 from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import config
 from . import couleurs, journal
-from .dates import _parser_recurrence
+from .dates import _parser_recurrence, lire_instant
 from .sauvegardes import sauvegarder_base
 from .stockage import _lire_archive, _lire_taches, _normaliser_notes
 
 FORMAT = "todo-cli"
 VERSION = 1
 CHAMPS = ("titre", "description", "priorite", "statut", "date_creation", "date_echeance", "date_terminee",
-          "tags", "recurrence", "suivante", "ancre", "apres", "notes")
+          "tags", "recurrence", "suivante", "ancre", "apres", "notes", "demarree")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _DATE_HEURE = re.compile(r"\d{4}-\d{2}-\d{2}( \d{2}:\d{2}(:\d{2})?)?")
 
@@ -174,6 +174,9 @@ def _valider(entree, archive):
     apres = entree.get("apres") or []
     if not isinstance(apres, list) or not all(isinstance(x, str) and x for x in apres):
         return None, "apres : liste d'identifiants attendue"
+    demarree = entree.get("demarree") or None
+    if demarree is not None and not (isinstance(demarree, str) and lire_instant(demarree)):
+        return None, f"demarree invalide : {demarree!r} (AAAA-MM-JJ HH:MM attendu)"
     identifiant = entree.get("id")
     if identifiant is None or identifiant == "":
         identifiant = str(uuid.uuid4())
@@ -186,6 +189,7 @@ def _valider(entree, archive):
         "date_terminee": entree.get("date_terminee") or None,
         "tags": [x.strip().lower() for x in tags if x.strip()], "recurrence": recurrence,
         "suivante": entree.get("suivante") or None, "ancre": ancre, "apres": list(dict.fromkeys(apres)), "notes": _normaliser_notes(entree.get("notes")),
+        "demarree": demarree[:16] if demarree else None,
     }
     if archive:
         enregistrement["date_archivage"] = entree.get("date_archivage") or _maintenant()

@@ -168,6 +168,100 @@ def marquer_terminee(ids, note=None):
     _afficher_bilan_lot(len(ids), nb_ok, "validée(s)", echecs)
     return echecs == 0
 
+def demarrer_taches(ids, instant=None, note=None):
+    """Note l'instant de démarrage (maintenant, ou `instant`, un datetime passé) de une ou plusieurs tâches à faire.
+
+    Plusieurs tâches peuvent être en cours en même temps. Une tâche déjà démarrée garde son instant (rien n'est
+    écrasé : `unstart` puis `start --at` pour le corriger) ; une tâche terminée ne se démarre pas ; une tâche
+    bloquée par une dépendance se démarre, avec un avertissement. Retourne True si aucun identifiant n'a posé problème.
+    """
+    note = carnet.valider_note(note) if note is not None else None
+    if not _base_existe():
+        print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à démarrer.{couleurs.CLR_RESET}")
+        return False
+    maintenant = datetime.now()
+    quand = (instant or maintenant).strftime("%Y-%m-%d %H:%M")
+
+    nb_ok = 0
+    with dbm.open(config.DB_NAME, 'w') as db:
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            try:
+                t = _normaliser_tache(db[key])
+            except ValueError:
+                journal.echec("corrupted_entry")
+                print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
+                echecs += 1
+                continue
+            if t['statut'] == STATUT_TERMINE:
+                journal.echec("start_done_task")
+                print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} La tâche '{t['titre']}' est terminée : rien à démarrer ('undone' pour la rouvrir).")
+                echecs += 1
+                continue
+            if t['demarree']:
+                print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà démarrée depuis le {t['demarree']} "
+                      f"('unstart' pour annuler ce démarrage).{couleurs.CLR_RESET}")
+                continue
+            attendues = dependances.en_attente(db, t)
+            t['demarree'] = quand
+            if note:
+                carnet.ajouter_a(t, note, "start")
+            db[key] = json.dumps(t)
+            print(f" {couleurs.CLR_TODO}▶️{couleurs.CLR_RESET}  Tâche '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' démarrée "
+                  f"{couleurs.CLR_DIM}({quand}){couleurs.CLR_RESET}.")
+            if attendues:
+                liste_attendues = ", ".join("{} ({})".format(dep['titre'], d[:8]) for d, dep in attendues)
+                print(f"    {couleurs.CLR_DEL}⚠️ Elle attend encore : {liste_attendues}.{couleurs.CLR_RESET}")
+            if note:
+                carnet.confirmer_ajout()
+            nb_ok += 1
+            journal.noter(ids=[key], titres=[t['titre']], modifie=True)
+
+    if nb_ok:
+        sauvegarder_base()
+    if len(ids) > 1:
+        _afficher_bilan_lot(len(ids), nb_ok, "démarrée(s)", echecs)
+    return echecs == 0
+
+def annuler_demarrage(ids, note=None):
+    """Efface l'instant de démarrage de une ou plusieurs tâches (démarrage posé par erreur). Le statut ne change pas."""
+    note = carnet.valider_note(note) if note is not None else None
+    if not _base_existe():
+        print(f" 📋 {couleurs.CLR_DIM}La liste est vide, rien à annuler.{couleurs.CLR_RESET}")
+        return False
+
+    nb_ok = 0
+    with dbm.open(config.DB_NAME, 'w') as db:
+        cles, echecs = _resoudre_ids(db, ids)
+        for key in cles:
+            try:
+                t = _normaliser_tache(db[key])
+            except ValueError:
+                journal.echec("corrupted_entry")
+                print(f" {couleurs.CLR_DEL}❌{couleurs.CLR_RESET} Cette entrée est corrompue et ne peut pas être modifiée.")
+                echecs += 1
+                continue
+            if not t['demarree']:
+                print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' n'est pas démarrée.{couleurs.CLR_RESET}")
+                continue
+            ancien = t['demarree']
+            t['demarree'] = None
+            if note:
+                carnet.ajouter_a(t, note, "unstart")
+            db[key] = json.dumps(t)
+            print(f" {couleurs.CLR_TODO}⏹️{couleurs.CLR_RESET}  Démarrage de '{couleurs.CLR_BOLD}{t['titre']}{couleurs.CLR_RESET}' annulé "
+                  f"{couleurs.CLR_DIM}(c'était le {ancien}){couleurs.CLR_RESET}.")
+            if note:
+                carnet.confirmer_ajout()
+            nb_ok += 1
+            journal.noter(ids=[key], titres=[t['titre']], modifie=True)
+
+    if nb_ok:
+        sauvegarder_base()
+    if len(ids) > 1:
+        _afficher_bilan_lot(len(ids), nb_ok, "annulée(s)", echecs)
+    return echecs == 0
+
 def rouvrir_tache(ids, note=None):
     """Repasse une ou plusieurs tâches terminées au statut 'A FAIRE' via préfixes d'ID (uniques).
 
@@ -217,6 +311,7 @@ def rouvrir_tache(ids, note=None):
 
             t['statut'] = STATUT_A_FAIRE
             t['date_terminee'] = None  # une tâche rouverte n'est plus terminée
+            t['demarree'] = None       # ... ni démarrée : le cycle repart de zéro (`task start` pour le relancer)
             if note:
                 carnet.ajouter_a(t, note, "undone")
             db[key] = json.dumps(t)

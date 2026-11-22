@@ -16,10 +16,10 @@ from .deplacement import deplacer_taches
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .dates import _decaler
-from .filtres import MSG_FORMATS_DATE_PASSEE, resoudre_date_passee
+from .filtres import MSG_FORMATS_DATE_PASSEE, parser_instant, resoudre_date_passee
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
-from .rapports import rapport_bloquees, rapport_retards, rapport_stagnantes, rapport_tags, rapport_terminees
+from .rapports import rapport_bloquees, rapport_delais, rapport_en_cours, rapport_retards, rapport_stagnantes, rapport_tags, rapport_terminees
 from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
@@ -27,7 +27,7 @@ from .echange import exporter, importer
 from .formats import FORMATS, colonnes_tache, resoudre as resoudre_format
 from .notes import commande_note
 from . import pieces_jointes
-from .taches import ajouter_tache, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
+from .taches import ajouter_tache, annuler_demarrage, demarrer_taches, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
 def _date_filtre(valeur, option):
@@ -114,6 +114,9 @@ def _args_filtres_notes(p):
     g = p.add_mutually_exclusive_group()
     g.add_argument('--has-files', action='store_true', help="Seulement les tâches qui ont au moins une pièce jointe")
     g.add_argument('--no-files', action='store_true', help="Seulement les tâches sans pièce jointe")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument('--started', action='store_true', help="Seulement les tâches démarrées (`task start` ; avec --status todo : les tâches en cours)")
+    g.add_argument('--not-started', action='store_true', help="Seulement les tâches jamais démarrées")
 
 
 def _args_filtres_fin(p, archive=False):
@@ -175,6 +178,8 @@ def _filtres_communs(args, archive=False, sans_prio=False):
         f['notes'] = bool(args.has_notes)
     if args.has_files or args.no_files:
         f['fichiers'] = bool(args.has_files)
+    if args.started or args.not_started:
+        f['demarree'] = bool(args.started)
     f['fini_apres'] = _date_passee(args.done_after, '--done-after')
     f['fini_avant'] = _date_passee(args.done_before, '--done-before')
     _plage_vide(f['fini_apres'], f['fini_avant'], '--done-after', '--done-before')
@@ -208,12 +213,12 @@ def _args_archive_filtres(p):
 
 
 def _filtres_archive_actifs(args):
-    return any([*(getattr(args, a) for a in _ATTRS_SELECTION), args.has_notes, args.no_notes, args.has_files, args.no_files, args.done_after, args.done_before,
+    return any([*(getattr(args, a) for a in _ATTRS_SELECTION), args.has_notes, args.no_notes, args.has_files, args.no_files, args.started, args.not_started, args.done_after, args.done_before,
                 args.archived_after, args.archived_before, args.sort, args.limit, args.start, args.columns])
 
 
 _ATTRS_LOT = ('status', 'search', 'search_in', 'overdue', 'today', 'due_before', 'due_after', 'no_due', 'blocked', 'ready',
-              'has_notes', 'no_notes', 'has_files', 'no_files', 'done_after', 'done_before', *_ATTRS_SELECTION)
+              'has_notes', 'no_notes', 'has_files', 'no_files', 'started', 'not_started', 'done_after', 'done_before', *_ATTRS_SELECTION)
 
 
 def _args_lot(p, statut=False, prio=True):
@@ -315,7 +320,7 @@ def _colonnes(valeur):
 def _args_colonnes(p):
     p.add_argument('--columns', type=_colonnes, default=None, metavar='COLONNES',
                    help="Colonnes des formats table et plain, séparées par des virgules, dans cet ordre : id, status, prio, due, "
-                        "tags, title, notes, files, created, done, archived, recurrence, description, after, blocked. L'id est toujours présent "
+                        "tags, title, notes, files, started, created, done, archived, recurrence, description, after, blocked. L'id est toujours présent "
                         "(placé en tête s'il manque). Défaut : id,status,prio,due,tags,title,notes (ou [general] columns)")
 
 
@@ -460,6 +465,28 @@ def _args_show(p):
                              help="Format de sortie (json : un objet, comme un élément de `list --format json`, compatible jq)")
 
 
+def _instant(valeur):
+    """Type argparse de --at : instant passé (voir filtres.parser_instant)."""
+    try:
+        return parser_instant(valeur)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+
+def _args_start(p):
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
+    p.add_argument('--at', type=_instant, default=None, metavar='HEURE',
+                   help="Instant du démarrage, pour rattraper un oubli : 14:30, hier 9:15, 2026-11-20 16:00 (défaut : maintenant ; jamais dans le futur)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche démarrée")
+    _args_lot(p)
+
+
+def _args_unstart(p):
+    p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
+    p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche dont le démarrage est annulé")
+    _args_lot(p, statut=True)
+
+
 def _args_undone(p):
     p.add_argument('ids', nargs='*', metavar='id', type=str, help="UUID cible, un ou plusieurs (préfixe unique accepté) ; ou un filtre (voir plus bas)")
     p.add_argument('-m', '--note', type=str, default=None, help="Ajoute une note à chaque tâche rouverte")
@@ -593,6 +620,20 @@ def _args_rapport_done(p):
                    help="Terminées à partir de cette date, incluse (défaut : 7d) : 7d, 2w, 1m, 1y, hier, aujourd'hui ou AAAA-MM-JJ")
     p.add_argument('--until', type=str, default=None, metavar='DATE',
                    help="Terminées au plus tard à cette date, incluse (défaut : aujourd'hui ; mêmes formats que --since)")
+    p.add_argument('--with-archive', action='store_true', help='Inclure les tâches archivées')
+    _args_sortie_rapport(p)
+
+
+def _args_rapport_active(p):
+    _args_sortie_rapport(p)
+
+
+def _args_rapport_cycle(p):
+    p.add_argument('--since', type=str, default='30d', metavar='DATE',
+                   help="Terminées à partir de cette date, incluse (défaut : 30d) : 7d, 2w, 1m, 1y, hier, aujourd'hui ou AAAA-MM-JJ")
+    p.add_argument('--until', type=str, default=None, metavar='DATE',
+                   help="Terminées au plus tard à cette date, incluse (défaut : aujourd'hui ; mêmes formats que --since)")
+    p.add_argument('--by', choices=['tag', 'prio'], default=None, help="Regroupe par tag (une tâche compte pour chacun de ses tags) ou par priorité")
     p.add_argument('--with-archive', action='store_true', help='Inclure les tâches archivées')
     _args_sortie_rapport(p)
 
@@ -748,7 +789,7 @@ def _args_format(p):
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
 _ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, tags_archive=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
                      tag=None, any_tag=None, no_tag=False, not_tag=None, prio=None, not_prio=None, recurring=False,
-                     no_recurring=False, created_after=None, created_before=None, filtre_id=None, has_notes=False, no_notes=False, has_files=False, no_files=False, done_after=None, done_before=None,
+                     no_recurring=False, created_after=None, created_before=None, filtre_id=None, has_notes=False, no_notes=False, has_files=False, no_files=False, started=False, not_started=False, done_after=None, done_before=None,
                      archived_after=None, archived_before=None, sort=None, limit=None, start=None, columns=None)
 
 # (groupe, aide, [(verbe, canon, constructeur, aide, valeurs par défaut)])
@@ -759,6 +800,8 @@ _GROUPES = [
         ('show', 'show', _args_show, "Afficher le détail complet d'une tâche", {}),
         ('edit', 'edit', _args_edit, 'Modifier une tâche', {}),
         ('done', 'done', _args_done, 'Clôturer une ou plusieurs tâches', {}),
+        ('start', 'start', _args_start, "Noter le démarrage d'une ou plusieurs tâches (plusieurs peuvent être en cours)", {}),
+        ('unstart', 'unstart', _args_unstart, "Annuler le démarrage d'une ou plusieurs tâches", {}),
         ('undone', 'undone', _args_undone, 'Rouvrir une tâche terminée', {}),
         ('remove', 'remove', _args_remove, 'Supprimer une ou plusieurs tâches', {}),
         ('move', 'move', _args_move, 'Déplacer une ou plusieurs tâches vers un autre projet', {}),
@@ -807,6 +850,8 @@ _GROUPES = [
         ('overdue', 'report_overdue', _args_sortie_rapport, 'Tâches en retard, les plus en retard d\'abord', {}),
         ('stale', 'report_stale', _args_rapport_stale, 'Tâches sans échéance qui traînent depuis longtemps', {}),
         ('done', 'report_done', _args_rapport_done, 'Bilan des tâches terminées sur une période', {}),
+        ('active', 'report_active', _args_rapport_active, 'Tâches en cours (démarrées, pas terminées) et temps écoulé', {}),
+        ('cycle', 'report_cycle', _args_rapport_cycle, 'Délai démarrage → fin des tâches terminées', {}),
     ]),
     ('admin', "Maintenance de la base", [
         ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
@@ -944,7 +989,7 @@ def _mode_verrou(args):
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
-             'report_stale', 'report_done', 'attachment_list', 'attachment_open', 'attachment_save'):
+             'report_stale', 'report_done', 'report_active', 'report_cycle', 'attachment_list', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -952,7 +997,7 @@ def _mode_verrou(args):
         return verrou.PARTAGE
     if c == 'import' and args.dry_run:
         return verrou.PARTAGE
-    if c in ('done', 'undone', 'postpone', 'remove', 'edit') and args.dry_run:
+    if c in ('done', 'undone', 'postpone', 'remove', 'edit', 'start', 'unstart') and args.dry_run:
         return verrou.PARTAGE          # simulation : ne modifie rien (ni archivage automatique)
     return verrou.EXCLUSIF
 
@@ -1119,6 +1164,12 @@ def main():
                       avant=avant, apres=apres, filtres=filtres, colonnes=_colonnes_effectives(args))
     elif args.commande == 'show':
         succes = afficher_tache(args.id, args.format)
+    elif args.commande == 'start':
+        ids = _ids_ou_lot(args, 'todo', "démarrer", "démarrées")
+        succes = demarrer_taches(ids, args.at, args.note) if ids else True
+    elif args.commande == 'unstart':
+        ids = _ids_ou_lot(args, None, "annuler le démarrage de", "annulées")
+        succes = annuler_demarrage(ids, args.note) if ids else True
     elif args.commande == 'undone':
         ids = _ids_ou_lot(args, 'done', "rouvrir", "rouvertes")
         succes = rouvrir_tache(ids, args.note) if ids else True
@@ -1266,6 +1317,13 @@ def main():
         jusqu_a = _date_passee(args.until, '--until') or datetime.now().date()
         _plage_vide(depuis, jusqu_a, '--since', '--until')
         rapport_terminees(depuis, jusqu_a, args.with_archive, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_active':
+        rapport_en_cours(args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_cycle':
+        depuis = _date_passee(args.since, '--since')
+        jusqu_a = _date_passee(args.until, '--until') or datetime.now().date()
+        _plage_vide(depuis, jusqu_a, '--since', '--until')
+        rapport_delais(depuis, jusqu_a, args.with_archive, args.by, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
     elif args.commande == 'project_current':
         succes = projets.afficher_courant(config.projet(), config.origine_projet(), args.format)
     elif args.commande == 'project_list':

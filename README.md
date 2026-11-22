@@ -26,6 +26,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
+- Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
 - Sauvegardes automatiques et restauration
@@ -75,13 +76,13 @@ plus courantes ont un **raccourci** de premier niveau.
 
 | Groupe | Actions |
 |---|---|
-| `task` | `add`, `list`, `show`, `edit`, `done`, `undone`, `remove`, `move`, `postpone`, `next` |
+| `task` | `add`, `list`, `show`, `edit`, `done`, `start`, `unstart`, `undone`, `remove`, `move`, `postpone`, `next` |
 | `note` | `add`, `list`, `edit`, `delete` |
 | `attachment` | `add`, `list`, `open`, `save`, `remove`, `gc` |
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
-| `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done` |
+| `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
 | `data` | `export`, `import` |
@@ -191,6 +192,7 @@ Options de `list` :
 | `--no-due` | tâches sans échéance (ne se combine pas avec `--due-before` / `--due-after`) |
 | `--has-notes`, `--no-notes` | tâches qui ont au moins une note, ou aucune |
 | `--has-files`, `--no-files` | tâches qui ont au moins une pièce jointe, ou aucune |
+| `--started`, `--not-started` | tâches démarrées (`task start`), ou jamais démarrées ; avec `--status todo` : les tâches en cours |
 | `--done-after DATE`, `--done-before DATE` | terminées à partir de / au plus tard à cette date, **incluse** (voir ci-dessous) |
 | `--sort alpha\|status\|priority\|due` | critère de tri |
 | `--overdue-first`, `--no-overdue-first` | regroupe (par défaut) ou non les retards en tête |
@@ -303,7 +305,7 @@ todo task remove a1b2c3 -m "doublon de a9f8e7"
 ```
 
 - Chaque note enregistre sa date, son texte et l'**action** qui l'a produite (`note`, `done`,
-  `undone`, `postpone`, `edit`) ; `show` les affiche de la plus ancienne à la plus récente, et `list`
+  `undone`, `postpone`, `edit`, `start`, `unstart`) ; `show` les affiche de la plus ancienne à la plus récente, et `list`
   signale une tâche annotée par `📝N`. Il n'y a pas de note automatique : seul ce que vous écrivez
   est enregistré.
 - Avec plusieurs identifiants, la même note est ajoutée à chaque tâche réellement traitée (pas à celle
@@ -359,6 +361,36 @@ todo list --has-files                             # tâches qui ont des pièces 
 - **Sauvegardes** : le dossier `attachments/` n'est **pas** dans les sauvegardes de la base ; sauvegardez-le avec
   `rsync` ou l'outil de votre choix. `data export` n'emporte que les métadonnées (aucun fichier) et `data import
   --update` conserve les pièces de la tâche existante.
+
+### Suivi du temps
+
+`todo` retient le moment où une tâche est **démarrée** et celui où elle est **terminée**. Ce n'est pas un chronomètre :
+on peut avoir plusieurs tâches en cours en même temps, et le délai est **calendaire** (du démarrage à la fin, nuits et
+week-ends compris), pas un temps de travail effectif.
+
+```bash
+todo task start a1b2c3                      # démarre maintenant (une ou plusieurs tâches : start a1b2c3 d4e5f6)
+todo task start a1b2c3 --at 14:30           # rattrape un oubli : 14:30 aujourd'hui, hier 9:15, 2026-11-20 16:00, 2d 10:00
+todo task start --tag pro --not-started     # par filtre, comme `done` (aperçu --dry-run, confirmation en lot)
+todo task unstart a1b2c3                    # annule un démarrage posé par erreur
+todo done a1b2c3                            # termine : le délai démarrage → fin est connu
+todo list --started --status todo           # les tâches en cours
+todo report active                          # ... avec le temps écoulé, la plus ancienne d'abord
+todo report cycle --since 1m --by tag       # délais moyen, médian, min et max des tâches terminées, par tag
+```
+
+- **Pas de nouveau statut** : « en cours » se déduit (démarrée et pas terminée). Le contrat `todo` / `done` ne change pas, et
+  terminer une tâche jamais démarrée reste possible (aucun délai n'est alors calculé).
+- **`--at`** : `HH:MM` (aujourd'hui) ou une date **passée** suivie de `HH:MM` (`hier`, `AAAA-MM-JJ`, `3d` = il y a 3 jours) ;
+  un instant futur est refusé. Une tâche déjà démarrée garde son instant : `unstart` puis `start --at` pour le corriger.
+- **Règles** : une tâche terminée ne se démarre pas (`undone` d'abord) ; une tâche bloquée par une dépendance (`--after`) se
+  démarre, avec un avertissement ; `task undone` **efface** la date de démarrage ; l'occurrence suivante d'une tâche
+  récurrente repart sans démarrage ; `-m` ajoute une note (action `start` / `unstart`).
+- **Affichage** : `list` marque une tâche en cours `▶ 2 j 3 h` ; `show` donne la date de démarrage et le temps écoulé, ou, une
+  fois terminée, le **délai** ; colonne `started` pour `--columns`. Le champ `demarree` (`AAAA-MM-JJ HH:MM`, `null` si la tâche n'a pas
+  été démarrée) figure dans les sorties JSON, `show --format plain`, l'export et l'import ; il suit les tâches archivées et déplacées.
+- **`report cycle`** : ne mesure que les tâches terminées **et** démarrées ; celles qui ne l'ont pas été sont comptées à part
+  (`sans_demarrage`). `--by tag` compte une tâche pour chacun de ses tags, `--by prio` la range par priorité.
 
 ### Reporter une échéance
 
@@ -597,7 +629,7 @@ todo list --format plain --columns id,title | grep -i budget
 
 **Choisir les colonnes** (`--columns`, sur `list`, `next` et `archive list`, pour `table` et `plain`) : noms
 séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponibles : `id`, `status`, `prio`,
-`due`, `tags`, `title`, `notes`, `files` (nombre de pièces jointes), `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked`, `project` (vide hors `--all-projects` ; les trois
+`due`, `tags`, `title`, `notes`, `files` (nombre de pièces jointes), `started` (instant de démarrage, `AAAA-MM-JJ HH:MM`), `created`, `done`, `archived`, `recurrence`, `description`, `after`, `blocked`, `project` (vide hors `--all-projects` ; les trois
 dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
 manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
 avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs).
@@ -722,6 +754,8 @@ todo report stale                     # tâches sans échéance créées il y a 
 todo report stale --older-than 2w     # ... il y a au moins 2 semaines (7d, 2w, 6m, 1y, hier, AAAA-MM-JJ)
 todo report done                      # bilan des tâches terminées ces 7 derniers jours, jour par jour
 todo report done --since 1m --until 2w --with-archive
+todo report active                    # tâches en cours (démarrées, pas terminées), la plus ancienne d'abord
+todo report cycle --by tag            # délai démarrage → fin des tâches terminées, par tag (voir « Suivi du temps »)
 ```
 
 | Rapport | Contenu | Options |
@@ -731,6 +765,8 @@ todo report done --since 1m --until 2w --with-archive
 | `overdue` | tâches à faire dont l'échéance est passée, avec le nombre de jours de retard ; les plus en retard d'abord | — |
 | `stale` | tâches à faire **sans échéance**, créées il y a au moins `--older-than` (30d par défaut), les plus anciennes d'abord : celles qu'on oublie | `--older-than DURÉE` |
 | `done` | tâches terminées entre `--since` (7d par défaut) et `--until` (aujourd'hui), dates incluses, regroupées par jour, le plus récent d'abord | `--since`, `--until`, `--with-archive` |
+| `active` | tâches **démarrées et pas terminées**, la plus ancienne d'abord, avec le temps écoulé | — |
+| `cycle` | délai démarrage → fin (nombre, moyenne, médiane, plus court, plus long) des tâches terminées entre `--since` (30d par défaut) et `--until`, avec ou sans regroupement | `--since`, `--until`, `--by tag\|prio`, `--with-archive` |
 
 Les dates de `--since`, `--until` et `--older-than` suivent les formats de `--done-after` : `7d`, `2w`, `1m`, `1y`,
 `hier`, `aujourd'hui` ou `AAAA-MM-JJ` ; une date future est refusée. L'archive n'est lue qu'avec `--with-archive`.
@@ -744,12 +780,16 @@ Sorties `plain` (champs séparés par des tabulations, identifiant complet, rien
 | `overdue` | `id`, `jours_retard`, `priorite`, `echeance`, `titre` |
 | `stale` | `id`, `age_jours`, `priorite`, `titre` |
 | `done` | `terminee` (date et heure), `id`, `priorite`, `titre` |
+| `active` | `id`, `ecoule_minutes`, `demarree` (`AAAA-MM-JJ HH:MM`), `priorite`, `titre` |
+| `cycle` | `groupe` (`tout`, un tag, `(sans tag)` ou une priorité), `nombre`, `moyenne`, `mediane`, `min`, `max` (en minutes) |
 
 Sorties `json` : un objet par rapport. `tags` : `{"avec_archive", "tags": [{"tag", "a_faire", "terminees", "total"}],
 "sans_tag": {"a_faire", "terminees"}}`. `blocked`, `overdue`, `stale` : `{"total", "taches": [...]}` (les tâches
 au format de `list --format json`, plus `attend` pour `blocked`, `jours_retard` pour `overdue`, `age_jours` pour
 `stale` ; `overdue` ajoute `date`, `stale` ajoute `avant`). `done` : `{"depuis", "jusqu_a", "avec_archive", "total",
-"jours": [{"date", "taches": [...]}]}`.
+"jours": [{"date", "taches": [...]}]}`. `active` : `{"date", "total", "taches": [...]}` (chaque tâche avec `ecoule_minutes`). `cycle` : `{"depuis", "jusqu_a",
+"avec_archive", "par", "mesurees", "sans_demarrage", "unite": "minutes", "groupes": [{"nom", "nombre", "moyenne", "mediane", "min", "max"}],
+"taches": [...]}` (chaque tâche avec `delai_minutes`).
 
 ```bash
 todo report overdue --format json | jq -r '.taches[] | "\(.jours_retard) j  \(.titre)"'
@@ -813,7 +853,7 @@ n'écrit que le nom, utilisable dans un script. `config show` l'affiche aussi (`
 
 #### Vues sur tous les projets
 
-`--all-projects` (lecture seule) fait porter `list`, `next`, `agenda`, `report tags|blocked|overdue|stale|done` et
+`--all-projects` (lecture seule) fait porter `list`, `next`, `agenda`, `report tags|blocked|overdue|stale|done|active|cycle` et
 `stats` sur tous les projets à la fois :
 
 ```bash
@@ -1172,7 +1212,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `prochaine.py` | commande `next` |
 | `deplacement.py` | `task move` : déplacement de tâches entre projets, dépendances et sauvegardes |
 | `projets.py` | groupe `project` : current, list, create, use, rename, delete (corbeille) |
-| `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done` |
+| `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `formats.py` | formats de sortie (text, table, plain, json, choix automatique) et catalogue des colonnes `--columns` |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |

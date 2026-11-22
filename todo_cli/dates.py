@@ -150,3 +150,31 @@ def _libelle_echeance(t, maintenant):
     if jours == 1:
         return f" {couleurs.CLR_TODO}[DEMAIN]{couleurs.CLR_RESET}"
     return f" {couleurs.CLR_CYAN}[J-{jours}]{couleurs.CLR_RESET}"
+
+
+# --- Instants et durées (suivi du temps) ---------------------------------------------
+def lire_instant(valeur):
+    """datetime d'un champ 'AAAA-MM-JJ HH:MM' (secondes tolérées), ou None si absent ou invalide."""
+    try:
+        return datetime.strptime((valeur or "")[:16], "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+
+def duree_minutes(debut, fin):
+    """Minutes entières entre deux datetimes (jamais négatif)."""
+    return max(0, int((fin - debut).total_seconds() // 60))
+
+
+def duree_lisible(minutes):
+    """90 -> '1 h 30', 45 -> '45 min', 3000 -> '2 j 2 h', 0 -> 'moins d'une minute' (durée calendaire)."""
+    minutes = int(minutes)
+    if minutes < 1:
+        return "moins d'une minute"
+    jours, reste = divmod(minutes, 1440)
+    heures, mins = divmod(reste, 60)
+    if jours:
+        return f"{jours} j {heures} h" if heures else f"{jours} j"
+    if heures:
+        return f"{heures} h {mins:02d}" if mins else f"{heures} h"
+    return f"{mins} min"

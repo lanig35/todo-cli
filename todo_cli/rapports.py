@@ -1,4 +1,4 @@
-"""Rapports : tags, tâches bloquées, en retard, qui traînent, et bilan des tâches terminées.
+"""Rapports : tags, tâches bloquées, en retard, qui traînent, bilan des tâches terminées, tâches en cours et délais.
 
 Chaque rapport existe dans les quatre formats habituels :
   text  affichage décoré (pager automatique), table  tableau aligné sans couleur,
@@ -7,13 +7,14 @@ Chaque rapport existe dans les quatre formats habituels :
 Les rapports lisent la base sans la modifier.
 """
 import json
+import statistics
 from datetime import datetime
 
 from . import couleurs, dependances
 from .affichage import _afficher_texte
 from .agenda import _libelle_jour, _ligne_tache, _ordre
 from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
-from .dates import _parse_date
+from .dates import _parse_date, duree_lisible, duree_minutes, lire_instant
 from .formats import imprimer_plain, tableau
 from .stockage import _lire_archive, _lire_taches
 
@@ -194,3 +195,94 @@ def rapport_terminees(depuis, jusqu_a, avec_archive=False, fmt="text", pager=Tru
     texte += _pied(f"{total} tâche(s) terminée(s)", f"{len(jours)} jour(s) actif(s)")
     rangees = [[t['date_terminee'], t['id'], t['priorite'], t['titre']] for j in jours for t in par_jour[j]]
     _sortie(fmt, ("TERMINÉE", "ID", "PRIO", "TITRE"), rangees, "Aucune tâche terminée sur cette période.", texte, pager)
+
+
+# ---------------------------------------------------------------------------------------------- en cours
+def rapport_en_cours(fmt="text", pager=True):
+    """Tâches démarrées et pas terminées, la plus ancienne en premier, avec le temps écoulé (calendaire)."""
+    maintenant = datetime.now()
+    actives = []
+    for t in _lire_taches():
+        debut = lire_instant(t.get('demarree'))
+        if t['statut'] == STATUT_A_FAIRE and debut is not None:
+            actives.append((t, debut, duree_minutes(debut, maintenant)))
+    actives.sort(key=lambda r: (r[1], r[0]['id']))
+
+    if fmt == "json":
+        _en_json({"date": maintenant.strftime("%Y-%m-%d %H:%M"), "total": len(actives),
+                  "taches": [{**t, "ecoule_minutes": m} for t, _, m in actives]})
+        return
+    texte = [_titre("▶️  TÂCHES EN COURS")]
+    for t, _, m in actives:
+        texte.append(_ligne_tache(t) + f" {couleurs.CLR_TODO}[▶ {duree_lisible(m)}]{couleurs.CLR_RESET}")
+    if not actives:
+        texte.append(f"  {couleurs.CLR_DIM}Aucune tâche en cours (`todo task start ID`).{couleurs.CLR_RESET}")
+    texte += _pied(f"{len(actives)} tâche(s) en cours", "durées calendaires")
+    rangees = [[t['id'], str(m), t['demarree'], t['priorite'], t['titre']] for t, _, m in actives]
+    _sortie(fmt, ("ID", "ÉCOULÉ (MIN)", "DÉMARRÉE", "PRIO", "TITRE"), rangees, "Aucune tâche en cours.", texte, pager)
+
+
+# ---------------------------------------------------------------------------------------------- délais
+def _resume_delais(nom, minutes):
+    """Statistiques d'une série de délais (minutes) : nombre, moyenne, médiane, plus court, plus long (entiers)."""
+    return {"nom": nom, "nombre": len(minutes), "moyenne": round(statistics.mean(minutes)),
+            "mediane": round(statistics.median(minutes)), "min": min(minutes), "max": max(minutes)}
+
+
+def rapport_delais(depuis, jusqu_a, avec_archive=False, par=None, fmt="text", pager=True):
+    """Délai démarrage → fin des tâches terminées entre `depuis` et `jusqu_a` (dates incluses).
+
+    `par` : None (tout ensemble), "tag" (une tâche compte pour chacun de ses tags) ou "prio". Les tâches terminées
+    sans instant de démarrage ne peuvent pas être mesurées : elles sont comptées à part. Délais calendaires.
+    """
+    mesurees, sans_demarrage = [], 0
+    for t in _lire_taches() + (_lire_archive() if avec_archive else []):
+        jour = _jour(t.get('date_terminee'))
+        if t['statut'] != STATUT_TERMINE or jour is None or not (depuis <= jour <= jusqu_a):
+            continue
+        debut, fin = lire_instant(t.get('demarree')), lire_instant(t.get('date_terminee'))
+        if debut is None or fin is None:
+            sans_demarrage += 1
+        else:
+            mesurees.append((t, duree_minutes(debut, fin)))
+    mesurees.sort(key=lambda r: (r[0]['date_terminee'], r[0]['id']))
+
+    series = {}
+    for t, m in mesurees:
+        if par == "tag":
+            noms = t['tags'] or ["(sans tag)"]
+        elif par == "prio":
+            noms = [t['priorite']]
+        else:
+            noms = ["tout"]
+        for nom in noms:
+            series.setdefault(nom, []).append(m)
+    if par == "prio":
+        ordre = [p for p in reversed(PRIORITES) if p in series]
+    else:
+        ordre = sorted(series, key=lambda n: (-len(series[n]), n))
+    groupes = [_resume_delais(n, series[n]) for n in ordre]
+
+    if fmt == "json":
+        _en_json({"depuis": depuis.isoformat(), "jusqu_a": jusqu_a.isoformat(), "avec_archive": avec_archive, "par": par,
+                  "mesurees": len(mesurees), "sans_demarrage": sans_demarrage, "unite": "minutes", "groupes": groupes,
+                  "taches": [{**t, "delai_minutes": m} for t, m in mesurees]})
+        return
+    aujourdhui = datetime.now().date()
+    texte = [_titre(f"⏱️  DÉLAIS DE TRAITEMENT : {_libelle_jour(depuis, aujourdhui)} → {_libelle_jour(jusqu_a, aujourdhui)}")]
+    if par:
+        texte.append(f"  {couleurs.CLR_DIM}par {'tag' if par == 'tag' else 'priorité'}{couleurs.CLR_RESET}")
+    for g in groupes:
+        entete = "" if g["nom"] == "tout" else f"{couleurs.CLR_BOLD}{g['nom']}{couleurs.CLR_RESET}  "
+        texte.append(f"\n  {entete}{couleurs.CLR_DIM}({g['nombre']} tâche(s)){couleurs.CLR_RESET}\n"
+                     f"    moyenne {duree_lisible(g['moyenne'])} · médiane {duree_lisible(g['mediane'])} · "
+                     f"plus court {duree_lisible(g['min'])} · plus long {duree_lisible(g['max'])}")
+    if not groupes:
+        texte.append(f"\n  {couleurs.CLR_DIM}Aucune tâche terminée et démarrée sur cette période.{couleurs.CLR_RESET}")
+    morceaux = [f"{len(mesurees)} tâche(s) mesurée(s)"]
+    if sans_demarrage:
+        morceaux.append(f"{sans_demarrage} terminée(s) sans démarrage (non mesurées)")
+    texte += _pied(*morceaux, "durées calendaires")
+    rangees = [[g["nom"], str(g["nombre"]), str(g["moyenne"]), str(g["mediane"]), str(g["min"]), str(g["max"])] for g in groupes]
+    _sortie(fmt, ("GROUPE", "NOMBRE", "MOYENNE (MIN)", "MÉDIANE (MIN)", "MIN", "MAX"), rangees,
+            "Aucune tâche terminée et démarrée sur cette période.", texte, pager)

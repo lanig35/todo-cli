@@ -11,7 +11,7 @@ from datetime import datetime
 from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import config
 from . import couleurs, dependances, journal
-from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date, _sans_accents
+from .dates import _jours_restants, _libelle_echeance, _libelle_recurrence, _parse_date, _sans_accents, duree_lisible, duree_minutes, lire_instant
 from .filtres import garder
 from .formats import imprimer_plain, sortie_taches, tableau
 from .notes import lignes_notes
@@ -28,6 +28,8 @@ def champs_tache(t, id_complet):
               ("statut", "Statut", "done" if t['statut'] == STATUT_TERMINE else "todo"),
               ("priorite", "Priorité", t['priorite']), ("creee", "Créée le", t.get('date_creation') or ""),
               ("echeance", "Échéance", t['date_echeance'] or "")]
+    if t['demarree']:
+        champs.append(("demarree", "Démarrée le", t['demarree']))
     if t['statut'] == STATUT_TERMINE:
         champs.append(("terminee", "Terminée le", t['date_terminee'] or ""))
     if t['recurrence']:
@@ -106,8 +108,16 @@ def afficher_tache(id_recherche, fmt="text"):
     print(f"  {couleurs.CLR_BOLD}Priorité    :{couleurs.CLR_RESET} {couleur_prio}{t['priorite'].upper()}{couleurs.CLR_RESET}")
     print(f"  {couleurs.CLR_BOLD}Créée le    :{couleurs.CLR_RESET} {t.get('date_creation') or f'{couleurs.CLR_DIM}inconnue{couleurs.CLR_RESET}'}")
     print(f"  {couleurs.CLR_BOLD}Échéance    :{couleurs.CLR_RESET} {echeance}")
+    debut = lire_instant(t['demarree'])
+    if debut:
+        fin = lire_instant(t['date_terminee']) if not a_faire else datetime.now()
+        ecoule = f" {couleurs.CLR_DIM}(depuis {duree_lisible(duree_minutes(debut, fin))}){couleurs.CLR_RESET}" if a_faire else ""
+        print(f"  {couleurs.CLR_BOLD}Démarrée le :{couleurs.CLR_RESET} {t['demarree']}{ecoule}")
     if not a_faire:
         print(f"  {couleurs.CLR_BOLD}Terminée le :{couleurs.CLR_RESET} {t['date_terminee'] or f'{couleurs.CLR_DIM}inconnue{couleurs.CLR_RESET}'}")
+        fin = lire_instant(t['date_terminee'])
+        if debut and fin:
+            print(f"  {couleurs.CLR_BOLD}Délai       :{couleurs.CLR_RESET} {duree_lisible(duree_minutes(debut, fin))} {couleurs.CLR_DIM}(démarrage → fin, durée calendaire){couleurs.CLR_RESET}")
     if t['recurrence']:
         print(f"  {couleurs.CLR_BOLD}Répétition  :{couleurs.CLR_RESET} ↻ {_libelle_recurrence(t['recurrence'])}")
     if t['suivante']:
@@ -327,6 +337,9 @@ def lister_taches(statut_filtre=None, recherche_filtre=None, tri=None, fmt="text
         display_tags = f" {couleurs.CLR_TAG}" + " ".join([f"#{tg}" for tg in t['tags']]) + f"{couleurs.CLR_RESET}" if t['tags'] else ""
         rec_str = f" {couleurs.CLR_DIM}↻ {_libelle_recurrence(t['recurrence'])}{couleurs.CLR_RESET}" if (t['recurrence'] and a_faire) else ""
         nb_notes = f" {couleurs.CLR_DIM}📝{len(t['notes'])}{couleurs.CLR_RESET}" if t['notes'] else ""
+        debut = lire_instant(t['demarree']) if a_faire else None
+        if debut:
+            nb_notes = f" {couleurs.CLR_TODO}▶ {duree_lisible(duree_minutes(debut, datetime.now()))}{couleurs.CLR_RESET}" + nb_notes
         if t['pieces_jointes']:
             nb_notes += f" {couleurs.CLR_DIM}📎{len(t['pieces_jointes'])}{couleurs.CLR_RESET}"
         if t.get('bloquee_par'):

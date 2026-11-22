@@ -201,3 +201,12 @@ def test_groupe_attachment_et_options(todo, argcomplete_utilisable):
     assert {"add", "list", "open", "save", "remove", "gc"} <= set(completer(todo, "todo attachment ")[0])
     assert "--has-files" in completer(todo, "todo list --has-")[0]
     assert "--older-than" in completer(todo, "todo attachment gc --")[0]
+
+
+# --- suivi du temps ------------------------------------------------------------------------------------------------------
+def test_start_unstart_et_rapports_completables(todo, argcomplete_utilisable):
+    assert {"start", "unstart"} <= set(completer(todo, "todo task ")[0])
+    assert {"active", "cycle"} <= set(completer(todo, "todo report ")[0])
+    assert "--at" in completer(todo, "todo task start --a")[0]
+    assert "--started" in completer(todo, "todo list --star")[0]
+    assert "--by" in [c.strip() for c in completer(todo, "todo report cycle --b")[0]]
