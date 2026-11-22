@@ -32,6 +32,7 @@ _FICHIERS = {
     "ARCHIVE_NAME": "todo_archive",        # tâches terminées rangées hors de la liste courante
     "ARCHIVE_AUTO_LAST": "archive_auto",   # date du dernier archivage automatique
     "LOCK_FILE": "todo.lock",              # verrou de la base
+    "VIEWS_FILE": "views.json",            # vues enregistrées (hors base : ni sauvegardé ni touché par restore/reset/undo)
 }
 # Fichiers communs à tous les projets, relatifs à la racine du stockage
 _FICHIERS_RACINE = {

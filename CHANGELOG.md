@@ -3,6 +3,16 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.5.0] - 2026-11-22
+
+### Ajouté
+
+- **Vues enregistrées** : groupe `view` (`save`, `run`, `list`, `show`, `rename`, `remove`). `todo view save retards --overdue
+  --prio high` mémorise une commande de lecture (`list`, `next`, `agenda`, `stats`, `report …`) sous un nom ; `todo view run
+  retards` la rejoue, avec des options supplémentaires si besoin (`--format json`, `-p PROJET`…). Les vues sont propres à chaque
+  projet : `views.json` dans son dossier (0600, écriture atomique), hors sauvegardes, `undo` et export. Les arguments sont validés
+  à l'enregistrement puis rejoués par le même analyseur que la commande d'origine. Complétion des noms de vues.
+
 ## [3.4.0] - 2026-11-22
 
 ### Ajouté
@@ -448,6 +458,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.5.0
 [3.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.4.0
 [3.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.3.0
 [3.2.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.2.0
