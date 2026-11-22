@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.6.0] - 2026-11-22
+
+### Ajouté
+
+- **Webhook HTTP intégré** : `[hooks] webhook_url` (`http://hôte:port/chemin`), `webhook_events` (liste, vide = tous) et
+  `webhook_token` (`Authorization: Bearer`) ; variables `TODO_HOOKS_WEBHOOK_*`. Après chaque commande qui modifie quelque chose,
+  un POST JSON (`event`, `project`, `count`, `ids`, `version`, `time`, `tasks`) part en une requête par commande. Refus de
+  connexion, réponse HTTP ≥ 400 ou délai dépassé : simple avertissement, jamais d'effet sur le code de sortie.
+- **Exemple Redis** : `examples/hooks/redis_hook.py` (sans dépendance) tient à jour un stream `todo:events` et un hash
+  `todo:tasks:<projet>` ; variantes `redis-cli` dans le README.
+- Les identifiants fournis aux hooks (`TODO_ID`, `TODO_IDS`) sont désormais complets, y compris pour une tâche supprimée.
+
+### Corrigé
+
+- Un hook (`on_remove`, `on_move` ou `on_change`) lancé après la suppression ou le déplacement d'une tâche faisait afficher
+  « Aucun identifiant ne correspond… » sur la sortie standard et notait un échec dans le journal ; la recherche de la tâche
+  dans la base est maintenant silencieuse.
+
 ## [3.5.0] - 2026-11-22
 
 ### Ajouté
@@ -458,6 +476,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0
 [3.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.5.0
 [3.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.4.0
 [3.3.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.3.0

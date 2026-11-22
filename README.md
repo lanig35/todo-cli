@@ -26,7 +26,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
 - Vues enregistrées : une commande de lecture et ses filtres mémorisés sous un nom, par projet (`view save`, `view run`)
-- Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…)
+- Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…), ou un webhook HTTP intégré (`webhook_url`)
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
 - Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
 - Date de complétion et statistiques
@@ -494,6 +494,78 @@ stderr ; pour garder une trace, écrivez dans un fichier. Pour voir ce que reço
 ```bash
 TODO_HOOKS_ON_ADD="sh -c 'env | grep TODO_'" todo add Essai
 ```
+
+#### Webhook HTTP intégré
+
+Pour prévenir un service web, pas besoin d'écrire de hook : un **POST JSON** part vers l'adresse de votre choix
+(hôte, port et chemin compris) après chaque commande qui modifie quelque chose.
+
+```ini
+[hooks]
+webhook_url = http://localhost:8080/todo        # http:// ou https:// ; vide = désactivé
+webhook_events = add, done, remove              # facultatif : seulement ces événements (vide ou `change` = tous)
+webhook_token = mon-jeton                       # facultatif : envoyé dans « Authorization: Bearer mon-jeton »
+```
+
+Variables : `TODO_HOOKS_WEBHOOK_URL`, `TODO_HOOKS_WEBHOOK_EVENTS`, `TODO_HOOKS_WEBHOOK_TOKEN`. Les événements sont ceux des hooks
+(`add`, `done`, `undone`, `start`, `unstart`, `edit`, `postpone`, `remove`, `move`) ; les commandes qui ne visent aucune tâche
+(`undo`, `import`, `archive`…) ne sont envoyées que si `webhook_events` est vide ou contient `change`.
+
+Corps de la requête (une requête par commande, pas par tâche), en-têtes `Content-Type: application/json`,
+`X-Todo-Event: done`, `User-Agent: todo-cli/VERSION` :
+
+```json
+{"event": "done", "project": "default", "count": 1, "ids": ["0d6a0a67-16c5-4995-8e2b-eea56700c8ad"],
+ "version": "3.6.0", "time": "2026-11-22T22:30:12+0100",
+ "tasks": [{"id": "0d6a0a67-…", "titre": "Rapport", "statut": "TERMINE", "priorite": "high", "tags": ["pro"], "…": "…"}]}
+```
+
+`tasks` contient les tâches comme `show --format json` (réduites à `{"id", "titre"}` pour une tâche supprimée ou déplacée) ;
+au-delà de 20 tâches, il est omis et seuls `count` et `ids` sont envoyés. Délai : `[hooks] timeout`. Comme pour les hooks,
+un refus de connexion, une réponse HTTP 4xx/5xx ou un délai dépassé donnent un simple avertissement (stderr et journal) et ne
+changent jamais le résultat de la commande. Le webhook s'ajoute aux hooks `on_*` éventuels.
+
+Pour tester sans serveur : `python3 -m http.server` ne reçoit pas de POST ; un récepteur de quelques lignes suffit :
+
+```bash
+python3 - <<'PY'
+import http.server
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        print(self.headers["X-Todo-Event"], self.rfile.read(int(self.headers["Content-Length"])).decode(), flush=True)
+        self.send_response(204); self.end_headers()
+http.server.HTTPServer(("127.0.0.1", 8080), H).serve_forever()
+PY
+```
+
+#### Exemple : envoyer les modifications dans Redis
+
+Avec `redis-cli`, un événement dans un *stream* par modification (`sh -c` pour lire les variables) :
+
+```ini
+[hooks]
+on_change = sh -c 'redis-cli XADD todo:events "*" event "$TODO_EVENT" project "$TODO_PROJECT" id "$TODO_ID" title "$TODO_TITLE"'
+```
+
+Ou la tâche complète (JSON lu sur l'entrée standard) dans une clé :
+
+```ini
+[hooks]
+on_add = sh -c 'redis-cli -x SET todo:derniere_tache'
+```
+
+Le script [`examples/hooks/redis_hook.py`](examples/hooks/redis_hook.py) fait mieux, sans aucune dépendance (petit client Redis
+intégré) : pour chaque tâche touchée, un `XADD todo:events` (journal des événements, avec la tâche en JSON) et un
+`HSET todo:tasks:<projet> <id> <json>` qui tient à jour l'état courant (`HDEL` à la suppression ou au déplacement).
+
+```ini
+[hooks]
+on_change = python3 /home/vous/todo-cli/examples/hooks/redis_hook.py
+```
+
+Variables lues par le script : `REDIS_HOST` (127.0.0.1), `REDIS_PORT` (6379), `REDIS_PASSWORD`, `REDIS_STREAM` (todo:events),
+`REDIS_MAXLEN` (10000). Lecture : `redis-cli XRANGE todo:events - +` ou `redis-cli HGETALL todo:tasks:default`. Avec `redis-py`
+(`pip install redis`), la même chose tient en quelques lignes : `r.xadd(...)`, `r.hset(...)`, avec `json.load(sys.stdin)` pour la tâche.
 
 ### Suivi du temps
 
@@ -1115,6 +1187,9 @@ timeout = 10            # secondes accordées à un hook
 on_add =                # commande lancée pour chaque tâche ajoutée (idem on_done, on_undone, on_start, on_unstart,
                         # on_edit, on_postpone, on_remove, on_move) ; vide = rien
 on_change =             # commande lancée après toute commande qui modifie quelque chose
+webhook_url =           # http://hôte:port/chemin : reçoit un POST JSON après chaque modification ; vide = désactivé
+webhook_events =        # add, done, remove… (séparés par des virgules) ; vide = tous
+webhook_token =         # envoyé en « Authorization: Bearer … » ; vide = aucun
 
 [list]
 limit = 30              # 0 = pas de limite
@@ -1145,6 +1220,9 @@ soon = 0
 | `attachments` | `opener` | *(vide : `xdg-open` en session graphique, sinon affiche le chemin)* | `TODO_ATTACHMENTS_OPENER` | — |
 | `hooks` | `enabled` | `true` | `TODO_HOOKS_ENABLED` | — |
 | `hooks` | `timeout` | `10` (secondes) | `TODO_HOOKS_TIMEOUT` | — |
+| `hooks` | `webhook_url` | *(vide : désactivé)* | `TODO_HOOKS_WEBHOOK_URL` | — |
+| `hooks` | `webhook_events` | *(vide : tous)* | `TODO_HOOKS_WEBHOOK_EVENTS` | — |
+| `hooks` | `webhook_token` | *(vide : aucun en-tête)* | `TODO_HOOKS_WEBHOOK_TOKEN` | — |
 | `hooks` | `on_add`, `on_done`, `on_undone`, `on_start`, `on_unstart`, `on_edit`, `on_postpone`, `on_remove`, `on_move`, `on_change` | *(vide)* | `TODO_HOOKS_ON_DONE`… | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
@@ -1342,7 +1420,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
-| `hooks.py` | hooks : commandes lancées après une modification |
+| `hooks.py` | hooks : commandes et webhook HTTP lancés après une modification |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
