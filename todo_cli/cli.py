@@ -26,7 +26,7 @@ from .seed import peupler_fausses_taches
 from .echange import exporter, importer
 from .formats import FORMATS, colonnes_tache, resoudre as resoudre_format
 from .notes import commande_note
-from . import hooks, pieces_jointes
+from . import hooks, pieces_jointes, vues
 from .taches import ajouter_tache, annuler_demarrage, demarrer_taches, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
@@ -787,6 +787,37 @@ def _args_format(p):
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
 
+def _completer_vues(prefix, parsed_args, **kwargs):
+    """Complétion d'un nom de vue : celles du projet visé (aucune écriture, aucune erreur)."""
+    return vues.noms_pour_completion(getattr(parsed_args, 'projet', None))
+
+
+def _args_vue_enregistrer(p):
+    _args_format(p)
+    p.add_argument('--replace', action='store_true', help="Remplacer la vue si elle existe déjà")
+    p.add_argument('nom', type=str, help="Nom de la vue (lettres, chiffres, - et _)")
+    p.add_argument('mots', nargs=argparse.REMAINDER, metavar='[COMMANDE] OPTIONS',
+                   help="Commande de lecture et ses options, comme tapées ; `list` si seules des options sont données "
+                        "(les options propres à `view save` se placent avant le nom)")
+
+
+def _args_vue_executer(p):
+    p.add_argument('nom', type=str, help="Nom de la vue").completer = _completer_vues
+    p.add_argument('reste', nargs=argparse.REMAINDER, metavar='OPTIONS',
+                   help="Options ajoutées à celles de la vue (elles l'emportent : --format json, --limit 5, -p PROJET…)")
+
+
+def _args_vue_nom(p):
+    _args_format(p)
+    p.add_argument('nom', type=str, help="Nom de la vue").completer = _completer_vues
+
+
+def _args_vue_renommer(p):
+    _args_format(p)
+    p.add_argument('ancien', type=str, help="Nom actuel").completer = _completer_vues
+    p.add_argument('nouveau', type=str, help="Nouveau nom")
+
+
 _RAPPEL_DEFAUTS = dict(limit=None, soon=None, once_a_day=False, write_status=False, disable=False, enable=False, status=False)
 _ARCHIVE_DEFAUTS = dict(ids=[], anciennete=None, tags_archive=None, purge=False, lister=False, search=None, search_in=None, yes=False, pager=None, format=None,
                      tag=None, any_tag=None, no_tag=False, not_tag=None, prio=None, not_prio=None, recurring=False,
@@ -854,6 +885,14 @@ _GROUPES = [
         ('done', 'report_done', _args_rapport_done, 'Bilan des tâches terminées sur une période', {}),
         ('active', 'report_active', _args_rapport_active, 'Tâches en cours (démarrées, pas terminées) et temps écoulé', {}),
         ('cycle', 'report_cycle', _args_rapport_cycle, 'Délai démarrage → fin des tâches terminées', {}),
+    ]),
+    ('view', "Vues enregistrées : une commande de lecture mémorisée sous un nom (par projet)", [
+        ('save', 'view_save', _args_vue_enregistrer, 'Enregistrer une vue (list, next, agenda, report … avec ses options)', {}),
+        ('run', 'view_run', _args_vue_executer, 'Exécuter une vue, avec des options en plus si besoin', {}),
+        ('list', 'view_list', _args_format, 'Lister les vues du projet', {}),
+        ('show', 'view_show', _args_vue_nom, "Afficher la commande qu'une vue représente", {}),
+        ('rename', 'view_rename', _args_vue_renommer, 'Renommer une vue', {}),
+        ('remove', 'view_remove', _args_vue_nom, 'Supprimer une vue', {}),
     ]),
     ('admin', "Maintenance de la base", [
         ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
@@ -980,7 +1019,8 @@ def _completer_ligne():
 
 
 # Commandes qui ne déclenchent pas l'archivage automatique (elles gèrent déjà l'archive ou l'historique)
-_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete', 'attachment_gc')
+_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete', 'attachment_gc',
+                        'view_save', 'view_rename', 'view_remove')
 
 
 def _mode_verrou(args):
@@ -991,7 +1031,7 @@ def _mode_verrou(args):
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
-             'report_stale', 'report_done', 'report_active', 'report_cycle', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
+             'report_stale', 'report_done', 'report_active', 'report_cycle', 'view_list', 'view_show', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -1047,6 +1087,37 @@ def _choisir_projet(args):
         sys.exit(1)
 
 
+def _canon_de(parser, mots):
+    """Analyse une ligne de commande (erreur d'usage habituelle si elle est invalide) et retourne le nom canonique de sa commande."""
+    return getattr(parser.parse_args(mots), 'canon', None)
+
+
+def _developper_vue(args, parser):
+    """`view run NOM [OPTIONS]` : relit la vue du projet et la rejoue (ses options, puis celles données en plus) comme si
+    elle avait été tapée ; options globales (--color, --log-level, -p…) conservées. Ne modifie rien : verrou de la commande réelle."""
+    try:
+        vue = vues.lire(args.nom)
+        if vues.normaliser(vue['args'])[0] in ('view', 'run') or not vue['args']:
+            raise vues.ErreurVue("views_file_invalid", f"la vue '{args.nom}' est invalide dans {vues.chemin()}.", vue=args.nom)
+    except vues.ErreurVue as e:
+        journal.echec(e.raison, **e.champs)
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} {e}", file=sys.stderr)
+        sys.exit(1)
+    nouveau = parser.parse_args(vue['args'] + args.reste)
+    nouveau.commande = getattr(nouveau, 'canon', None)
+    if nouveau.commande not in vues.COMMANDES_AUTORISEES:
+        journal.echec("invalid_view", vue=args.nom)
+        print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} la vue '{args.nom}' (ou les options ajoutées) ne désigne pas "
+              f"une commande de lecture.", file=sys.stderr)
+        sys.exit(2)
+    for champ in ('projet', 'couleur', 'niveau_log', 'fichier_config'):
+        if hasattr(args, champ) and not hasattr(nouveau, champ):
+            setattr(nouveau, champ, getattr(args, champ))
+    journal.definir_commande(nouveau.commande)
+    journal.noter(view=args.nom)
+    return nouveau
+
+
 def main():
     if os.environ.get('_ARGCOMPLETE'):
         _completer_ligne()
@@ -1070,6 +1141,12 @@ def main():
                           'unset': "config unset attend un réglage : todo config unset section.clé",
                           'set': "config set attend un réglage et une valeur : todo config set section.clé valeur"}
                          .get(args.action, f"config {args.action} n'accepte pas d'argument supplémentaire"))
+    if args.commande in ('view_save', 'view_run'):          # -p NOM placé après le nom de la vue : il vaut pour toute la commande
+        champ = 'mots' if args.commande == 'view_save' else 'reste'
+        projet_vue, reste = vues.extraire_projet(getattr(args, champ))
+        setattr(args, champ, reste)
+        if projet_vue is not None:
+            args.projet = projet_vue
     explicite = getattr(args, 'fichier_config', None)
     if explicite is not None:
         reglages.definir_fichier(explicite)
@@ -1095,6 +1172,9 @@ def main():
                 sys.exit(1)
             if args.format in ('text', 'json'):     # format venu du réglage ou d'un terminal : --columns suppose un tableau
                 args.format = 'table'
+
+    if args.commande == 'view_run':
+        args = _developper_vue(args, parser)
 
     mode_verrou = _mode_verrou(args)
     if args.commande in ('project_rename', 'project_delete'):
@@ -1340,6 +1420,16 @@ def main():
         succes = projets.renommer(args.ancien, args.nouveau, args.format)
     elif args.commande == 'project_delete':
         succes = projets.supprimer(args.nom, args.courant, args.yes, args.force, args.format)
+    elif args.commande == 'view_save':
+        succes = vues.commande_enregistrer(args.nom, args.mots, args.replace, lambda mots: _canon_de(parser, mots), args.format)
+    elif args.commande == 'view_list':
+        succes = vues.commande_lister(args.format)
+    elif args.commande == 'view_show':
+        succes = vues.commande_afficher(args.nom, args.format)
+    elif args.commande == 'view_rename':
+        succes = vues.commande_renommer(args.ancien, args.nouveau, args.format)
+    elif args.commande == 'view_remove':
+        succes = vues.commande_supprimer(args.nom, args.format)
     elif args.commande == 'reset':
         reinitialiser_base(args.include_archive)
     else:

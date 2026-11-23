@@ -195,6 +195,24 @@ def test_completion_avec_un_projet_inexistant_ne_cree_rien(todo, argcomplete_uti
     assert err == "" and not (todo.db_dir / "projects").exists()
 
 
+# --- vues ----------------------------------------------------------------------------------------------------------------
+def test_vues_proposees(todo, argcomplete_utilisable):
+    assert "view" in completer(todo, "todo ")[0]
+    assert {"save", "run", "list", "show", "rename", "remove"} <= set(completer(todo, "todo view ")[0])
+    todo("view", "save", "retards", "--overdue")
+    todo("project", "create", "pro")
+    todo("view", "save", "-p", "pro", "urgent", "--prio", "high")
+    for ligne in ("todo view run ", "todo view show ", "todo view remove ", "todo view rename "):
+        propositions, _, err, _ = completer(todo, ligne)
+        assert "retards" in propositions and "urgent" not in propositions and err == "", ligne
+    assert "urgent" in completer(todo, "todo view run -p pro ")[0]
+
+
+def test_completion_des_vues_ne_cree_rien(todo, argcomplete_utilisable):
+    _, code, err, _ = completer(todo, "todo view run ")
+    assert err == "" and not (todo.db_dir / "views.json").exists()
+
+
 # --- pièces jointes ------------------------------------------------------------------------------------------------------
 def test_groupe_attachment_et_options(todo, argcomplete_utilisable):
     assert "attachment" in completer(todo, "todo ")[0]

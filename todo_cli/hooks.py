@@ -88,6 +88,8 @@ def declencher():
         if (not bilan["modifie"] or os.environ.get("TODO_IN_HOOK") or not reglages.obtenir('hooks', 'enabled')
                 or not bilan["commande"]):
             return
+        if bilan["commande"].startswith("view_"):          # les vues sont des préférences, pas des tâches
+            return
         evenement, ids, titres = bilan["commande"], bilan["ids"], bilan["titres"]
         specifique = _commande("on_" + evenement) if evenement in EVENEMENTS and ids else None
         general = _commande("on_change")

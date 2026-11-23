@@ -25,6 +25,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
+- Vues enregistrées : une commande de lecture et ses filtres mémorisés sous un nom, par projet (`view save`, `view run`)
 - Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…)
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
 - Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
@@ -84,6 +85,7 @@ plus courantes ont un **raccourci** de premier niveau.
 | `reminder` | `check`, `enable`, `disable`, `status` |
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
 | `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
+| `view` | `save`, `run`, `list`, `show`, `rename`, `remove` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
 | `data` | `export`, `import` |
@@ -374,6 +376,36 @@ todo list --has-files                             # tâches qui ont des pièces 
 - **Sauvegardes** : le dossier `attachments/` n'est **pas** dans les sauvegardes de la base ; sauvegardez-le avec
   `rsync` ou l'outil de votre choix. `data export` n'emporte que les métadonnées (aucun fichier) et `data import
   --update` conserve les pièces de la tâche existante.
+
+### Vues enregistrées
+
+Une **vue** mémorise une commande de lecture et ses options sous un nom, pour la rejouer en une ligne. Les vues sont propres
+à chaque projet.
+
+```bash
+todo view save retards --overdue --prio high --sort due    # `list` est sous-entendu quand on ne donne que des options
+todo view save semaine agenda --days 7                       # ou une autre commande de lecture : next, agenda, report …
+todo view run retards                                        # = todo list --overdue --prio high --sort due
+todo view run retards --format json                          # des options en plus s'ajoutent (et l'emportent)
+todo view list                                               # les vues du projet (--format text|table|plain|json)
+todo view show retards                                       # la commande équivalente : todo list --overdue …
+todo view rename retards urgent
+todo view remove urgent
+```
+
+- **Commandes mémorisables** : seulement des lectures — `list` (ou `task list`), `next`, `agenda`, `stats`, `report …`. Une
+  commande qui modifie quelque chose (`done`, `add`…) est refusée à l'enregistrement.
+- **Validation** : la ligne est analysée à l'enregistrement, une option invalide est refusée tout de suite. Elle est
+  mémorisée telle que tapée et rejouée par le même analyseur que la commande d'origine : tout nouveau filtre fonctionne sans
+  migration. Les options propres à `view save` (`--replace`, `--format`) se placent **avant** le nom.
+- **Nom** : lettres, chiffres, `-` et `_` (40 caractères au plus). Enregistrer sous un nom existant demande `--replace`.
+- **Projets** : `todo -p travail view save …` ou `todo view save … -p travail` ; `view run NOM -p travail` lit les vues de
+  `travail`. Les options globales (`--no-color`, `--log-level`…) s'appliquent aux vues comme aux autres commandes.
+- **Stockage** : `views.json` dans le dossier du projet (voir *Stockage*), en 0600, écrit de façon atomique. Ce sont des
+  préférences et non des tâches : ni sauvegardées avec la base, ni concernées par `undo`, `restore` ou `reset`, ni exportées ;
+  elles suivent le projet quand il est renommé ou mis à la corbeille. Un fichier illisible n'est jamais écrasé.
+- **Hooks** : les vues ne déclenchent aucun hook ; `view run` rejoue une lecture et ne modifie rien.
+- La complétion du shell propose les noms des vues du projet visé.
 
 ### Hooks
 
@@ -1309,6 +1341,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `cli.py` | définition de la ligne de commande (argparse) et aiguillage |
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
+| `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `hooks.py` | hooks : commandes lancées après une modification |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
@@ -1369,6 +1402,7 @@ status checks to pass* (cocher `pytest (Python`3.13`).
 | Base (projet `default`) | `~/.local/share/todo/todo_db*` |
 | Autres projets | `~/.local/share/todo/projects/<nom>/` (mêmes fichiers : base, archive, sauvegardes, verrou) |
 | Projets supprimés | `~/.local/share/todo/.trash/<nom>-AAAAMMJJ-HHMMSS/` |
+| Vues enregistrées | `<dossier du projet>/views.json` |
 | Pièces jointes | `<dossier du projet>/attachments/<id de la tâche>/<nom>` ; corbeille : `attachments/.trash/<id>/<horodatage>/` |
 | Journal (cible `file`) | `~/.local/state/todo/todo.log` |
 | État du rappel | `~/.local/share/todo/remind_off`, `remind_last`, `remind_status` |
