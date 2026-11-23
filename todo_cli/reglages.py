@@ -105,6 +105,13 @@ REGLAGES = (
     Reglage("hooks", "on_change", "texte", "",
             "Commande lancée après toute commande qui modifie quelque chose (en plus du hook propre à la commande) ; "
             "une seule fois si la commande ne vise aucune tâche (import, undo, archive…)."),
+    Reglage("hooks", "webhook_url", "texte", "",
+            "Adresse http(s) qui reçoit un POST JSON après chaque modification (ex. http://localhost:8080/todo) ; vide = désactivé."),
+    Reglage("hooks", "webhook_events", "texte", "",
+            "Événements envoyés au webhook, séparés par des virgules (add, done, undone, start, unstart, edit, postpone, remove, "
+            "move ; `change` = tout) ; vide = tout."),
+    Reglage("hooks", "webhook_token", "texte", "",
+            "Jeton envoyé dans l'en-tête `Authorization: Bearer …` du webhook ; vide = aucun en-tête."),
     Reglage("log", "level", "choix", "info",
             "Niveau du journal : off, error, warning, info (actions et erreurs) ou debug (ajoute les lectures).",
             choix=("off", "error", "warning", "info", "debug")),
