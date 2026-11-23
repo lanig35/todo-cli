@@ -31,7 +31,7 @@ _etat = {}
 
 def _remettre_a_zero():
     _etat.clear()
-    _etat.update(commande=None, ids=[], titres=[], champs={}, modifie=False, echecs=0,
+    _etat.update(commande=None, ids=[], ids_complets=[], titres=[], champs={}, modifie=False, echecs=0,
                  niveau=None, titres_actifs=False, logger=None, avertissements_emis=False, projet=None)
 
 
@@ -184,6 +184,7 @@ def noter(ids=None, titres=None, modifie=False, **champs):
     """
     if ids:
         _etat["ids"].extend(id_court(i) for i in ids)
+        _etat["ids_complets"].extend(i.decode("utf-8", "replace") if isinstance(i, (bytes, bytearray)) else str(i) for i in ids)
     if titres:
         _etat["titres"].extend(titres)
     if modifie:
@@ -193,7 +194,7 @@ def noter(ids=None, titres=None, modifie=False, **champs):
 
 def bilan():
     """Ce que la commande en cours a noté : commande, identifiants (abrégés), titres, modification faite ? (pour les hooks)."""
-    return {"commande": _etat["commande"], "ids": list(_etat["ids"]), "titres": list(_etat["titres"]), "modifie": _etat["modifie"]}
+    return {"commande": _etat["commande"], "ids": list(_etat["ids"]), "ids_complets": list(_etat["ids_complets"]), "titres": list(_etat["titres"]), "modifie": _etat["modifie"]}
 
 
 def avertir(evenement, **champs):
