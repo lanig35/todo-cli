@@ -538,6 +538,12 @@ http.server.HTTPServer(("127.0.0.1", 8080), H).serve_forever()
 PY
 ```
 
+Un récepteur complet avec Flask (`pip install flask`) est fourni dans
+[`examples/hooks/flask_webhook.py`](examples/hooks/flask_webhook.py) : il vérifie le jeton, valide le JSON, journalise chaque
+événement (`events.jsonl`), tient à jour l'état des tâches (`tasks.json`, lisible par `GET /tasks`) et réagit aux tâches
+terminées. Lancement : `TODO_WEBHOOK_TOKEN=mon-jeton python3 examples/hooks/flask_webhook.py`, avec
+`webhook_url = http://127.0.0.1:8080/todo` et `webhook_token = mon-jeton`.
+
 #### Exemple : envoyer les modifications dans Redis
 
 Avec `redis-cli`, un événement dans un *stream* par modification (`sh -c` pour lire les variables) :
