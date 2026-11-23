@@ -26,7 +26,7 @@ from .seed import peupler_fausses_taches
 from .echange import exporter, importer
 from .formats import FORMATS, colonnes_tache, resoudre as resoudre_format
 from .notes import commande_note
-from . import hooks, pieces_jointes, vues
+from . import ecriture_json, hooks, pieces_jointes, vues
 from .taches import ajouter_tache, annuler_demarrage, demarrer_taches, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
@@ -250,7 +250,7 @@ def _args_lot(p, statut=False, prio=True):
     g.add_argument('--due-after', type=str, default=None, metavar='DATE', help="Échéance à partir de cette date, incluse")
     g.add_argument('--dry-run', action='store_true', help="Montre les tâches visées sans rien modifier")
     g.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation pour un lot")
-    g.add_argument('--format', choices=FORMATS, default=None, help="Format de l'aperçu de --dry-run (json : compatible jq)")
+    g.add_argument('--format', choices=FORMATS, default=None, help="Format de l'aperçu de --dry-run ; json sans --dry-run : un objet JSON (tâches touchées) sur stdout à la place des messages")
     _args_colonnes(g)
 
 
@@ -396,6 +396,8 @@ def _args_add(p):
     p.add_argument('--repeat', type=str, default=None,
                             help="Tâche récurrente : daily, weekly, monthly, yearly ou 3d/2w/1m/1y (échéance = aujourd'hui si --due absent)")
 
+    p.add_argument('--format', choices=FORMATS, default=None,
+                   help="json : écrit sur stdout un objet JSON (la tâche créée) à la place du message ; les autres valeurs sont ignorées")
     p.add_argument('--literal', action='store_true',
                             help="Garde le titre tel quel : désactive la saisie rapide (dates, !priorité, #tags, ~récurrence)")
 
@@ -1131,6 +1133,8 @@ def main():
     journal.definir_commande(_commande_visee(mots))
     args = parser.parse_args()
     args.commande = getattr(args, 'canon', None)
+    if ecriture_json.demande(args):                       # --format json explicite sur une écriture : stdout réservé au JSON
+        ecriture_json.activer()
     if args.commande == 'config' and args.action == 'list':
         args.action = 'show'
     if args.commande == 'config':
@@ -1301,6 +1305,7 @@ def main():
         succes = supprimer_tache(ids, args.note) if ids else True
     elif args.commande == 'move':
         ids = _ids_ou_lot(args, None, "déplacer", "déplacées")
+        ecriture_json.ajouter_extras(to=args.vers)
         succes = deplacer_taches(ids, args.vers) if ids else True
     elif args.commande == 'postpone':
         ids = _ids_ou_lot(args, 'todo', "reporter", "reportées")
@@ -1455,12 +1460,16 @@ def executer():
         journal.terminer(0)
         sys.exit(0)
     except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
         hooks.declencher()
-        journal.terminer(e.code if isinstance(e.code, int) else (0 if e.code is None else 1))
+        ecriture_json.emettre(journal.bilan()["commande"], code)
+        journal.terminer(code)
         raise
     except Exception:
         journal.critique()
+        ecriture_json.emettre(journal.bilan()["commande"], 1)
         journal.terminer(1)
         raise
     hooks.declencher()
+    ecriture_json.emettre(journal.bilan()["commande"], 0)
     journal.terminer(0)

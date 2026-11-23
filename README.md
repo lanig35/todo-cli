@@ -815,7 +815,7 @@ sans tâche (« rien de prévu »). Au sein d'un jour, la priorité haute passe 
 ### Formats de sortie
 
 `--format` choisit la forme de la sortie de `list`, `show`, `next`, `agenda`, `archive list`, `note list`,
-`report stats`, `config show` et `reminder` :
+`report stats`, `config show` et `reminder` (les commandes d'écriture ont leur propre sortie JSON, voir plus bas) :
 
 | Format | Pour | Contenu |
 |---|---|---|
@@ -844,6 +844,35 @@ séparés par des virgules, affichés dans l'ordre indiqué. Colonnes disponible
 dates s'affichent `AAAA-MM-JJ`, vides si absentes). L'`id` est obligatoire : il est ajouté en tête s'il
 manque. Sans `--format`, `--columns` donne un tableau dans un terminal et du `plain` dans un pipe ;
 avec `--format text` ou `json`, il est refusé (le JSON contient déjà tous les champs).
+
+**Sortie JSON des commandes d'écriture** : `add`, `task edit`, `done`, `task undone`, `task start`, `task unstart`,
+`task postpone`, `task move` et `task remove` acceptent `--format json`. La commande s'exécute normalement, mais ses
+messages (« ✅ Tâche ajoutée… », avertissements, erreurs) partent sur **stderr** ; **stdout** ne reçoit qu'un objet JSON,
+pratique pour un script ou une API qui pilote `todo` :
+
+```bash
+$ todo add "Écrire le rapport !high #pro" --format json 2>/dev/null
+{"ok": true, "action": "add", "project": "default", "count": 1, "failed": 0,
+ "tasks": [{"id": "0d6a0a67-16c5-…", "titre": "Écrire le rapport", "priorite": "high", "statut": "A FAIRE", "…": "…"}],
+ "errors": []}
+$ todo done 0d6a0a67 --format json | jq -r '.tasks[0].statut'
+TERMINE
+$ todo done zzzz --format json 2>/dev/null; echo $?
+{"ok": false, "action": "done", "count": 0, "failed": 1, "tasks": [], "errors": ["unknown_id"], …}
+1
+```
+
+- `tasks` : les tâches touchées, **relues après la commande**, comme `show --format json` (identifiant complet,
+  `bloquee_par`, `suivante` = occurrence créée quand on termine une tâche récurrente). Pour `remove` et `move`, qui les font
+  disparaître du projet, seulement `{"id", "titre"}` ; `move` ajoute `"to"` (projet cible).
+- `ok` vaut `true` quand le code de sortie est 0 ; `errors` liste les raisons techniques des refus (`unknown_id`,
+  `empty_title`, `invalid_target_project`…, celles du journal). Un lot partiel donne `ok: false`, `count` = tâches modifiées et
+  `failed` = identifiants en échec. Une commande qui ne touche rien (tâche déjà terminée) donne `ok: true`, `count: 0`.
+- Le code de sortie est celui de la commande ; une erreur d'usage détectée par `argparse` (code 2) n'écrit pas de JSON.
+- Seule l'option **explicite** `--format json` active cette sortie : ni `[general] format` ni `TODO_FORMAT` ne la déclenchent
+  (un script qui règle `TODO_FORMAT=json` pour ses `list` garde les messages des commandes d'écriture). Les autres valeurs
+  (`text`, `plain`, `table`) ne changent rien. Avec `--dry-run`, `--format` règle toujours l'aperçu.
+- Les hooks et le webhook se déclenchent comme d'habitude ; la sortie d'un hook va sur stderr, donc jamais dans le JSON.
 
 **Colonnes par défaut** : le réglage `[general] columns` (variable `TODO_COLUMNS`) fixe les colonnes quand
 `--columns` n'est pas donné, par exemple `todo config set general.columns id,title,due,created`. Il suit la
@@ -1426,6 +1455,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `taches.py` | ajout, fin, réouverture, modification, suppression, report |
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
+| `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
 | `hooks.py` | hooks : commandes et webhook HTTP lancés après une modification |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
