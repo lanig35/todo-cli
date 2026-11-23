@@ -1472,8 +1472,8 @@ def executer():
         sys.exit(0)
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
-        hooks.declencher()
         ecriture_json.emettre(journal.bilan()["commande"], code)
+        hooks.declencher()
         journal.terminer(code)
         raise
     except Exception:
@@ -1481,6 +1481,6 @@ def executer():
         ecriture_json.emettre(journal.bilan()["commande"], 1)
         journal.terminer(1)
         raise
-    hooks.declencher()
     ecriture_json.emettre(journal.bilan()["commande"], 0)
+    hooks.declencher()
     journal.terminer(0)

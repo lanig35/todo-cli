@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.9.0] - 2026-11-23
+
+### Ajouté
+
+- **Hooks « avant »** : `[hooks] before_add` et `before_done` (variables `TODO_HOOKS_BEFORE_ADD`, `TODO_HOOKS_BEFORE_DONE`) sont
+  lancés avant que la commande ne modifie quoi que ce soit ; un code de sortie non nul **refuse l'action** (code 1, message du
+  hook sur stderr, aucune écriture, aucun hook « après » ni webhook). L'entrée standard reçoit la tâche en JSON (à créer pour
+  `add`, telle qu'elle est avant pour `done`), l'environnement les variables habituelles plus `TODO_PHASE=before`. `done` sur un lot :
+  un appel par tâche, refus partiel. Un hook introuvable, mal écrit ou trop lent refuse par précaution ;
+  `TODO_HOOKS_ENABLED=0` permet de passer outre. Les tâches créées autrement (occurrence suivante, import, `admin seed`) et
+  `--dry-run` ne déclenchent rien.
+
+### Corrigé
+
+- Un hook « après » (`on_*`) qui lançait `todo` attendait pendant tout le délai `timeout` (10 s) puis échouait : la commande
+  d'origine gardait le verrou de la base jusqu'à la fin des hooks. Le verrou est maintenant relâché avant le lancement des hooks.
+  (Un hook « avant » tient forcément le verrou : il ne doit pas appeler `todo`, voir le README.)
+
 ## [3.8.0] - 2026-11-23
 
 ### Ajouté
@@ -502,6 +520,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.9.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0

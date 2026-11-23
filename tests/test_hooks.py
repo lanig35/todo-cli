@@ -1,6 +1,7 @@
 """Hooks : commande lancée après une modification (réglages [hooks])."""
 import json
 import os
+import sys
 import stat
 
 import pytest
@@ -452,3 +453,18 @@ def test_exemple_redis_mot_de_passe_et_flux(hook, redis):
 def test_exemple_redis_indisponible_ne_change_rien(hook):
     res = hook("add", "A", env={"TODO_HOOKS_ON_CHANGE": f"{sys.executable} {REDIS_HOOK}", "REDIS_PORT": "1"})
     assert res.code == 0 and "Hook on_change" in res.err and hook.une("A")
+
+
+# ------------------------------------------------------------------ un hook « après » peut appeler todo (verrou libéré)
+def test_hook_apres_peut_appeler_todo(hook, tmp_path):
+    """Régression : le verrou de la base était tenu pendant les hooks, un `todo` lancé par le hook attendait 10 s puis échouait."""
+    from outils import SCRIPT
+    sortie = tmp_path / "liste.log"
+    appel = script_appelant = tmp_path / "appelle_todo.sh"
+    appel.write_text(f'#!/bin/sh\n"{sys.executable}" -B "{SCRIPT}" list --format plain > {sortie}\n"{sys.executable}" -B "{SCRIPT}" add "Creee par le hook" >> {sortie}\n')
+    appel.chmod(appel.stat().st_mode | stat.S_IEXEC)
+    debut = time.time()
+    r = hook("add", "A", env=avec(hook, on_add=str(appel), timeout="20"))
+    assert r.code == 0 and time.time() - debut < 8 and "interrompue" not in r.err
+    assert "A" in sortie.read_text().splitlines()[0]
+    assert sorted(t["titre"] for t in hook.taches().values()) == ["A", "Creee par le hook"]     # TODO_IN_HOOK : pas de hook en cascade

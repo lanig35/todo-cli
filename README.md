@@ -496,6 +496,57 @@ stderr ; pour garder une trace, écrivez dans un fichier. Pour voir ce que reço
 TODO_HOOKS_ON_ADD="sh -c 'env | grep TODO_'" todo add Essai
 ```
 
+#### Hooks « avant » : contrôler une action
+
+Les hooks `on_*` réagissent **après** coup. `before_add` et `before_done` sont lancés **avant** que la commande ne modifie
+quoi que ce soit, et peuvent **la refuser** :
+
+```ini
+[hooks]
+before_add  = python3 /home/vous/bin/exige_tag.py      # lancé avant `add`
+before_done = /home/vous/bin/verifie_terminer.sh       # lancé avant `done`, pour chaque tâche
+```
+
+- **Décision** : code de sortie 0 = l'action a lieu ; **non nul = elle est refusée**, avec le message du hook (ce qu'il écrit,
+  sur la sortie standard ou d'erreur, s'affiche sur stderr) et le code de sortie 1 pour `todo`. Rien n'est écrit : pas de tâche
+  créée, pas de sauvegarde, aucun hook `on_*` ni webhook (rien n'a changé).
+- **Données** : mêmes variables que les autres hooks (`TODO_EVENT`, `TODO_ID`, `TODO_TITLE`, `TODO_PROJECT`, `TODO_COUNT`,
+  `TODO_IDS`), plus `TODO_PHASE=before`. L'entrée standard reçoit la tâche en JSON : pour `add`, **la tâche à créer** (après
+  analyse de la saisie rapide, avec l'`id` qu'elle recevra) ; pour `done`, la tâche **telle qu'elle est avant** d'être terminée.
+- **Lots** : `done a b c` lance le hook une fois par tâche ; les tâches refusées restent à faire, les autres sont terminées, et
+  la commande se termine par le code 1 (comme pour un identifiant introuvable). Avec `--format json`, `errors` contient
+  `"hook_refused"`.
+- **Par précaution, ce qui ne peut pas décider refuse** : commande introuvable, mal écrite ou dépassant `timeout` (10 s par défaut ;
+  le hook tient le verrou de la base pendant qu'il tourne, restez rapide). Message explicite à chaque fois (`hook_refused`,
+  `hook_unavailable`, `hook_timeout`, `hook_invalid` au journal). **Pour passer outre** en cas de panne : `TODO_HOOKS_ENABLED=0 todo add …`.
+- **Où ça s'applique** : à `add` et `done` tapés par vous. Pas aux tâches créées autrement (occurrence suivante d'une tâche récurrente,
+  `import`, `admin seed`) ni à `--dry-run`. Un hook qui appelle lui-même `todo` ne déclenche pas d'autre hook (`TODO_IN_HOOK`).
+- Un hook « avant » ne peut que **refuser** ; il ne modifie pas la tâche.
+
+Exemple : refuser les tâches sans tag, `~/bin/exige_tag.py` :
+
+```python
+#!/usr/bin/env python3
+import json, sys
+
+tache = json.load(sys.stdin)              # la tâche à créer
+if not tache["tags"]:
+    print("Ajoutez au moins un tag (#tag).")
+    sys.exit(1)                           # refus : rien n'est créé
+```
+
+```bash
+$ todo add "Écrire le rapport"
+Ajoutez au moins un tag (#tag).
+ ❌ Refusé par le hook before_add : « python3 » a retourné le code 1.
+$ todo add "Écrire le rapport #pro"       # accepté
+```
+
+**Un hook « avant » ne doit pas appeler `todo`** : il s'exécute pendant que la commande tient le verrou de la base, un `todo`
+lancé par le hook attendrait donc ce verrou (jusqu'au délai `timeout`, puis l'action serait refusée). Il décide d'après la tâche
+reçue sur l'entrée standard et les variables `TODO_*`. Les hooks « après » (`on_*`) n'ont pas cette limite : la base est libérée
+avant qu'ils ne partent, ils peuvent lancer `todo`.
+
 #### Webhook HTTP intégré
 
 Pour prévenir un service web, pas besoin d'écrire de hook : un **POST JSON** part vers l'adresse de votre choix
@@ -1248,6 +1299,8 @@ enabled = true          # false : aucun hook n'est lancé
 timeout = 10            # secondes accordées à un hook
 on_add =                # commande lancée pour chaque tâche ajoutée (idem on_done, on_undone, on_start, on_unstart,
                         # on_edit, on_postpone, on_remove, on_move) ; vide = rien
+before_add =            # commande lancée AVANT add ; un code de sortie non nul refuse l'ajout
+before_done =           # commande lancée AVANT done, pour chaque tâche ; un code non nul refuse
 on_change =             # commande lancée après toute commande qui modifie quelque chose
 webhook_url =           # http://hôte:port/chemin : reçoit un POST JSON après chaque modification ; vide = désactivé
 webhook_events =        # add, done, remove… (séparés par des virgules) ; vide = tous
@@ -1293,6 +1346,7 @@ soon = 0
 | `hooks` | `webhook_retry` | `true` | `TODO_HOOKS_WEBHOOK_RETRY` | — |
 | `hooks` | `webhook_queue_max` | `500` | `TODO_HOOKS_WEBHOOK_QUEUE_MAX` | — |
 | `hooks` | `webhook_retention` | `7` (jours) | `TODO_HOOKS_WEBHOOK_RETENTION` | — |
+| `hooks` | `before_add`, `before_done` | *(vide)* | `TODO_HOOKS_BEFORE_ADD`, `TODO_HOOKS_BEFORE_DONE` | — |
 | `hooks` | `on_add`, `on_done`, `on_undone`, `on_start`, `on_unstart`, `on_edit`, `on_postpone`, `on_remove`, `on_move`, `on_change` | *(vide)* | `TODO_HOOKS_ON_DONE`… | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
