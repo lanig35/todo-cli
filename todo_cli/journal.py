@@ -197,6 +197,11 @@ def bilan():
     return {"commande": _etat["commande"], "ids": list(_etat["ids"]), "ids_complets": list(_etat["ids_complets"]), "raisons": list(_etat["raisons"]), "echecs": _etat["echecs"], "champs": dict(_etat["champs"]), "titres": list(_etat["titres"]), "modifie": _etat["modifie"]}
 
 
+def informer(evenement, **champs):
+    """Évènement d'information (INFO) hors bilan de commande."""
+    _emettre("info", evenement, champs)
+
+
 def avertir(evenement, **champs):
     """Avertissement hors refus d'utilisation (WARNING) : un hook qui échoue, par exemple."""
     _emettre("warning", evenement, champs)

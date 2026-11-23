@@ -26,7 +26,7 @@ from .seed import peupler_fausses_taches
 from .echange import exporter, importer
 from .formats import FORMATS, colonnes_tache, resoudre as resoudre_format
 from .notes import commande_note
-from . import ecriture_json, hooks, pieces_jointes, vues
+from . import ecriture_json, hooks, pieces_jointes, vues, webhook
 from .taches import ajouter_tache, annuler_demarrage, demarrer_taches, marquer_terminee, modifier_tache, reporter_taches, rouvrir_tache, supprimer_tache
 
 
@@ -896,6 +896,11 @@ _GROUPES = [
         ('rename', 'view_rename', _args_vue_renommer, 'Renommer une vue', {}),
         ('remove', 'view_remove', _args_vue_nom, 'Supprimer une vue', {}),
     ]),
+    ('hooks', "Webhook : file d'attente des événements à renvoyer (par projet)", [
+        ('queue', 'hooks_queue', _args_format, "Afficher les événements en attente", {}),
+        ('flush', 'hooks_flush', _args_format, "Renvoyer toute la file maintenant", {}),
+        ('clear', 'hooks_clear', _args_format, "Vider la file sans rien envoyer", {}),
+    ]),
     ('admin', "Maintenance de la base", [
         ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
         ('restore', 'restore', _args_restore, "Lister les sauvegardes ou restaurer l'une d'elles", {}),
@@ -1022,7 +1027,7 @@ def _completer_ligne():
 
 # Commandes qui ne déclenchent pas l'archivage automatique (elles gèrent déjà l'archive ou l'historique)
 _SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete', 'attachment_gc',
-                        'view_save', 'view_rename', 'view_remove')
+                        'view_save', 'view_rename', 'view_remove', 'hooks_queue', 'hooks_flush', 'hooks_clear')
 
 
 def _mode_verrou(args):
@@ -1033,7 +1038,7 @@ def _mode_verrou(args):
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
-             'report_stale', 'report_done', 'report_active', 'report_cycle', 'view_list', 'view_show', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
+             'report_stale', 'report_done', 'report_active', 'report_cycle', 'view_list', 'view_show', 'hooks_queue', 'hooks_flush', 'hooks_clear', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -1425,6 +1430,12 @@ def main():
         succes = projets.renommer(args.ancien, args.nouveau, args.format)
     elif args.commande == 'project_delete':
         succes = projets.supprimer(args.nom, args.courant, args.yes, args.force, args.format)
+    elif args.commande == 'hooks_queue':
+        succes = webhook.commande_file(args.format)
+    elif args.commande == 'hooks_flush':
+        succes = webhook.commande_vider(args.format)
+    elif args.commande == 'hooks_clear':
+        succes = webhook.commande_purger(args.format)
     elif args.commande == 'view_save':
         succes = vues.commande_enregistrer(args.nom, args.mots, args.replace, lambda mots: _canon_de(parser, mots), args.format)
     elif args.commande == 'view_list':

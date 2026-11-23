@@ -85,6 +85,7 @@ plus courantes ont un **raccourci** de premier niveau.
 | `reminder` | `check`, `enable`, `disable`, `status` |
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
 | `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
+| `hooks` | `queue`, `flush`, `clear` (file d'attente du webhook) |
 | `view` | `save`, `run`, `list`, `show`, `rename`, `remove` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
@@ -505,6 +506,8 @@ Pour prévenir un service web, pas besoin d'écrire de hook : un **POST JSON** p
 webhook_url = http://localhost:8080/todo        # http:// ou https:// ; vide = désactivé
 webhook_events = add, done, remove              # facultatif : seulement ces événements (vide ou `change` = tous)
 webhook_token = mon-jeton                       # facultatif : envoyé dans « Authorization: Bearer mon-jeton »
+webhook_secret = mon-secret                     # facultatif : signature HMAC-SHA256 du corps (en-tête X-Todo-Signature)
+webhook_retry = true                            # garder les envois ratés dans une file et les renvoyer (défaut : oui)
 ```
 
 Variables : `TODO_HOOKS_WEBHOOK_URL`, `TODO_HOOKS_WEBHOOK_EVENTS`, `TODO_HOOKS_WEBHOOK_TOKEN`. Les événements sont ceux des hooks
@@ -521,9 +524,32 @@ Corps de la requête (une requête par commande, pas par tâche), en-têtes `Con
 ```
 
 `tasks` contient les tâches comme `show --format json` (réduites à `{"id", "titre"}` pour une tâche supprimée ou déplacée) ;
-au-delà de 20 tâches, il est omis et seuls `count` et `ids` sont envoyés. Délai : `[hooks] timeout`. Comme pour les hooks,
-un refus de connexion, une réponse HTTP 4xx/5xx ou un délai dépassé donnent un simple avertissement (stderr et journal) et ne
-changent jamais le résultat de la commande. Le webhook s'ajoute aux hooks `on_*` éventuels.
+au-delà de 20 tâches, il est omis et seuls `count` et `ids` sont envoyés. Le corps contient aussi `delivery`, l'identifiant
+unique de l'événement. Délai : `[hooks] timeout`. Comme pour les hooks, un échec donne un simple avertissement (stderr et journal)
+et ne change jamais le résultat de la commande. Le webhook s'ajoute aux hooks `on_*` éventuels.
+
+**Envois ratés : file d'attente.** Un événement dont l'envoi échoue pour une raison passagère (serveur arrêté, réseau coupé,
+délai dépassé, HTTP 5xx, 408, 425, 429, ou 401/403/404 qu'un jeton ou une URL corrigés résolvent) n'est pas perdu : il est mis dans
+la file du projet (`webhook_queue.json`, à côté de la base, hors sauvegardes) et **renvoyé dans l'ordre** à la prochaine commande
+qui modifie quelque chose, ou tout de suite par `todo hooks flush`. Les autres refus (400, 413, 422…) sont définitifs :
+l'événement est abandonné avec un avertissement.
+
+```bash
+todo hooks queue            # événements en attente : type, date, nombre d'essais, dernière erreur (--format text|table|plain|json)
+todo hooks flush            # renvoie toute la file maintenant ; code 1 s'il en reste
+todo hooks clear            # vide la file sans rien envoyer
+```
+
+- **Attente croissante** : 30 s, 1 min, 2 min… 1 h entre deux tentatives automatiques, pour qu'une panne ne ralentisse pas chaque
+  commande du délai `timeout`. Une commande ordinaire renvoie au plus 50 événements ; `hooks flush` renvoie tout.
+- **Bornes** : `webhook_queue_max` événements au plus (500 ; les plus anciens sautent) et `webhook_retention` jours (7), avec un
+  avertissement quand des événements sont abandonnés. `webhook_retry = false` revient à un seul essai sans file.
+- **Livraison « au moins une fois »** : un événement peut arriver deux fois (la réponse s'est perdue alors que le serveur l'avait
+  reçu). Il garde le même `delivery` (corps et en-tête `X-Todo-Delivery`) à chaque essai ; le récepteur l'utilise pour ignorer un
+  doublon. `X-Todo-Attempt` donne le numéro de l'essai.
+- **Signature** : avec `webhook_secret`, `X-Todo-Signature: sha256=<hex>` est le HMAC-SHA256 des octets exacts du corps ; le récepteur
+  le recalcule avec le même secret (et compare en temps constant) pour s'assurer que la requête vient bien de todo.
+- Les files sont **par projet** (`-p PROJET`) ; l'ordre est conservé à l'intérieur d'un projet.
 
 Pour tester sans serveur : `python3 -m http.server` ne reçoit pas de POST ; un récepteur de quelques lignes suffit :
 
@@ -541,8 +567,9 @@ PY
 Un récepteur complet avec Flask (`pip install flask`) est fourni dans
 [`examples/hooks/flask_webhook.py`](examples/hooks/flask_webhook.py) : il vérifie le jeton, valide le JSON, journalise chaque
 événement (`events.jsonl`), tient à jour l'état des tâches (`tasks.json`, lisible par `GET /tasks`) et réagit aux tâches
-terminées. Lancement : `TODO_WEBHOOK_TOKEN=mon-jeton python3 examples/hooks/flask_webhook.py`, avec
-`webhook_url = http://127.0.0.1:8080/todo` et `webhook_token = mon-jeton`.
+terminées ; il vérifie aussi la signature HMAC et ignore les doublons (`delivery`). Lancement :
+`TODO_WEBHOOK_TOKEN=mon-jeton TODO_WEBHOOK_SECRET=mon-secret python3 examples/hooks/flask_webhook.py`, avec
+`webhook_url = http://127.0.0.1:8080/todo`, `webhook_token = mon-jeton` et `webhook_secret = mon-secret`.
 
 #### Exemple : envoyer les modifications dans Redis
 
@@ -1225,6 +1252,10 @@ on_change =             # commande lancée après toute commande qui modifie que
 webhook_url =           # http://hôte:port/chemin : reçoit un POST JSON après chaque modification ; vide = désactivé
 webhook_events =        # add, done, remove… (séparés par des virgules) ; vide = tous
 webhook_token =         # envoyé en « Authorization: Bearer … » ; vide = aucun
+webhook_secret =        # signature HMAC-SHA256 du corps (X-Todo-Signature) ; vide = non signé
+webhook_retry = true    # file d'attente et renvoi des envois ratés
+webhook_queue_max = 500 # événements gardés au plus dans la file
+webhook_retention = 7   # jours avant d'abandonner un événement de la file
 
 [list]
 limit = 30              # 0 = pas de limite
@@ -1258,6 +1289,10 @@ soon = 0
 | `hooks` | `webhook_url` | *(vide : désactivé)* | `TODO_HOOKS_WEBHOOK_URL` | — |
 | `hooks` | `webhook_events` | *(vide : tous)* | `TODO_HOOKS_WEBHOOK_EVENTS` | — |
 | `hooks` | `webhook_token` | *(vide : aucun en-tête)* | `TODO_HOOKS_WEBHOOK_TOKEN` | — |
+| `hooks` | `webhook_secret` | *(vide : non signé)* | `TODO_HOOKS_WEBHOOK_SECRET` | — |
+| `hooks` | `webhook_retry` | `true` | `TODO_HOOKS_WEBHOOK_RETRY` | — |
+| `hooks` | `webhook_queue_max` | `500` | `TODO_HOOKS_WEBHOOK_QUEUE_MAX` | — |
+| `hooks` | `webhook_retention` | `7` (jours) | `TODO_HOOKS_WEBHOOK_RETENTION` | — |
 | `hooks` | `on_add`, `on_done`, `on_undone`, `on_start`, `on_unstart`, `on_edit`, `on_postpone`, `on_remove`, `on_move`, `on_change` | *(vide)* | `TODO_HOOKS_ON_DONE`… | — |
 | `list` | `limit` | `0` (illimité) | `TODO_LIST_LIMIT` | `--limit` |
 | `list` | `overdue_first` | `true` | `TODO_LIST_OVERDUE_FIRST` | `--overdue-first`, `--no-overdue-first` |
@@ -1456,7 +1491,8 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `notes.py` | notes des tâches (commande `note`, option `-m`) |
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
-| `hooks.py` | hooks : commandes et webhook HTTP lancés après une modification |
+| `hooks.py` | hooks : commandes lancées après une modification |
+| `webhook.py` | webhook HTTP : envoi, signature HMAC, file d'attente et renvoi |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |

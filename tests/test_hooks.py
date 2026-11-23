@@ -207,6 +207,8 @@ import time
 class Serveur:
     def __init__(self, statut=204, pause=0):
         recu = self.recu = []
+        self.statut = statut
+        serveur = self
 
         class Gestionnaire(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
@@ -214,7 +216,7 @@ class Serveur:
                 recu.append({"en_tetes": dict(self.headers), "corps": json.loads(corps), "chemin": self.path})
                 time.sleep(pause)
                 try:
-                    self.send_response(statut)
+                    self.send_response(serveur.statut)
                     self.end_headers()
                 except OSError:
                     pass
