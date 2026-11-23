@@ -3,6 +3,17 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.7.0] - 2026-11-23
+
+### Ajouté
+
+- **Sortie JSON des commandes d'écriture** : `add`, `task edit`, `done`, `task undone`, `task start`, `task unstart`,
+  `task postpone`, `task move` et `task remove` acceptent `--format json`. Les messages habituels partent sur stderr et stdout
+  ne reçoit qu'un objet `{"ok", "action", "project", "count", "failed", "tasks", "errors"}` : `tasks` contient les tâches
+  touchées, relues après la commande (identifiant complet, comme `show --format json`), `{"id", "titre"}` pour une tâche
+  supprimée ou déplacée. Seul `--format json` explicite active cette sortie (pas `TODO_FORMAT` ni `[general] format`) ; avec
+  `--dry-run`, `--format` règle toujours l'aperçu. Première étape d'une API REST (la CLI sert de moteur).
+
 ## [3.6.0] - 2026-11-22
 
 ### Ajouté
@@ -476,6 +487,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0
 [3.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.5.0
 [3.4.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.4.0

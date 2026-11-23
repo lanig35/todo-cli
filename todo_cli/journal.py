@@ -31,7 +31,7 @@ _etat = {}
 
 def _remettre_a_zero():
     _etat.clear()
-    _etat.update(commande=None, ids=[], ids_complets=[], titres=[], champs={}, modifie=False, echecs=0,
+    _etat.update(commande=None, ids=[], ids_complets=[], titres=[], raisons=[], champs={}, modifie=False, echecs=0,
                  niveau=None, titres_actifs=False, logger=None, avertissements_emis=False, projet=None)
 
 
@@ -194,7 +194,7 @@ def noter(ids=None, titres=None, modifie=False, **champs):
 
 def bilan():
     """Ce que la commande en cours a noté : commande, identifiants (abrégés), titres, modification faite ? (pour les hooks)."""
-    return {"commande": _etat["commande"], "ids": list(_etat["ids"]), "ids_complets": list(_etat["ids_complets"]), "titres": list(_etat["titres"]), "modifie": _etat["modifie"]}
+    return {"commande": _etat["commande"], "ids": list(_etat["ids"]), "ids_complets": list(_etat["ids_complets"]), "raisons": list(_etat["raisons"]), "echecs": _etat["echecs"], "champs": dict(_etat["champs"]), "titres": list(_etat["titres"]), "modifie": _etat["modifie"]}
 
 
 def avertir(evenement, **champs):
@@ -219,6 +219,7 @@ def activer_titres():
 def echec(raison, **champs):
     """Refus ou erreur d'utilisation (WARNING), au moment où le message d'erreur est affiché."""
     _etat["echecs"] += 1
+    _etat["raisons"].append(raison)
     _emettre("warning", "refus", {"reason": raison, **champs})
 
 
