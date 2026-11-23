@@ -8,10 +8,13 @@ Côté todo :
     [hooks]
     webhook_url = http://127.0.0.1:8080/todo
     webhook_token = mon-jeton          # si le récepteur exige un jeton
+    webhook_secret = mon-secret        # signature HMAC-SHA256 du corps (en-tête X-Todo-Signature)
 
-Le récepteur vérifie le jeton, valide le JSON, journalise chaque événement dans events.jsonl et tient à jour l'état
+Le récepteur vérifie le jeton et la signature HMAC (TODO_WEBHOOK_SECRET = webhook_secret), ignore les doublons (une même livraison
+peut arriver plusieurs fois : todo renvoie les événements qui ont échoué), valide le JSON, journalise chaque événement dans events.jsonl et tient à jour l'état
 courant des tâches (tasks.json). `GET /tasks` les renvoie. Il répond vite (204) : todo n'attend que `[hooks] timeout` secondes.
 """
+import hashlib
 import hmac
 import json
 import os
@@ -22,7 +25,9 @@ from flask import Flask, abort, jsonify, request
 
 app = Flask(__name__)
 JETON = os.environ.get("TODO_WEBHOOK_TOKEN", "")
+SECRET = os.environ.get("TODO_WEBHOOK_SECRET", "")
 DOSSIER = Path(os.environ.get("TODO_WEBHOOK_DIR", "."))
+deja_vues = set()                             # en mémoire ; pour un service durable, gardez-les dans une base
 verrou = threading.Lock()                     # Flask peut traiter plusieurs requêtes à la fois
 
 
@@ -39,12 +44,20 @@ def recevoir():
         recu = request.headers.get("Authorization", "")
         if not hmac.compare_digest(recu, f"Bearer {JETON}"):
             abort(401)
+    if SECRET:                                # signature calculée par todo sur les octets exacts du corps
+        attendue = "sha256=" + hmac.new(SECRET.encode(), request.get_data(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(request.headers.get("X-Todo-Signature", ""), attendue):
+            abort(401)
     corps = request.get_json(silent=True)
     if not isinstance(corps, dict) or "event" not in corps:
         abort(400, "JSON attendu : {event, project, count, ids, tasks…}")
 
     evenement, projet = corps["event"], corps.get("project", "default")
     with verrou:
+        livraison = corps.get("delivery")      # identique à chaque nouvel essai d'un même événement
+        if livraison in deja_vues:
+            return "", 204                     # doublon : déjà traité, on répond 2xx pour que todo l'oublie
+        deja_vues.add(livraison)
         with (DOSSIER / "events.jsonl").open("a", encoding="utf-8") as f:          # journal d'événements
             f.write(json.dumps(corps, ensure_ascii=False) + "\n")
         etat = lire_etat()

@@ -3,6 +3,21 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.8.0] - 2026-11-23
+
+### Ajouté
+
+- **Webhook : file d'attente et nouvelles tentatives.** Un envoi qui échoue pour une raison passagère (réseau, délai, HTTP 5xx,
+  408, 425, 429, 401, 403, 404) n'est plus perdu : l'événement est mis dans `webhook_queue.json` (par projet, hors sauvegardes) et
+  renvoyé dans l'ordre à la prochaine modification (attente croissante de 30 s à 1 h, 50 événements au plus par commande) ou par
+  `todo hooks flush`. Les refus définitifs (400, 413, 422…) sont abandonnés avec un avertissement. Réglages `webhook_retry`
+  (défaut : vrai), `webhook_queue_max` (500) et `webhook_retention` (7 jours).
+- **Commandes `todo hooks queue|flush|clear`** : afficher la file (`--format text|table|plain|json`), la renvoyer tout de suite
+  (code 1 s'il en reste), la vider.
+- **Signature HMAC** : `[hooks] webhook_secret` ajoute `X-Todo-Signature: sha256=<HMAC-SHA256 du corps>`.
+- **Identifiant de livraison** : `delivery` (corps) et `X-Todo-Delivery` / `X-Todo-Attempt` (en-têtes), identiques à chaque essai,
+  pour que le récepteur ignore les doublons. L'exemple Flask vérifie la signature et les doublons.
+
 ## [3.7.0] - 2026-11-23
 
 ### Ajouté
@@ -487,6 +502,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 - Les tâches portent désormais les champs `notes` et `ancre` ; les anciennes bases restent lisibles
   sans migration.
 
+[3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0
 [3.5.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.5.0
