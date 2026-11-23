@@ -36,7 +36,7 @@ def peupler_fausses_taches(nombre):
         tags_choisis = random.sample(liste_tags_test, k=random.randint(0, 2))
         # Pas de sauvegarde à chaque tâche : une seule à la fin
         ajouter_tache(titre, description, priorite, date_echeance, ",".join(tags_choisis),
-                      silencieux=True, sauvegarder=False)
+                      silencieux=True, sauvegarder=False, hook_avant=False)
 
     journal.noter(count=nombre, modifie=True)
     sauvegarder_base()

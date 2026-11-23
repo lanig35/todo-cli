@@ -26,7 +26,7 @@ import shlex
 import subprocess
 import sys
 
-from . import config, journal, reglages, webhook
+from . import config, couleurs, journal, reglages, verrou, webhook
 from .stockage import _normaliser_tache
 
 EVENEMENTS = ("add", "done", "undone", "start", "unstart", "edit", "postpone", "remove", "move")
@@ -65,10 +65,15 @@ def _tache(identifiant, titre):
     return identifiant, {"id": identifiant, "titre": titre or ""}
 
 
-def _lancer(reglage, commande, evenement, id_complet, titre, nombre, ids, projet, entree):
+def _environnement(reglage, evenement, id_complet, titre, nombre, ids, projet, phase="after"):
     env = dict(os.environ)
     env.update(TODO_EVENT=evenement, TODO_ID=id_complet or "", TODO_TITLE=titre or "", TODO_PROJECT=projet,
-               TODO_COUNT=str(nombre), TODO_IDS=",".join(ids), TODO_IN_HOOK="1", TODO_HOOK=reglage)
+               TODO_COUNT=str(nombre), TODO_IDS=",".join(ids), TODO_IN_HOOK="1", TODO_HOOK=reglage, TODO_PHASE=phase)
+    return env
+
+
+def _lancer(reglage, commande, evenement, id_complet, titre, nombre, ids, projet, entree):
+    env = _environnement(reglage, evenement, id_complet, titre, nombre, ids, projet)
     try:
         sys.stdout.flush()
         resultat = subprocess.run(commande, input=json.dumps(entree, ensure_ascii=False).encode(), env=env,
@@ -79,6 +84,61 @@ def _lancer(reglage, commande, evenement, id_complet, titre, nombre, ids, projet
         _avertir(reglage, f"« {commande[0]} » interrompue après {reglages.obtenir('hooks', 'timeout')} s")
     except OSError as e:
         _avertir(reglage, f"impossible de lancer « {commande[0]} » : {e.strerror or e}")
+
+
+AVANT = ("add", "done")                  # événements qui ont un hook « avant »
+
+
+def _refuser(reglage, raison, message, **champs):
+    rouge, raz = couleurs._couleurs_erreur()
+    print(f" {rouge}❌ Refusé par le hook {reglage} :{raz} {message}", file=sys.stderr)
+    journal.echec(raison, hook=reglage, **champs)
+    return False
+
+
+def avant(evenement, identifiant, tache, nombre=1, ids=()):
+    """Hook « before_<événement> » : lancé AVANT que la commande modifie quoi que ce soit.
+
+    Retourne True si l'action peut avoir lieu, False si elle est refusée (le message est déjà affiché et l'échec noté au journal).
+    Un code de sortie non nul refuse l'action ; un hook introuvable, mal écrit ou trop lent la refuse aussi (par précaution :
+    `TODO_HOOKS_ENABLED=0` permet de passer outre en cas de besoin). Rien n'est lancé sans hook défini, ni pour un hook qui
+    appelle `todo` lui-même (TODO_IN_HOOK), ni quand `[hooks] enabled` est faux.
+    """
+    reglage = "before_" + evenement
+
+    def texte_de(x):
+        return x.decode("utf-8", errors="replace") if isinstance(x, (bytes, bytearray)) else str(x)
+
+    try:
+        texte = reglages.obtenir('hooks', reglage)
+        if not texte or os.environ.get("TODO_IN_HOOK") or not reglages.obtenir('hooks', 'enabled'):
+            return True
+        try:
+            commande = shlex.split(texte)
+        except ValueError as e:
+            return _refuser(reglage, "hook_invalid", f"commande invalide ({e}).")
+        if not commande:
+            return True
+        identifiant = texte_de(identifiant)
+        tache = {**tache, "id": identifiant}
+        env = _environnement(reglage, evenement, identifiant, tache.get('titre', ""), nombre,
+                             [texte_de(i) for i in ids] or [identifiant], config.projet(), phase="before")
+        delai = reglages.obtenir('hooks', 'timeout')
+        sys.stdout.flush()
+        try:
+            resultat = subprocess.run(commande, input=json.dumps(tache, ensure_ascii=False).encode(), env=env,
+                                      stdout=sys.stderr, timeout=delai)
+        except subprocess.TimeoutExpired:
+            return _refuser(reglage, "hook_timeout", f"« {commande[0]} » interrompue après {delai} s, action refusée par précaution "
+                            f"(TODO_HOOKS_ENABLED=0 pour passer outre).", timeout=delai)
+        except OSError as e:
+            return _refuser(reglage, "hook_unavailable", f"impossible de lancer « {commande[0]} » : {e.strerror or e} "
+                            f"(TODO_HOOKS_ENABLED=0 pour passer outre).")
+        if resultat.returncode != 0:
+            return _refuser(reglage, "hook_refused", f"« {commande[0]} » a retourné le code {resultat.returncode}.", code=resultat.returncode)
+        return True
+    except Exception as e:                                  # un bug ici ne doit pas laisser passer une action qu'un hook devait contrôler
+        return _refuser(reglage, "hook_error", f"erreur interne ({e}).")
 
 
 def declencher():
@@ -97,6 +157,7 @@ def declencher():
         general = _commande("on_change")
         if not specifique and not general and not webhook.url_configuree():
             return
+        verrou.liberer()          # la commande a fini avec la base : un hook qui appelle `todo` ne doit pas attendre ce verrou
         projet = config.projet()
         a_lancer = [(nom, cmd) for nom, cmd in (("on_" + evenement, specifique), ("on_change", general)) if cmd]
         alignes = len(titres) == len(ids)

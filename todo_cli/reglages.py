@@ -102,6 +102,10 @@ REGLAGES = (
       for evt, cmd in (("add", "add"), ("done", "done"), ("undone", "task undone"), ("start", "task start"),
                        ("unstart", "task unstart"), ("edit", "task edit"), ("postpone", "postpone"),
                        ("remove", "task remove"), ("move", "task move"))),
+    Reglage("hooks", "before_add", "texte", "",
+            "Commande lancée AVANT `add` : un code de sortie non nul refuse l'ajout (la tâche à créer est sur l'entrée standard)."),
+    Reglage("hooks", "before_done", "texte", "",
+            "Commande lancée AVANT `done`, pour chaque tâche : un code de sortie non nul refuse de la terminer."),
     Reglage("hooks", "on_change", "texte", "",
             "Commande lancée après toute commande qui modifie quelque chose (en plus du hook propre à la commande) ; "
             "une seule fois si la commande ne vise aucune tâche (import, undo, archive…)."),

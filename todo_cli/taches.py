@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from .config import PRIORITES, STATUT_A_FAIRE, STATUT_TERMINE
 from . import config
-from . import couleurs, dependances, journal
+from . import couleurs, dependances, hooks, journal
 from .dates import MSG_FORMATS_DATE, MSG_FORMATS_REPETITION, _decaler, _libelle_recurrence, _parse_date, _parser_recurrence, _prochaine_echeance, _resoudre_date, _sans_accents
 from . import notes as carnet
 from . import pieces_jointes
@@ -19,7 +19,8 @@ def _parser_tags(tags_str):
     """Transforme 'Pro, dev' en ['pro', 'dev'] (minuscules, sans vides)."""
     return [t.strip().lower() for t in tags_str.split(",") if t.strip()] if tags_str else []
 
-def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silencieux=False, sauvegarder=True, repeter=None, apres=None):
+def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silencieux=False, sauvegarder=True, repeter=None, apres=None,
+                  hook_avant=True):
     """Insère une tâche sérialisée en JSON dans la base clé-valeur intégrée."""
     if not titre or not titre.strip():
         journal.echec("empty_title")
@@ -75,6 +76,8 @@ def ajouter_tache(titre, description, priorite, date_echeance, tags_str, silenci
             "recurrence": recurrence,
             "apres": dependances_ids,
         }
+        if hook_avant and not hooks.avant("add", id_tache, {**donnees_tache, "id": id_tache}):
+            sys.exit(1)
         # Conversion du dictionnaire en chaîne JSON exploitable par DBM
         db[id_tache] = json.dumps(donnees_tache)
         journal.noter(ids=[id_tache], titres=[titre.strip()], modifie=True)
@@ -141,6 +144,9 @@ def marquer_terminee(ids, note=None):
                 continue
             if t['statut'] == STATUT_TERMINE:
                 print(f" {couleurs.CLR_DIM}ℹ️  La tâche '{t['titre']}' est déjà terminée.{couleurs.CLR_RESET}")
+                continue
+            if not hooks.avant("done", key, {**t, "id": key}, nombre=len(cles), ids=cles):
+                echecs += 1
                 continue
             attendues = dependances.en_attente(db, t)
             t['statut'] = STATUT_TERMINE
