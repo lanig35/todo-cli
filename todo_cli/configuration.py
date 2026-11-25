@@ -11,7 +11,13 @@ from . import reglages
 from .reglages import REGLAGES, chemin_config, modele_fichier, nom_variable, obtenir_avec_origine, origine_chemin_config
 
 
+# Réglages secrets : `config show` n'en montre pas la valeur (`config get` la donne, pour un script)
+SECRETS = {("server", "token"), ("hooks", "webhook_token"), ("hooks", "webhook_secret")}
+
+
 def _affichage(r, valeur):
+    if (r.section, r.cle) in SECRETS and valeur:
+        return "******** (masqué)"
     if r.type == "bool":
         return "true" if valeur else "false"
     if (r.section, r.cle) == ("list", "limit") and valeur == 0:
@@ -31,7 +37,7 @@ def afficher_config(fmt="text"):
     if fmt == "json":
         print(json.dumps({
             "fichier": chemin, "fichier_origine": origine_chemin_config(), "fichier_existe": existe,
-            "reglages": [{"cle": cle, "valeur": valeur, "origine": origine, "variable": nom_variable(r.section, r.cle)}
+            "reglages": [{"cle": cle, "valeur": _affichage(r, valeur) if (r.section, r.cle) in SECRETS else valeur, "origine": origine, "variable": nom_variable(r.section, r.cle)}
                          for cle, valeur, origine, r in lignes],
             "rappels_coupes_par_commande": os.path.exists(config.REMIND_OFF),
         }, indent=2, ensure_ascii=False))

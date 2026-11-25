@@ -92,6 +92,14 @@ REGLAGES = (
     Reglage("attachments", "opener", "texte", "",
             "Commande qui ouvre une pièce jointe (`todo attachment open`), par exemple `less` ou `evince` ; vide = xdg-open dans une "
             "session graphique, sinon le chemin du fichier est seulement affiché."),
+    Reglage("server", "host", "texte", "127.0.0.1",
+            "Adresse d'écoute de `todo serve` (API REST) ; 127.0.0.1 = cette machine seulement."),
+    Reglage("server", "port", "int", 8765, "Port d'écoute de `todo serve`.", minimum=1, maximum=65535),
+    Reglage("server", "token", "texte", "",
+            "Jeton obligatoire de l'API (en-tête `Authorization: Bearer …`) ; de préférence via TODO_SERVER_TOKEN "
+            "plutôt que dans le fichier de configuration."),
+    Reglage("server", "timeout", "int", 30, "Secondes accordées à une requête avant de l'interrompre (erreur 504).", minimum=1),
+    Reglage("server", "max_body", "int", 65536, "Taille maximale du corps d'une requête, en octets.", minimum=1024),
     Reglage("hooks", "enabled", "bool", True,
             "Activer les hooks (commandes lancées après une modification) ; désactive tout sans effacer les réglages."),
     Reglage("hooks", "timeout", "int", 10,

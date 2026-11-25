@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.10.0] - 2026-11-25
+
+### Ajouté
+
+- **API REST** : `todo serve` lance un serveur HTTP (Flask, dépendance **optionnelle** : `pip install flask` ou
+  `pip install 'todo-cli[server]'`) pour gérer les tâches à distance. Le serveur ne touche pas à la base : chaque requête lance
+  le CLI avec `--format json` dans un sous-processus, si bien que les verrous, les hooks (y compris « avant »), le journal,
+  l'archivage automatique, `undo` et les sauvegardes se comportent comme en ligne de commande.
+  - Routes sous `/api/v1` : `health`, `projects`, `tasks` (liste filtrée, ajout), `tasks/ID` (lecture, `PATCH`, `DELETE`),
+    `tasks/ID/done|undone|start|unstart|postpone|move`, `views`, `views/NOM`, `next`, `agenda`, `stats` ; `?project=NOM`
+    choisit le projet.
+  - **Jeton obligatoire** (`Authorization: Bearer …`, réglage `[server] token` ou `TODO_SERVER_TOKEN`) : le serveur refuse de
+    démarrer sans jeton ; seul `GET /health` est public. Écoute sur `127.0.0.1` par défaut.
+  - **`ETag` / `If-Match`** : une tâche porte une empreinte ; une écriture qui présente une empreinte périmée reçoit `412`.
+  - Les erreurs sont du JSON `{"error": {"code", "message"}}` avec un statut HTTP adapté (404, 409, 412, 422, 503…).
+  - Réglages `[server]` : `host`, `port`, `token`, `timeout`, `max_body`.
+- Groupe `server` (raccourci `todo serve`), extra `server` du paquet.
+
 ## [3.9.0] - 2026-11-23
 
 ### Ajouté
@@ -521,6 +539,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
   sans migration.
 
 [3.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.9.0
+[3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0

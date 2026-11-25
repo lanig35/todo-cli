@@ -27,6 +27,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
 - Vues enregistrées : une commande de lecture et ses filtres mémorisés sous un nom, par projet (`view save`, `view run`)
 - Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…), ou un webhook HTTP intégré (`webhook_url`)
+- API REST (Flask, optionnelle) : `todo serve` pour gérer les tâches à distance, avec jeton obligatoire et `ETag` / `If-Match`
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
 - Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
 - Date de complétion et statistiques
@@ -86,12 +87,13 @@ plus courantes ont un **raccourci** de premier niveau.
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
 | `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
 | `hooks` | `queue`, `flush`, `clear` (file d'attente du webhook) |
+| `server` | `serve` (API REST) |
 | `view` | `save`, `run`, `list`, `show`, `rename`, `remove` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
 | `data` | `export`, `import` |
 
-Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo` (= `task add`, `task list`, … `report agenda`,
+Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo`, `serve` (= `task add`, `task list`, … `report agenda`,
 `admin undo`). `todo GROUPE --help` détaille un groupe.
 
 ### Migration depuis la 1.x et la 2.x
@@ -650,6 +652,79 @@ on_change = python3 /home/vous/todo-cli/examples/hooks/redis_hook.py
 Variables lues par le script : `REDIS_HOST` (127.0.0.1), `REDIS_PORT` (6379), `REDIS_PASSWORD`, `REDIS_STREAM` (todo:events),
 `REDIS_MAXLEN` (10000). Lecture : `redis-cli XRANGE todo:events - +` ou `redis-cli HGETALL todo:tasks:default`. Avec `redis-py`
 (`pip install redis`), la même chose tient en quelques lignes : `r.xadd(...)`, `r.hset(...)`, avec `json.load(sys.stdin)` pour la tâche.
+
+### API REST
+
+`todo serve` lance un petit serveur HTTP (JSON) pour gérer ses tâches depuis une autre machine, un script ou, plus tard, une
+interface web. Flask est une dépendance **optionnelle** :
+
+```bash
+pip install flask                       # ou : pip install 'todo-cli[server]'
+export TODO_SERVER_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+todo serve                              # http://127.0.0.1:8765/api/v1/   (--host, --port ; [server] host, port)
+```
+
+Le serveur **ne touche pas à la base** : chaque requête lance `todo … --format json` dans un sous-processus. Verrous, hooks
+(y compris les hooks « avant », qui peuvent refuser : `409`), journal, archivage automatique, `undo` et sauvegardes sont ceux
+de la ligne de commande ; une tâche modifiée par l'API s'annule avec `todo undo`. Les écritures du serveur sont sérialisées.
+
+**Sécurité.** Un jeton est obligatoire (`Authorization: Bearer …`) : sans `TODO_SERVER_TOKEN` ou `[server] token`, le serveur
+refuse de démarrer. Seul `GET /api/v1/health` est public. Il écoute sur `127.0.0.1` par défaut ; pour l'exposer, placez-le
+derrière un proxy HTTPS (nginx, Caddy…) : le jeton circule sinon en clair. Aucune valeur de requête n'est interprétée par un
+shell ni ne peut passer pour une option du CLI. Pas de CORS : les navigateurs ne peuvent appeler l'API que depuis la même origine.
+
+| Méthode et chemin | Rôle |
+|---|---|
+| `GET /health` | `{"ok": true, "version": …}` (sans jeton) |
+| `GET /projects` | projets et compteurs (`project list`) |
+| `GET /tasks` | liste `{"tasks": […]}` ; filtres en paramètres : `status`, `search`, `tag`, `any_tag`, `not_tag`, `prio`, `not_prio`, `due_before`, `due_after`, `created_*`, `done_*`, `sort`, `limit`, `start` ; booléens `overdue`, `today`, `no_due`, `blocked`, `ready`, `started`, `no_tag`, `has_notes`, `all_projects`… |
+| `POST /tasks` | ajoute une tâche → `201`, `Location`, `ETag` |
+| `GET /tasks/ID` | une tâche (identifiant complet ou préfixe), avec `ETag` |
+| `PATCH /tasks/ID` | modifie ; `null` supprime `date_echeance` / `recurrence` |
+| `DELETE /tasks/ID` | supprime (corbeille, `undo` possible) |
+| `POST /tasks/ID/done` `undone` `start` `unstart` `postpone` `move` | actions ; corps facultatif : `note`, `at` (start), `to` (postpone : date, move : projet) |
+| `GET /next`, `/agenda`, `/stats` | `next`, `report agenda`, `report stats` (`n`, `tag`, `prio`, `days`, `from`, `all_projects`) |
+| `GET /views`, `/views/NOM` | vues enregistrées et leur exécution |
+
+`?project=NOM` (sur toutes les routes sauf `health`) choisit le projet, sinon c'est le projet courant. Les corps JSON reprennent
+les noms de champs de la sortie : `titre`, `description`, `priorite`, `date_echeance`, `tags` (liste), `recurrence`, `apres`
+(liste d'identifiants) ; `PATCH` accepte en plus `ajouter_tags`, `retirer_tags`, `note`. À l'ajout, le titre est pris tel
+quel ; `"saisie_rapide": true` active la saisie rapide (`Appeler Paul demain !high #pro`).
+
+```bash
+H="Authorization: Bearer $TODO_SERVER_TOKEN"; API=http://127.0.0.1:8765/api/v1
+curl -H "$H" -X POST -d '{"titre": "Appeler Paul", "priorite": "high", "date_echeance": "demain"}' \
+     -H 'Content-Type: application/json' $API/tasks
+curl -H "$H" "$API/tasks?status=todo&tag=pro&limit=10"
+curl -H "$H" -X POST $API/tasks/3f2a/done                      # préfixe d'identifiant accepté
+```
+
+```python
+import json, os, urllib.request
+def appel(methode, chemin, corps=None):
+    r = urllib.request.Request("http://127.0.0.1:8765/api/v1" + chemin, method=methode,
+        data=json.dumps(corps).encode() if corps is not None else None,
+        headers={"Authorization": "Bearer " + os.environ["TODO_SERVER_TOKEN"], "Content-Type": "application/json"})
+    with urllib.request.urlopen(r) as rep:
+        return json.load(rep)
+tache = appel("POST", "/tasks", {"titre": "Faire les courses", "tags": ["maison"]})["tasks"][0]
+appel("POST", f"/tasks/{tache['id']}/done")
+```
+
+**Modifications concurrentes (`ETag`).** `GET /tasks/ID` renvoie un `ETag` (empreinte de la tâche). Une écriture
+(`PATCH`, `DELETE`, action) qui envoie `If-Match: "<etag>"` n'est appliquée que si la tâche n'a pas changé depuis : sinon `412
+Precondition Failed`, avec l'`ETag` courant. Sans `If-Match`, l'écriture est inconditionnelle. La vérification est faite
+sous le verrou du serveur : elle protège des autres clients de l'API, pas d'un `todo` lancé en même temps dans un terminal.
+
+**Erreurs.** Corps `{"error": {"code": "unknown_id", "message": "…"}}` ; `code` reprend les raisons du journal. `400` requête
+mal formée ou paramètre inconnu, `401` jeton, `404` tâche, projet ou vue inconnus, `409` conflit (hook « avant » qui refuse,
+dépendance, ambiguïté d'identifiant), `412` `If-Match`, `413` corps trop gros, `422` valeur invalide (date, priorité…),
+`503` base verrouillée, `504` délai dépassé. Une action qui ne change rien (tâche déjà terminée) répond `200` avec `count: 0`.
+
+Réglages `[server]` : `host` (127.0.0.1), `port` (8765), `token`, `timeout` (30 s par requête), `max_body` (64 Ko).
+Le serveur intégré (Werkzeug, multi-threads) suffit pour un usage personnel. Avec un autre serveur WSGI, gardez **un seul
+processus** (les écritures sont sérialisées par un verrou de processus), par exemple :
+`gunicorn -w 1 --threads 4 -b 127.0.0.1:8765 'todo_cli.serveur:creer_application()'`.
 
 ### Suivi du temps
 
@@ -1546,6 +1621,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
 | `hooks.py` | hooks : commandes lancées après une modification |
+| `serveur.py` | API REST Flask (`todo serve`) : sous-processus du CLI, jeton, `ETag`, erreurs |
 | `webhook.py` | webhook HTTP : envoi, signature HMAC, file d'attente et renvoi |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |
 | `archive.py` | archivage, consultation de l'archive, récupération |
