@@ -28,7 +28,9 @@ Changelog = "https://github.com/lanig35/todo-cli/blob/main/CHANGELOG.md"
 seed = ["faker"]
 # autocomplétion du shell : register-python-argcomplete todo
 completion = ["argcomplete"]
-dev = ["pytest", "faker", "argcomplete"]
+# serveur : API REST (todo serve)
+server = ["flask"]
+dev = ["pytest", "faker", "argcomplete", "flask"]
 
 [project.scripts]
 todo = "todo_cli.cli:executer"

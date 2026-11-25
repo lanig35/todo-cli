@@ -785,6 +785,11 @@ def _args_archive_purger(p):
                    help='Ne retient que les tâches terminées depuis au moins cette durée (30d, 2w, 6m, 1y)')
     p.add_argument('-y', '--yes', action='store_true', help="Ne pas demander de confirmation")
 
+def _args_serve(p):
+    p.add_argument('--host', default=None, help="Adresse d'écoute (défaut : [server] host, 127.0.0.1)")
+    p.add_argument('--port', type=int, default=None, help="Port d'écoute (défaut : [server] port, 8765)")
+
+
 def _args_format(p):
     p.add_argument('--format', choices=FORMATS, default=None, help="Format de sortie (json : compatible jq)")
 
@@ -901,6 +906,9 @@ _GROUPES = [
         ('flush', 'hooks_flush', _args_format, "Renvoyer toute la file maintenant", {}),
         ('clear', 'hooks_clear', _args_format, "Vider la file sans rien envoyer", {}),
     ]),
+    ('server', "API REST (Flask) : gestion des tâches à distance", [
+        ('serve', 'serve', _args_serve, "Lancer le serveur HTTP (jeton obligatoire : TODO_SERVER_TOKEN ou [server] token)", {}),
+    ]),
     ('admin', "Maintenance de la base", [
         ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
         ('restore', 'restore', _args_restore, "Lister les sauvegardes ou restaurer l'une d'elles", {}),
@@ -914,7 +922,7 @@ _GROUPES = [
 ]
 # Raccourcis de premier niveau (même syntaxe que dans le groupe) : nom -> (groupe, verbe)
 _RACCOURCIS = {'add': 'task', 'list': 'task', 'show': 'task', 'done': 'task', 'next': 'task',
-               'agenda': 'report', 'undo': 'admin'}
+               'agenda': 'report', 'undo': 'admin', 'serve': 'server'}
 _VERBES = {g: {v[0] for v in verbes} for g, _, verbes in _GROUPES}
 _OPTIONS_A_VALEUR = {'--color', '--log-level', '--config', '--project', '-p'}
 
@@ -1033,7 +1041,7 @@ _SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'imp
 def _mode_verrou(args):
     """Verrou à prendre sur la base : None (rien), PARTAGE (lecture) ou EXCLUSIF (écriture)."""
     c = args.commande
-    if c == 'config' or c in ('project_current', 'project_list', 'project_create', 'project_use'):
+    if c == 'config' or c == 'serve' or c in ('project_current', 'project_list', 'project_create', 'project_use'):
         return None
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
@@ -1430,6 +1438,9 @@ def main():
         succes = projets.renommer(args.ancien, args.nouveau, args.format)
     elif args.commande == 'project_delete':
         succes = projets.supprimer(args.nom, args.courant, args.yes, args.force, args.format)
+    elif args.commande == 'serve':
+        from . import serveur
+        succes = serveur.servir(args.host, args.port) == 0
     elif args.commande == 'hooks_queue':
         succes = webhook.commande_file(args.format)
     elif args.commande == 'hooks_flush':
