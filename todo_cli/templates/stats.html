@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block titre %}Statistiques{% endblock %}
+{% block contenu %}
+<h1 class="h3 mb-3">Statistiques</h1>
+<div class="row g-3 mb-4">
+  {% for libelle, cle in (('Total', 'total'), ('Terminées', 'terminees'), ('En retard', 'en_retard'), ("Pour aujourd'hui", 'pour_aujourdhui'), ('Terminées aujourd\'hui', 'terminees_aujourdhui'), ('Terminées sur 7 jours', 'terminees_7_jours')) %}
+  <div class="col-6 col-md-4 col-lg-2"><div class="card shadow-sm text-center"><div class="card-body">
+    <div class="fs-3 fw-semibold">{{ s.get(cle, 0) }}</div><div class="small text-body-secondary">{{ libelle }}</div></div></div></div>
+  {% endfor %}
+</div>
+<div class="card shadow-sm mb-4"><div class="card-body">
+  <div class="d-flex justify-content-between"><span>Avancement</span><span>{{ s.get('pourcentage_termine', 0) }} %</span></div>
+  <progress class="w-100 mt-2" max="100" value="{{ s.get('pourcentage_termine', 0)|int }}"></progress>
+</div></div>
+<div class="row g-3">
+  <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Priorités</div>
+    <ul class="list-group list-group-flush">
+      {% for libelle, cle in (('Haute', 'priorite_high'), ('Moyenne', 'priorite_medium'), ('Basse', 'priorite_low')) %}
+      <li class="list-group-item d-flex justify-content-between">{{ libelle }}<span class="badge text-bg-secondary">{{ s.get(cle, 0) }}</span></li>{% endfor %}
+    </ul></div></div>
+  <div class="col-md-6"><div class="card shadow-sm"><div class="card-header">Tags</div>
+    <ul class="list-group list-group-flush">
+      {% for tag, n in tags %}<li class="list-group-item d-flex justify-content-between"><a href="{{ url_for('accueil', tag=tag) }}" class="text-decoration-none">{{ tag }}</a><span class="badge text-bg-secondary">{{ n }}</span></li>
+      {% else %}<li class="list-group-item text-body-secondary">Aucun tag.</li>{% endfor %}
+    </ul></div></div>
+</div>
+{% endblock %}

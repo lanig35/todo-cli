@@ -98,6 +98,7 @@ REGLAGES = (
     Reglage("server", "token", "texte", "",
             "Jeton obligatoire de l'API (en-tête `Authorization: Bearer …`) ; de préférence via TODO_SERVER_TOKEN "
             "plutôt que dans le fichier de configuration."),
+    Reglage("server", "web", "bool", True, "Sert aussi l'interface web (connexion par le jeton) ; false = API seule."),
     Reglage("server", "timeout", "int", 30, "Secondes accordées à une requête avant de l'interrompre (erreur 504).", minimum=1),
     Reglage("server", "max_body", "int", 65536, "Taille maximale du corps d'une requête, en octets.", minimum=1024),
     Reglage("hooks", "enabled", "bool", True,

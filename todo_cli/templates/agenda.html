@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import tableau with context %}
+{% block titre %}Agenda{% endblock %}
+{% block contenu %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Agenda <small class="text-body-secondary fs-6">{{ ag.debut }} → {{ ag.fin }}</small></h1>
+  <div class="btn-group" role="group" aria-label="Durée">
+    {% for n in (7, 14, 30) %}<a class="btn btn-sm btn-outline-secondary{% if n == jours %} active{% endif %}" href="{{ url_for('page_agenda', days=n) }}">{{ n }} j</a>{% endfor %}
+  </div>
+</div>
+{% if ag.en_retard %}
+<div class="card border-danger shadow-sm mb-3"><div class="card-header text-danger fw-semibold">En retard ({{ ag.en_retard|length }})</div>
+  <div class="card-body p-2 p-md-3">{{ tableau(ag.en_retard, chemin) }}</div></div>
+{% endif %}
+{% for j in ag.jours if j.taches %}
+<div class="card shadow-sm mb-3"><div class="card-header fw-semibold">{{ j.date }}{% if j.date == aujourdhui %} <span class="badge text-bg-primary">aujourd'hui</span>{% endif %}</div>
+  <div class="card-body p-2 p-md-3">{{ tableau(j.taches, chemin) }}</div></div>
+{% else %}
+{% if not ag.en_retard %}<p class="text-body-secondary">Rien de prévu sur cette période.</p>{% endif %}
+{% endfor %}
+<p class="text-body-secondary small">{{ ag.plus_tard }} plus tard · {{ ag.sans_echeance }} sans échéance</p>
+{% endblock %}

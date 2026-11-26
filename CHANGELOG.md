@@ -3,6 +3,24 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.11.0] - 2026-11-26
+
+### Ajouté
+
+- **Interface web** : `todo serve` sert aussi, à la racine (`/`), une interface en pages Jinja et Bootstrap 5 (Flask, comme
+  l'API). Liste filtrable (recherche, tag, statut, priorité, tri), ajout (avec saisie rapide en option), fiche d'une tâche
+  (modification, notes, reporter, déplacer, démarrer, terminer, supprimer), agenda, statistiques, vues enregistrées et
+  changement de projet. Thème clair/sombre selon le système, adaptée au téléphone.
+  - Comme l'API, elle lance le CLI : verrous, hooks (un hook « avant » qui refuse s'affiche comme erreur), journal et `undo`
+    sont ceux de la ligne de commande.
+  - Connexion par le jeton du serveur, cookie de session signé (HttpOnly, SameSite=Lax, 12 h), jeton CSRF sur chaque
+    formulaire, échappement automatique, en-têtes CSP (aucun script ni style en ligne), `X-Frame-Options`, `no-store`.
+  - Une fiche modifiée ailleurs entre l'ouverture du formulaire et l'enregistrement n'est pas écrasée (même empreinte que
+    l'`ETag` de l'API).
+  - Bootstrap est chargé depuis jsDelivr (version fixée, empreintes SRI) : il faut un accès Internet côté navigateur.
+  - Réglage `[server] web` (défaut `true`) ; `false` = API seule.
+- Les pages et fichiers statiques sont inclus dans le paquet (`package-data`).
+
 ## [3.10.0] - 2026-11-25
 
 ### Ajouté
@@ -540,6 +558,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 
 [3.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.9.0
 [3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
+[3.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.11.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0
