@@ -30,7 +30,9 @@ seed = ["faker"]
 completion = ["argcomplete"]
 # serveur : API REST (todo serve)
 server = ["flask"]
-dev = ["pytest", "faker", "argcomplete", "flask"]
+# tui : interface texte curses (todo tui), cliente de l'API
+tui = ["requests"]
+dev = ["pytest", "pytest-xdist", "faker", "argcomplete", "flask", "requests"]
 
 [project.scripts]
 todo = "todo_cli.cli:executer"
@@ -48,3 +50,4 @@ todo_cli = ["templates/*.html", "static/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["smoke: sous-ensemble rapide de non-régression (pytest -m smoke)"]

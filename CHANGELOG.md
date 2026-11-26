@@ -3,6 +3,23 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.12.0] - 2026-11-26
+
+### Ajouté
+
+- **TUI** : `todo tui` ouvre une interface texte (curses) qui est un **client de l'API REST** (`todo serve`) : elle fonctionne en
+  SSH, depuis une autre machine que le serveur. Liste filtrable (statut, priorité, tag, recherche, tri), fiche d'une tâche
+  (modifier titre, description, échéance, tags, priorité ; notes), terminer, démarrer, reporter, déplacer, supprimer, ajout en
+  saisie rapide, changement de projet, agenda, statistiques, aide (`?`). Les appels réseau tournent dans un fil : l'écran reste
+  vivant pendant l'attente. Les modifications d'une fiche utilisent `If-Match` : une tâche modifiée ailleurs est relue au lieu
+  d'être écrasée.
+  - Dépendance optionnelle : `requests` (`pip install requests` ou `pip install 'todo-cli[tui]'`).
+  - Réglages `[client]` : `url` (défaut `http://127.0.0.1:8765`), `token` (à défaut `[server] token` / `TODO_SERVER_TOKEN` ; de
+    préférence `TODO_CLIENT_TOKEN`, jamais en argument de ligne de commande), `timeout`. `config show` masque le jeton.
+  - Module `client.py` : client Python de l'API (`Client`, `ErreurClient`), utilisable seul.
+- **Tests** : sous-ensemble de non-régression rapide (`pytest -m smoke`) et exécution parallèle (`pytest -n auto`, extra `dev`) ;
+  voir la section « Tests » du README.
+
 ## [3.11.0] - 2026-11-26
 
 ### Ajouté
@@ -559,6 +576,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 [3.9.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.9.0
 [3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
 [3.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.11.0
+[3.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.12.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0
