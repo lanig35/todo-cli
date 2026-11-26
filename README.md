@@ -27,6 +27,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
 - Vues enregistrées : une commande de lecture et ses filtres mémorisés sous un nom, par projet (`view save`, `view run`)
 - Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…), ou un webhook HTTP intégré (`webhook_url`)
+- Interface web (Flask + Jinja + Bootstrap) servie par `todo serve`, à côté de l'API
 - API REST (Flask, optionnelle) : `todo serve` pour gérer les tâches à distance, avec jeton obligatoire et `ETag` / `If-Match`
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
 - Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
@@ -725,6 +726,28 @@ Réglages `[server]` : `host` (127.0.0.1), `port` (8765), `token`, `timeout` (30
 Le serveur intégré (Werkzeug, multi-threads) suffit pour un usage personnel. Avec un autre serveur WSGI, gardez **un seul
 processus** (les écritures sont sérialisées par un verrou de processus), par exemple :
 `gunicorn -w 1 --threads 4 -b 127.0.0.1:8765 'todo_cli.serveur:creer_application()'`.
+
+### Interface web
+
+Le même `todo serve` sert, à la racine, une interface web (Flask + Jinja + Bootstrap 5) : `http://127.0.0.1:8765/`. On s'y
+connecte avec le **jeton du serveur** (celui de l'API). Elle offre : la liste des tâches (recherche, tag, statut, priorité, tri),
+l'ajout (case « saisie rapide » pour `Appeler Paul demain !high #pro`), la fiche d'une tâche (modifier, notes, reporter,
+déplacer vers un autre projet, démarrer, terminer, supprimer), l'agenda (7, 14 ou 30 jours), les statistiques, les vues
+enregistrées (menu « Vues ») et le changement de projet (menu en haut à droite). L'affichage suit le thème clair ou sombre du
+système et s'adapte au téléphone.
+
+Comme l'API, l'interface ne touche pas à la base : chaque action lance le CLI (hooks, journal, verrous et `todo undo` inclus ;
+un hook « avant » qui refuse s'affiche comme un message d'erreur). Une fiche modifiée ailleurs entre l'ouverture du formulaire
+et l'enregistrement n'est pas écrasée : un message demande de la relire.
+
+**Sécurité.** Cookie de session signé (HttpOnly, SameSite=Lax, 12 h) dont la clé dérive du jeton : changer le jeton déconnecte
+tout le monde. Jeton CSRF sur chaque formulaire, échappement automatique de Jinja (un titre contenant du HTML s'affiche tel
+quel), en-têtes `Content-Security-Policy` (aucun script ni style en ligne), `X-Frame-Options: DENY`, `Cache-Control: no-store`,
+redirections limitées au site. Derrière un proxy HTTPS, le cookie reste utilisable ; pensez à le servir en HTTPS dès que le
+serveur n'est pas sur `127.0.0.1`.
+
+**Bootstrap** est chargé depuis le CDN jsDelivr (version fixée, empreintes SRI) : le navigateur a besoin d'un accès à Internet.
+Sans lui, les pages restent utilisables mais sans mise en forme. `[server] web = false` (ou `TODO_SERVER_WEB=0`) ne sert que l'API.
 
 ### Suivi du temps
 
@@ -1621,6 +1644,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
 | `hooks.py` | hooks : commandes lancées après une modification |
+| `web.py` + `templates/`, `static/` | Interface web (pages Jinja, Bootstrap, session, CSRF) |
 | `serveur.py` | API REST Flask (`todo serve`) : sous-processus du CLI, jeton, `ETag`, erreurs |
 | `webhook.py` | webhook HTTP : envoi, signature HMAC, file d'attente et renvoi |
 | `pieces_jointes.py` | pièces jointes : copie ou lien, vérification, corbeille, groupe `attachment` |

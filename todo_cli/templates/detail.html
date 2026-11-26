@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf, bouton, priorite, echeance with context %}
+{% block titre %}{{ t.titre }}{% endblock %}
+{% block contenu %}
+{% set suivant = url_for('detail', id_=t.id) %}
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="{{ url_for('accueil') }}">Tâches</a></li>
+  <li class="breadcrumb-item active" aria-current="page">{{ t.id[:8] }}</li></ol></nav>
+
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+  <h1 class="h3 mb-0{% if t.statut != 'A FAIRE' %} text-decoration-line-through text-body-secondary{% endif %}">{{ t.titre }}</h1>
+  <div class="d-flex flex-wrap gap-1">
+    {% if t.statut == 'A FAIRE' %}
+      {{ bouton('done', t, 'Terminer', 'btn-success', suivant, '✓ Terminer') }}
+      {% if not t.demarree %}{{ bouton('start', t, 'Démarrer', 'btn-outline-primary', suivant, '▶ Démarrer') }}
+      {% else %}{{ bouton('unstart', t, 'Annuler le démarrage', 'btn-outline-secondary', suivant, '■ Arrêter') }}{% endif %}
+    {% else %}
+      {{ bouton('undone', t, 'Rouvrir', 'btn-outline-secondary', suivant, '↺ Rouvrir') }}
+    {% endif %}
+    <form method="post" action="{{ url_for('form_supprimer', id_=t.id) }}" class="d-inline" data-confirm="Supprimer cette tâche ? (annulable avec « todo undo »)">
+      {{ csrf() }}<input type="hidden" name="etag" value="{{ etag }}">
+      <button class="btn btn-outline-danger">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <form method="post" action="{{ url_for('form_modifier', id_=t.id) }}" class="card card-body shadow-sm">
+      {{ csrf() }}<input type="hidden" name="etag" value="{{ etag }}">
+      <h2 class="h5">Modifier</h2>
+      <div class="row g-3">
+        <div class="col-12"><label class="form-label" for="e-titre">Titre</label>
+          <input class="form-control" id="e-titre" name="titre" value="{{ t.titre }}" required maxlength="500"></div>
+        <div class="col-md-4"><label class="form-label" for="e-prio">Priorité</label>
+          <select class="form-select" id="e-prio" name="priorite">
+            {% for v, l in (('high', 'haute'), ('medium', 'moyenne'), ('low', 'basse')) %}<option value="{{ v }}"{% if t.priorite == v %} selected{% endif %}>{{ l }}</option>{% endfor %}
+          </select></div>
+        <div class="col-md-4"><label class="form-label" for="e-due">Échéance</label>
+          <input class="form-control" id="e-due" name="date_echeance" value="{{ t.date_echeance or '' }}" placeholder="vide = aucune"></div>
+        <div class="col-md-4"><label class="form-label" for="e-rec">Récurrence</label>
+          <input class="form-control" id="e-rec" name="recurrence" value="{{ t.recurrence or '' }}" placeholder="vide = aucune"></div>
+        <div class="col-12"><label class="form-label" for="e-tags">Tags (séparés par des virgules)</label>
+          <input class="form-control" id="e-tags" name="tags" value="{{ t.tags|join(', ') }}"></div>
+        <div class="col-12"><label class="form-label" for="e-desc">Description</label>
+          <textarea class="form-control" id="e-desc" name="description" rows="4">{{ t.description }}</textarea></div>
+        <div class="col-12"><button class="btn btn-primary">Enregistrer</button></div>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card shadow-sm mb-3"><ul class="list-group list-group-flush">
+      <li class="list-group-item d-flex justify-content-between">Statut<span>{{ 'terminée' if t.statut != 'A FAIRE' else 'à faire' }}</span></li>
+      <li class="list-group-item d-flex justify-content-between">Priorité<span>{{ priorite(t.priorite) }}</span></li>
+      <li class="list-group-item d-flex justify-content-between">Échéance<span>{{ echeance(t) }}</span></li>
+      <li class="list-group-item d-flex justify-content-between">Créée<span>{{ t.date_creation }}</span></li>
+      {% if t.demarree %}<li class="list-group-item d-flex justify-content-between">Démarrée<span>{{ t.demarree }}</span></li>{% endif %}
+      {% if t.date_terminee %}<li class="list-group-item d-flex justify-content-between">Terminée<span>{{ t.date_terminee }}</span></li>{% endif %}
+      {% if t.bloquee_par %}<li class="list-group-item">Bloquée par :
+        {% for b in t.bloquee_par %}<a href="{{ url_for('detail', id_=b) }}"><code>{{ b[:8] }}</code></a> {% endfor %}</li>{% endif %}
+      {% if t.suivante %}<li class="list-group-item">Occurrence suivante : <a href="{{ url_for('detail', id_=t.suivante) }}"><code>{{ t.suivante[:8] }}</code></a></li>{% endif %}
+    </ul></div>
+
+    {% if t.statut == 'A FAIRE' %}
+    <div class="card card-body shadow-sm mb-3">
+      <form method="post" action="{{ url_for('form_agir', id_=t.id, action='postpone') }}" class="row g-2 mb-3">
+        {{ csrf() }}<input type="hidden" name="etag" value="{{ etag }}">
+        <label class="form-label mb-0" for="p-to">Reporter</label>
+        <div class="col"><input class="form-control" id="p-to" name="to" placeholder="+3d, lundi, 2026-12-01…" required></div>
+        <div class="col-auto"><button class="btn btn-outline-secondary">Reporter</button></div>
+      </form>
+      {% set autres = nav().projets|rejectattr('projet', 'equalto', nav().courant)|list %}
+      {% if autres %}
+      <form method="post" action="{{ url_for('form_agir', id_=t.id, action='move') }}" class="row g-2" data-confirm="Déplacer cette tâche ?">
+        {{ csrf() }}<input type="hidden" name="etag" value="{{ etag }}">
+        <label class="form-label mb-0" for="m-to">Déplacer vers un projet</label>
+        <div class="col"><select class="form-select" id="m-to" name="to">{% for p in autres %}<option value="{{ p.projet }}">{{ p.projet }}</option>{% endfor %}</select></div>
+        <div class="col-auto"><button class="btn btn-outline-secondary">Déplacer</button></div>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<h2 class="h5 mt-4">Notes</h2>
+<div class="card shadow-sm mb-4">
+  <ul class="list-group list-group-flush">
+    {% for n in t.notes %}
+    <li class="list-group-item"><div class="small text-body-secondary">{{ n.date }}{% if n.action and n.action != 'note' %} · {{ n.action }}{% endif %}</div>
+      <div class="note text-break">{{ n.texte }}</div></li>
+    {% else %}<li class="list-group-item text-body-secondary">Aucune note.</li>{% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('noter', id_=t.id) }}" class="card-body border-top row g-2">
+    {{ csrf() }}
+    <div class="col"><input class="form-control" name="note" placeholder="Ajouter une note…" aria-label="Note" required></div>
+    <div class="col-auto"><button class="btn btn-outline-primary">Ajouter</button></div>
+  </form>
+</div>
+{% if t.pieces_jointes %}
+<h2 class="h5">Pièces jointes</h2>
+<ul>{% for p in t.pieces_jointes %}<li>{{ p.get('nom', p) if p is mapping else p }}</li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}

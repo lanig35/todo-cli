@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import csrf, tableau with context %}
+{% block contenu %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">{{ nav().courant }} <small class="text-body-secondary fs-6">{{ taches|length }} tâche{{ 's' if taches|length > 1 }}</small></h1>
+  <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#nouvelle" aria-expanded="false" aria-controls="nouvelle">+ Nouvelle tâche</button>
+</div>
+
+<div class="collapse mb-4" id="nouvelle">
+  <form method="post" action="{{ url_for('form_ajouter') }}" class="card card-body shadow-sm">
+    {{ csrf() }}
+    <div class="row g-3">
+      <div class="col-12"><label class="form-label" for="n-titre">Titre</label>
+        <input class="form-control" id="n-titre" name="titre" required maxlength="500"></div>
+      <div class="col-md-3"><label class="form-label" for="n-prio">Priorité</label>
+        <select class="form-select" id="n-prio" name="priorite"><option value="">moyenne</option><option value="high">haute</option><option value="low">basse</option></select></div>
+      <div class="col-md-3"><label class="form-label" for="n-due">Échéance</label>
+        <input class="form-control" id="n-due" name="date_echeance" placeholder="demain, 2026-12-01, +3d…"></div>
+      <div class="col-md-3"><label class="form-label" for="n-tags">Tags</label>
+        <input class="form-control" id="n-tags" name="tags" placeholder="pro, maison"></div>
+      <div class="col-md-3"><label class="form-label" for="n-rec">Récurrence</label>
+        <input class="form-control" id="n-rec" name="recurrence" placeholder="1w, daily…"></div>
+      <div class="col-12"><label class="form-label" for="n-desc">Description</label>
+        <textarea class="form-control" id="n-desc" name="description" rows="2"></textarea></div>
+      <div class="col-12 d-flex justify-content-between align-items-center">
+        <div class="form-check"><input class="form-check-input" type="checkbox" id="n-rapide" name="saisie_rapide" value="1">
+          <label class="form-check-label" for="n-rapide">Saisie rapide (<code>Appeler Paul demain !high #pro</code>)</label></div>
+        <button class="btn btn-primary">Ajouter</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<form method="get" action="{{ url_for('accueil') }}" class="row g-2 mb-3">
+  <div class="col-md-4"><input class="form-control" type="search" name="q" value="{{ filtres.q }}" placeholder="Rechercher…" aria-label="Rechercher"></div>
+  <div class="col-6 col-md-2"><input class="form-control" name="tag" value="{{ filtres.tag }}" placeholder="Tag" aria-label="Tag"></div>
+  <div class="col-6 col-md-2">
+    <select class="form-select" name="status" aria-label="Statut">
+      <option value="todo"{% if filtres.status == 'todo' %} selected{% endif %}>À faire</option>
+      <option value="done"{% if filtres.status == 'done' %} selected{% endif %}>Terminées</option>
+      <option value="all"{% if filtres.status == 'all' %} selected{% endif %}>Toutes</option>
+    </select></div>
+  <div class="col-6 col-md-2">
+    <select class="form-select" name="prio" aria-label="Priorité">
+      <option value="">Priorité</option>
+      <option value="high"{% if filtres.prio == 'high' %} selected{% endif %}>Haute</option>
+      <option value="medium"{% if filtres.prio == 'medium' %} selected{% endif %}>Moyenne</option>
+      <option value="low"{% if filtres.prio == 'low' %} selected{% endif %}>Basse</option>
+    </select></div>
+  <div class="col-6 col-md-2">
+    <select class="form-select" name="sort" aria-label="Tri">
+      <option value="">Tri</option>
+      <option value="due"{% if filtres.sort == 'due' %} selected{% endif %}>Échéance</option>
+      <option value="priority"{% if filtres.sort == 'priority' %} selected{% endif %}>Priorité</option>
+      <option value="alpha"{% if filtres.sort == 'alpha' %} selected{% endif %}>Alphabétique</option>
+    </select></div>
+  <div class="col-12"><button class="btn btn-outline-secondary btn-sm">Filtrer</button>
+    <a class="btn btn-link btn-sm" href="{{ url_for('accueil') }}">Réinitialiser</a></div>
+</form>
+
+<div class="card shadow-sm"><div class="card-body p-2 p-md-3">{{ tableau(taches, chemin) }}</div></div>
+{% endblock %}

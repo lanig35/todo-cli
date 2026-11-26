@@ -1,0 +1,55 @@
+{% macro csrf() %}<input type="hidden" name="csrf" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro bouton(action, t, libelle, classe, suivant, etiquette="") %}
+<form method="post" action="{{ url_for('form_agir', id_=t.id, action=action) }}" class="d-inline">
+  {{ csrf() }}<input type="hidden" name="next" value="{{ suivant }}">
+  <button class="btn btn-sm {{ classe }}" title="{{ libelle }}" aria-label="{{ libelle }}">{{ etiquette or libelle }}</button>
+</form>
+{% endmacro %}
+
+{% macro priorite(p) %}
+<span class="badge text-bg-{{ {'high': 'danger', 'medium': 'secondary', 'low': 'info'}.get(p, 'secondary') }}">{{ {'high': 'haute', 'medium': 'moyenne', 'low': 'basse'}.get(p, p) }}</span>
+{% endmacro %}
+
+{% macro echeance(t) %}
+{%- if t.date_echeance -%}
+  <span class="{% if t.statut == 'A FAIRE' and t.date_echeance < aujourdhui %}text-danger fw-semibold{% elif t.statut == 'A FAIRE' and t.date_echeance == aujourdhui %}text-warning-emphasis fw-semibold{% endif %}">{{ t.date_echeance }}</span>
+{%- else -%}<span class="text-body-secondary">—</span>{%- endif -%}
+{% endmacro %}
+
+{% macro tableau(taches, suivant, actions=True) %}
+{% if not taches %}
+<p class="text-body-secondary my-4">Aucune tâche.</p>
+{% else %}
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+  <thead><tr><th>Tâche</th><th>Priorité</th><th>Échéance</th><th>Tags</th>{% if actions %}<th class="text-end">Actions</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for t in taches %}
+  <tr{% if t.statut != 'A FAIRE' %} class="text-body-secondary"{% endif %}>
+    <td>
+      <a href="{{ url_for('detail', id_=t.id) }}" class="text-decoration-none{% if t.statut != 'A FAIRE' %} text-decoration-line-through{% endif %}">{{ t.titre }}</a>
+      {% if t.demarree %}<span class="badge text-bg-primary ms-1" title="Démarrée {{ t.demarree }}">en cours</span>{% endif %}
+      {% if t.bloquee_par %}<span class="badge text-bg-warning ms-1" title="Bloquée par {{ t.bloquee_par|length }} tâche(s)">bloquée</span>{% endif %}
+      {% if t.recurrence %}<span class="badge text-bg-light border ms-1" title="Récurrence">↻ {{ t.recurrence }}</span>{% endif %}
+    </td>
+    <td>{{ priorite(t.priorite) }}</td>
+    <td>{{ echeance(t) }}</td>
+    <td>{% for tag in t.tags %}<a class="badge text-bg-light border text-decoration-none" href="{{ url_for('accueil', tag=tag) }}">{{ tag }}</a> {% endfor %}</td>
+    {% if actions %}
+    <td class="text-end text-nowrap">
+      {% if t.statut == 'A FAIRE' %}
+        {{ bouton('done', t, 'Terminer', 'btn-outline-success', suivant, '✓') }}
+        {% if not t.demarree %}{{ bouton('start', t, 'Démarrer', 'btn-outline-primary', suivant, '▶') }}{% endif %}
+      {% else %}
+        {{ bouton('undone', t, 'Rouvrir', 'btn-outline-secondary', suivant, '↺') }}
+      {% endif %}
+    </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endmacro %}

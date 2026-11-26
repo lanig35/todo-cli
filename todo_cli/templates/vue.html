@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import tableau with context %}
+{% block titre %}Vue {{ nom }}{% endblock %}
+{% block contenu %}
+<h1 class="h3 mb-3">Vue « {{ nom }} »</h1>
+<div class="card shadow-sm"><div class="card-body p-2 p-md-3">
+{% if taches is not none %}{{ tableau(taches, chemin) }}
+{% else %}<pre class="mb-0">{{ brut|tojson(indent=2) }}</pre>{% endif %}
+</div></div>
+{% endblock %}

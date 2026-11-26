@@ -228,7 +228,7 @@ def options_requete(args, valeurs, booleens, extras=()):
     return options
 
 
-def creer_application(token=None, delai=None, taille_max=None):
+def creer_application(token=None, delai=None, taille_max=None, web=None):
     """Application Flask. Sans argument, lit les réglages `[server]` (utilisable par gunicorn : `todo_cli.serveur:creer_application()`)."""
     try:
         from flask import Flask, jsonify, make_response, request
@@ -240,6 +240,7 @@ def creer_application(token=None, delai=None, taille_max=None):
         raise RuntimeError("aucun jeton : définir [server] token (todo config set server.token …) ou TODO_SERVER_TOKEN")
     delai = delai or reglages.obtenir("server", "timeout")
     taille_max = taille_max or reglages.obtenir("server", "max_body")
+    web = reglages.obtenir("server", "web") if web is None else web
 
     app = Flask(__name__)
     app.json.ensure_ascii = False
@@ -295,8 +296,8 @@ def creer_application(token=None, delai=None, taille_max=None):
 
     @app.before_request
     def authentifier():
-        if request.path == PREFIXE + "/health":
-            return None
+        if not request.path.startswith(PREFIXE + "/") or request.path == PREFIXE + "/health":
+            return None                      # l'interface web a sa propre garde (session) : voir web.py
         fourni = request.headers.get("Authorization", "")
         schema, _, valeur = fourni.partition(" ")
         if schema.lower() != "bearer" or not hmac.compare_digest(valeur.strip().encode(), token.encode()):
@@ -305,27 +306,48 @@ def creer_application(token=None, delai=None, taille_max=None):
             return r
         return None
 
+    def page_html(statut, message):
+        """Page d'erreur de l'interface web (None pour l'API, qui répond en JSON)."""
+        if request.path.startswith(PREFIXE) or "todo_page_erreur" not in app.extensions:
+            return None
+        return app.extensions["todo_page_erreur"](statut, message)
+
     @app.errorhandler(ErreurApi)
     def erreur_api(e):
+        page = page_html(e.statut, e.message)
+        if page is not None:
+            return page
         corps = {"error": {"code": e.code, "message": e.message}}
         corps.update(e.extra.get("result") and {"result": e.extra["result"]} or {})
         return repondre(corps, e.statut, e.extra.get("etag"))
 
     @app.errorhandler(404)
     def non_trouve(_):
+        page = page_html(404, "Page introuvable.")
+        if page is not None:
+            return page
         return repondre({"error": {"code": "not_found", "message": "ressource inconnue"}}, 404)
 
     @app.errorhandler(405)
     def methode(_):
+        page = page_html(405, "Méthode non autorisée.")
+        if page is not None:
+            return page
         return repondre({"error": {"code": "method_not_allowed", "message": "méthode non autorisée"}}, 405)
 
     @app.errorhandler(413)
     def trop_gros(_):
+        page = page_html(413, "Formulaire trop volumineux.")
+        if page is not None:
+            return page
         return repondre({"error": {"code": "too_large", "message": "corps trop volumineux"}}, 413)
 
     @app.errorhandler(Exception)
     def inattendue(e):
         app.logger.exception("erreur inattendue")
+        page = page_html(500, "Erreur interne.")
+        if page is not None:
+            return page
         return repondre({"error": {"code": "internal", "message": "erreur interne"}}, 500)
 
     # ---- lecture ----
@@ -435,6 +457,9 @@ def creer_application(token=None, delai=None, taille_max=None):
             resultat = moteur.ecrire(mots, projet, options, [id_])
         return resultat_ecriture(resultat)
 
+    if web:
+        from . import web as interface
+        interface.enregistrer(app, moteur, token)
     return app
 
 
@@ -451,6 +476,6 @@ def servir(hote=None, port=None):
     if hote not in ("127.0.0.1", "localhost", "::1"):
         print(f" ⚠️  Le serveur écoute sur {hote} sans chiffrement : placez-le derrière un proxy HTTPS (le jeton circule en clair).",
               file=sys.stderr)
-    print(f" 🌐 API todo-cli {__version__} sur http://{hote}:{port}{PREFIXE}/  (Ctrl-C pour arrêter)")
+    print(f" 🌐 todo-cli {__version__} : interface web http://{hote}:{port}/  ·  API http://{hote}:{port}{PREFIXE}/  (Ctrl-C pour arrêter)")
     app.run(host=hote, port=port, threaded=True, use_reloader=False)
     return 0
