@@ -12,7 +12,7 @@ from .reglages import REGLAGES, chemin_config, modele_fichier, nom_variable, obt
 
 
 # Réglages secrets : `config show` n'en montre pas la valeur (`config get` la donne, pour un script)
-SECRETS = {("server", "token"), ("hooks", "webhook_token"), ("hooks", "webhook_secret")}
+SECRETS = {("server", "token"), ("client", "token"), ("hooks", "webhook_token"), ("hooks", "webhook_secret")}
 
 
 def _affichage(r, valeur):

@@ -27,6 +27,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
 - Vues enregistrées : une commande de lecture et ses filtres mémorisés sous un nom, par projet (`view save`, `view run`)
 - Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…), ou un webhook HTTP intégré (`webhook_url`)
+- Interface texte `todo tui` (curses), cliente de l'API : utilisable en SSH
 - Interface web (Flask + Jinja + Bootstrap) servie par `todo serve`, à côté de l'API
 - API REST (Flask, optionnelle) : `todo serve` pour gérer les tâches à distance, avec jeton obligatoire et `ETag` / `If-Match`
 - Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
@@ -88,7 +89,7 @@ plus courantes ont un **raccourci** de premier niveau.
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
 | `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
 | `hooks` | `queue`, `flush`, `clear` (file d'attente du webhook) |
-| `server` | `serve` (API REST) |
+| `server` | `serve` (API REST + interface web), `tui` (interface texte) |
 | `view` | `save`, `run`, `list`, `show`, `rename`, `remove` |
 | `config` | `show` (ou `list`), `path`, `init` |
 | `admin` | `undo`, `restore`, `reset`, `seed` |
@@ -748,6 +749,35 @@ serveur n'est pas sur `127.0.0.1`.
 
 **Bootstrap** est chargé depuis le CDN jsDelivr (version fixée, empreintes SRI) : le navigateur a besoin d'un accès à Internet.
 Sans lui, les pages restent utilisables mais sans mise en forme. `[server] web = false` (ou `TODO_SERVER_WEB=0`) ne sert que l'API.
+
+### Interface texte (TUI)
+
+`todo tui` ouvre une interface en terminal (curses) qui est un **client de l'API REST** : elle marche en SSH et peut parler à un
+serveur `todo serve` situé sur une autre machine.
+
+```bash
+pip install requests                      # ou : pip install 'todo-cli[tui]'
+export TODO_CLIENT_TOKEN="…"              # le jeton du serveur (à défaut TODO_SERVER_TOKEN ou [client] token)
+todo tui                                  # serveur sur http://127.0.0.1:8765
+todo tui --url https://todo.example.org -p perso
+```
+
+| Touches | Action |
+|---|---|
+| `j` `k` `↑` `↓` `PgUp` `PgDn` `Home` `End` | naviguer |
+| `Entrée` | fiche de la tâche (`Échap` pour revenir) |
+| `a` | ajouter, en saisie rapide (`Appeler Paul demain !high #pro`) |
+| `d` `s` `p` `m` `x` | terminer ou rouvrir · démarrer ou arrêter · reporter · déplacer · supprimer |
+| `e` `n` `!` | modifier le titre · ajouter une note · changer la priorité (dans la fiche aussi : `D` description, `w` échéance, `t` tags) |
+| `/` `t` `f` `F` `o` `c` | rechercher · tag · statut · priorité · tri · réinitialiser les filtres |
+| `P` | changer de projet |
+| `g` `S` | agenda · statistiques |
+| `r` `?` `q` | recharger · aide · quitter |
+
+Les appels réseau tournent dans un fil : l'écran reste vivant pendant que le serveur répond. Les modifications faites depuis une
+fiche envoient `If-Match` : si la tâche a changé ailleurs entre-temps, elle est relue au lieu d'être écrasée. Réglages
+`[client]` : `url`, `token`, `timeout`. Le jeton ne se passe jamais en argument (visible dans `ps`) ; `config show` le masque.
+Le client Python (`todo_cli.client.Client`) peut aussi s'utiliser seul dans un script.
 
 ### Suivi du temps
 
@@ -1644,6 +1674,8 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
 | `hooks.py` | hooks : commandes lancées après une modification |
+| `client.py` | Client Python (`requests`) de l'API REST |
+| `tui.py`, `tui_modele.py` | TUI curses (mise en page, boucle) et son modèle sans écran |
 | `web.py` + `templates/`, `static/` | Interface web (pages Jinja, Bootstrap, session, CSRF) |
 | `serveur.py` | API REST Flask (`todo serve`) : sous-processus du CLI, jeton, `ETag`, erreurs |
 | `webhook.py` | webhook HTTP : envoi, signature HMAC, file d'attente et renvoi |
@@ -1684,9 +1716,16 @@ interne du code.
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"               # installe todo en mode éditable, avec pytest et faker
-python -m pytest
+pip install -e ".[dev]"               # installe todo en mode éditable, avec pytest, pytest-xdist, faker, flask, requests
+python -m pytest -m smoke             # non-régression rapide : environ 300 tests, 1 à 2 minutes
+python -m pytest -n auto              # suite complète en parallèle (≈ 1 500 tests ; plus de 15 minutes sans -n)
 ```
+
+**Au quotidien**, on ne lance pas toute la suite : `-m smoke` après chaque modification, plus le fichier de la fonction touchée
+(`python -m pytest tests/test_hooks.py`) ou `-k mot`. La suite complète tourne en intégration continue (`-n auto`) et avant une
+version. Le sous-ensemble `smoke` est défini dans `tests/conftest.py` : les fichiers courts en entier, les 3 premiers tests (cas
+nominaux) des autres, et quelques tests bout en bout. Pour trouver les tests lents : `python -m pytest --durations=20 -n auto`.
+Deux tests du suivi du temps (`test_suivi_temps.py`) dépendent de l'heure de la journée et peuvent échouer tôt le matin.
 
 Le fichier `pyproject.toml` décrit le paquet (nom, extras, commande `todo`) et la configuration de pytest.
 La version n'y est écrite nulle part : elle est lue dans `todo_cli/__init__.py`, comme `todo --version` et

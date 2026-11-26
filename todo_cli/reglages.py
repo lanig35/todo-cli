@@ -92,6 +92,10 @@ REGLAGES = (
     Reglage("attachments", "opener", "texte", "",
             "Commande qui ouvre une pièce jointe (`todo attachment open`), par exemple `less` ou `evince` ; vide = xdg-open dans une "
             "session graphique, sinon le chemin du fichier est seulement affiché."),
+    Reglage("client", "url", "texte", "http://127.0.0.1:8765", "Adresse du serveur `todo serve` pour la TUI (`todo tui`)."),
+    Reglage("client", "token", "texte", "",
+            "Jeton de l'API pour `todo tui` (à défaut : [server] token / TODO_SERVER_TOKEN) ; de préférence via TODO_CLIENT_TOKEN."),
+    Reglage("client", "timeout", "int", 15, "Secondes d'attente d'une réponse du serveur.", minimum=1),
     Reglage("server", "host", "texte", "127.0.0.1",
             "Adresse d'écoute de `todo serve` (API REST) ; 127.0.0.1 = cette machine seulement."),
     Reglage("server", "port", "int", 8765, "Port d'écoute de `todo serve`.", minimum=1, maximum=65535),
