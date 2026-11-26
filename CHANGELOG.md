@@ -3,6 +3,19 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.13.0] - 2026-11-26
+
+### Ajouté
+
+- **OpenAPI 3.0** : `todo_cli/openapi.json` décrit toute l'API (routes, paramètres, corps, schémas, erreurs, sécurité) et est servi
+  sans jeton sur `GET /api/v1/openapi.json`. Utilisable avec Swagger UI, Redoc, Postman, Insomnia ou `openapi-generator`. Les tests
+  vérifient qu'il décrit exactement les routes du serveur et que les réponses réelles respectent ses schémas.
+- **Déploiement** : guide `docs/deploiement.md` (gunicorn, service systemd durci, Caddy et nginx, tunnel SSH, sauvegardes, mise à
+  jour) ; extra `deploy` (`pip install 'todo-cli[deploy]'` : Flask + gunicorn).
+- Réglage `[server] proxy` (`TODO_SERVER_PROXY`) : derrière un proxy HTTPS de confiance, lit `X-Forwarded-For/Proto/Host` et marque le
+  cookie de session « Secure ».
+- `todo serve` rappelle qu'il s'agit du serveur de développement.
+
 ## [3.12.0] - 2026-11-26
 
 ### Ajouté
@@ -577,6 +590,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 [3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
 [3.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.11.0
 [3.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.12.0
+[3.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.13.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0
 [3.6.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.6.0

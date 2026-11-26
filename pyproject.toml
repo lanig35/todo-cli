@@ -30,9 +30,11 @@ seed = ["faker"]
 completion = ["argcomplete"]
 # serveur : API REST (todo serve)
 server = ["flask"]
+# deploy : serveur de production (gunicorn) pour l'API et l'interface web
+deploy = ["flask", "gunicorn"]
 # tui : interface texte curses (todo tui), cliente de l'API
 tui = ["requests"]
-dev = ["pytest", "pytest-xdist", "faker", "argcomplete", "flask", "requests"]
+dev = ["pytest", "pytest-xdist", "faker", "argcomplete", "flask", "requests", "jsonschema", "openapi-spec-validator"]
 
 [project.scripts]
 todo = "todo_cli.cli:executer"
@@ -45,7 +47,7 @@ version = { attr = "todo_cli.__version__" }
 include = ["todo_cli*"]
 
 [tool.setuptools.package-data]
-todo_cli = ["templates/*.html", "static/*"]
+todo_cli = ["templates/*.html", "static/*", "openapi.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

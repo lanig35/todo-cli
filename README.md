@@ -750,6 +750,26 @@ serveur n'est pas sur `127.0.0.1`.
 **Bootstrap** est chargé depuis le CDN jsDelivr (version fixée, empreintes SRI) : le navigateur a besoin d'un accès à Internet.
 Sans lui, les pages restent utilisables mais sans mise en forme. `[server] web = false` (ou `TODO_SERVER_WEB=0`) ne sert que l'API.
 
+### Déploiement (production) et OpenAPI
+
+`todo serve` est le serveur de développement de Flask. Pour un usage permanent : **gunicorn** (un seul processus, plusieurs
+threads) lancé par **systemd**, derrière un proxy **HTTPS** (Caddy ou nginx), avec `TODO_SERVER_PROXY=1` (cookie de session
+« Secure », en-têtes `X-Forwarded-*`). Le guide complet (installation, jeton, unité systemd durcie, configurations Caddy et
+nginx, tunnel SSH, sauvegardes, mise à jour) est dans [`docs/deploiement.md`](docs/deploiement.md) ; en voici l'essentiel :
+
+```bash
+pip install 'todo-cli[deploy]'          # Flask + gunicorn
+TODO_SERVER_TOKEN=… TODO_SERVER_PROXY=1 gunicorn --workers 1 --threads 8 --timeout 60 \
+    --bind 127.0.0.1:8765 'todo_cli.serveur:creer_application()'
+```
+
+**Un seul `--workers`** : les écritures et la vérification `If-Match` sont sérialisées par un verrou de processus.
+
+L'API est décrite en **OpenAPI 3.0** (`todo_cli/openapi.json`), servie sans jeton sur `GET /api/v1/openapi.json` : importable dans
+Swagger UI, Redoc, Postman, Insomnia ou `openapi-generator` pour produire un client dans un autre langage. Les tests vérifient que
+le document décrit exactement les routes réelles et que les réponses respectent ses schémas. Réglage `[server] proxy`
+(`TODO_SERVER_PROXY`) : derrière un proxy HTTPS de confiance seulement.
+
 ### Interface texte (TUI)
 
 `todo tui` ouvre une interface en terminal (curses) qui est un **client de l'API REST** : elle marche en SSH et peut parler à un
@@ -1674,6 +1694,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
 | `hooks.py` | hooks : commandes lancées après une modification |
+| `openapi.json` | Description OpenAPI 3.0 de l'API (servie par `/api/v1/openapi.json`) |
 | `client.py` | Client Python (`requests`) de l'API REST |
 | `tui.py`, `tui_modele.py` | TUI curses (mise en page, boucle) et son modèle sans écran |
 | `web.py` + `templates/`, `static/` | Interface web (pages Jinja, Bootstrap, session, CSRF) |

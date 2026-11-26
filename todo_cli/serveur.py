@@ -241,11 +241,17 @@ def creer_application(token=None, delai=None, taille_max=None, web=None):
     delai = delai or reglages.obtenir("server", "timeout")
     taille_max = taille_max or reglages.obtenir("server", "max_body")
     web = reglages.obtenir("server", "web") if web is None else web
+    derriere_proxy = reglages.obtenir("server", "proxy")
 
     app = Flask(__name__)
     app.json.ensure_ascii = False
     app.json.sort_keys = False
     app.config["MAX_CONTENT_LENGTH"] = taille_max
+    if derriere_proxy:
+        # Proxy HTTPS de confiance (nginx, Caddy…) : schéma, hôte et adresse viennent de X-Forwarded-*, le cookie est « Secure »
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+        app.config["SESSION_COOKIE_SECURE"] = True
     moteur = Moteur(delai)
     app.extensions["todo_moteur"] = moteur
 
@@ -296,7 +302,7 @@ def creer_application(token=None, delai=None, taille_max=None, web=None):
 
     @app.before_request
     def authentifier():
-        if not request.path.startswith(PREFIXE + "/") or request.path == PREFIXE + "/health":
+        if not request.path.startswith(PREFIXE + "/") or request.path in (PREFIXE + "/health", PREFIXE + "/openapi.json"):
             return None                      # l'interface web a sa propre garde (session) : voir web.py
         fourni = request.headers.get("Authorization", "")
         schema, _, valeur = fourni.partition(" ")
@@ -354,6 +360,13 @@ def creer_application(token=None, delai=None, taille_max=None, web=None):
     @app.get(PREFIXE + "/health")
     def sante():
         return repondre({"ok": True, "version": __version__})
+
+    @app.get(PREFIXE + "/openapi.json")
+    def description_openapi():
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "openapi.json"), encoding="utf-8") as f:
+            description = json.load(f)
+        description["info"]["version"] = __version__
+        return repondre(description)
 
     @app.get(PREFIXE + "/projects")
     def projets():
@@ -477,5 +490,6 @@ def servir(hote=None, port=None):
         print(f" ⚠️  Le serveur écoute sur {hote} sans chiffrement : placez-le derrière un proxy HTTPS (le jeton circule en clair).",
               file=sys.stderr)
     print(f" 🌐 todo-cli {__version__} : interface web http://{hote}:{port}/  ·  API http://{hote}:{port}{PREFIXE}/  (Ctrl-C pour arrêter)")
+    print(" ℹ️  Serveur de développement : pour un usage permanent, voir « Déploiement » du README (gunicorn, systemd, proxy HTTPS).")
     app.run(host=hote, port=port, threaded=True, use_reloader=False)
     return 0
