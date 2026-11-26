@@ -1,0 +1,2018 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "todo-cli — API REST",
+    "version": "3.12.0",
+    "description": "API REST du gestionnaire de tâches todo-cli (`todo serve`). Chaque requête lance le CLI avec `--format json` : verrous, hooks (y compris « avant »), journal, `undo` et sauvegardes sont ceux de la ligne de commande. Authentification : en-tête `Authorization: Bearer <jeton>` (obligatoire, sauf `health` et ce document). Les écritures sont sérialisées par le serveur ; `ETag` / `If-Match` protègent des modifications concurrentes.",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8765/api/v1",
+      "description": "Local (todo serve)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Système"
+    },
+    {
+      "name": "Tâches"
+    },
+    {
+      "name": "Actions"
+    },
+    {
+      "name": "Rapports"
+    },
+    {
+      "name": "Vues"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Système"
+        ],
+        "operationId": "health",
+        "summary": "Santé du serveur",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Serveur en marche.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "Système"
+        ],
+        "operationId": "openapi",
+        "summary": "Ce document",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Description OpenAPI 3.0 de l'API.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Système"
+        ],
+        "operationId": "listProjects",
+        "summary": "Projets et compteurs",
+        "responses": {
+          "200": {
+            "description": "Projets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Projets"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/tasks": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Tâches"
+        ],
+        "operationId": "listTasks",
+        "summary": "Lister les tâches",
+        "description": "Un paramètre inconnu est refusé (`400`).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Statut.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "done"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Texte recherché (titre, description, notes selon search_in).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search_in",
+            "in": "query",
+            "description": "Champs de la recherche.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "description": "Tag exigé (toutes les valeurs séparées par des virgules).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "any_tag",
+            "in": "query",
+            "description": "Au moins un de ces tags.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "not_tag",
+            "in": "query",
+            "description": "Aucun de ces tags.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "prio",
+            "in": "query",
+            "description": "Priorité.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          },
+          {
+            "name": "not_prio",
+            "in": "query",
+            "description": "Priorité exclue.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          },
+          {
+            "name": "created_after",
+            "in": "query",
+            "description": "Créée après (date).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "created_before",
+            "in": "query",
+            "description": "Créée avant (date).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "done_after",
+            "in": "query",
+            "description": "Terminée après (date).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "done_before",
+            "in": "query",
+            "description": "Terminée avant (date).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "due_before",
+            "in": "query",
+            "description": "Échéance avant (date).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "due_after",
+            "in": "query",
+            "description": "Échéance après (date).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Tri.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "alpha",
+                "status",
+                "priority",
+                "due"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Nombre maximal de tâches.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "description": "Rang de la première tâche.",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "no_tag",
+            "in": "query",
+            "description": "Sans tag.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "overdue",
+            "in": "query",
+            "description": "En retard.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "today",
+            "in": "query",
+            "description": "Pour aujourd'hui.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "no_due",
+            "in": "query",
+            "description": "Sans échéance.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "blocked",
+            "in": "query",
+            "description": "Bloquées par une dépendance.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "ready",
+            "in": "query",
+            "description": "Prêtes (non bloquées).",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "started",
+            "in": "query",
+            "description": "Démarrées.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "not_started",
+            "in": "query",
+            "description": "Non démarrées.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "recurring",
+            "in": "query",
+            "description": "Récurrentes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "no_recurring",
+            "in": "query",
+            "description": "Non récurrentes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "has_notes",
+            "in": "query",
+            "description": "Avec notes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "no_notes",
+            "in": "query",
+            "description": "Sans notes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "has_files",
+            "in": "query",
+            "description": "Avec pièces jointes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "no_files",
+            "in": "query",
+            "description": "Sans pièces jointes.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "all_projects",
+            "in": "query",
+            "description": "Tous les projets.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tâches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tasks"
+                  ],
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Tache"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Tâches"
+        ],
+        "operationId": "addTask",
+        "summary": "Ajouter une tâche",
+        "description": "Le titre est pris tel quel ; `saisie_rapide: true` interprète `demain`, `!high`, `#tag`…",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TacheEntree"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tâche créée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              },
+              "Location": {
+                "description": "URL de la tâche.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "413": {
+            "description": "Corps trop volumineux.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Erreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/tasks/{id}": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Tâches"
+        ],
+        "operationId": "getTask",
+        "summary": "Lire une tâche",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "La tâche.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tache"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      },
+      "patch": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Tâches"
+        ],
+        "operationId": "editTask",
+        "summary": "Modifier une tâche",
+        "description": "Seuls les champs présents sont modifiés ; `null` supprime `date_echeance` et `recurrence`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TacheModification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tâche modifiée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Tâches"
+        ],
+        "operationId": "deleteTask",
+        "summary": "Supprimer une tâche",
+        "description": "Annulable en ligne de commande (`todo undo`).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tâche supprimée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/tasks/{id}/done": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Actions"
+        ],
+        "operationId": "doneTask",
+        "summary": "Terminer une tâche",
+        "description": "Sans effet (déjà dans cet état) : `200` avec `count: 0`. Une récurrente crée l'occurrence suivante (champ `suivante`).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de l'écriture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "description": "Note ajoutée à la tâche."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/undone": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Actions"
+        ],
+        "operationId": "undoneTask",
+        "summary": "Rouvrir une tâche",
+        "description": "Sans effet (déjà dans cet état) : `200` avec `count: 0`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de l'écriture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/start": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Actions"
+        ],
+        "operationId": "startTask",
+        "summary": "Démarrer une tâche",
+        "description": "Sans effet (déjà dans cet état) : `200` avec `count: 0`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de l'écriture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "description": "Note ajoutée à la tâche."
+                  },
+                  "at": {
+                    "type": "string",
+                    "description": "Heure de démarrage (date/heure du CLI)."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/unstart": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Actions"
+        ],
+        "operationId": "unstartTask",
+        "summary": "Annuler le démarrage",
+        "description": "Sans effet (déjà dans cet état) : `200` avec `count: 0`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de l'écriture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/postpone": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Actions"
+        ],
+        "operationId": "postponeTask",
+        "summary": "Reporter l'échéance",
+        "description": "Sans effet (déjà dans cet état) : `200` avec `count: 0`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de l'écriture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "to": {
+                    "type": "string",
+                    "description": "Nouvelle date ou durée (`+3d`, `lundi`, `2026-12-01`)."
+                  },
+                  "note": {
+                    "type": "string",
+                    "description": "Note ajoutée à la tâche."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{id}/move": {
+      "post": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Actions"
+        ],
+        "operationId": "moveTask",
+        "summary": "Déplacer vers un autre projet",
+        "description": "Sans effet (déjà dans cet état) : `200` avec `count: 0`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de l'écriture.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ecriture"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+                "schema": {
+                  "type": "string"
+                },
+                "example": "\"3f9a1c2b4d5e6f70\""
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionEchouee"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValeurInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "to": {
+                    "type": "string",
+                    "description": "Projet cible."
+                  }
+                },
+                "required": [
+                  "to"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/next": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Rapports"
+        ],
+        "operationId": "nextTasks",
+        "summary": "Prochaines tâches à faire",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "name": "n",
+            "in": "query",
+            "description": "Nombre de tâches.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "description": "Tag exigé.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "prio",
+            "in": "query",
+            "description": "Priorité.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ]
+            }
+          },
+          {
+            "name": "all_projects",
+            "in": "query",
+            "description": "Tous les projets.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tâches.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Tache"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/agenda": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Rapports"
+        ],
+        "operationId": "agenda",
+        "summary": "Agenda",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Nombre de jours.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Date de début.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "all_projects",
+            "in": "query",
+            "description": "Tous les projets.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agenda.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agenda"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/RequeteInvalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Rapports"
+        ],
+        "operationId": "stats",
+        "summary": "Statistiques",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statistiques.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/views": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Vues"
+        ],
+        "operationId": "listViews",
+        "summary": "Vues enregistrées",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/project"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vues du projet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vues"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    },
+    "/views/{nom}": {
+      "get": {
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Vues"
+        ],
+        "operationId": "runView",
+        "summary": "Exécuter une vue",
+        "description": "Seules les commandes de lecture peuvent être enregistrées en vue ; le résultat dépend de la commande.",
+        "parameters": [
+          {
+            "name": "nom",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[\\w.-]{1,64}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/project"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Résultat de la commande de la vue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "view": {
+                      "type": "string"
+                    },
+                    "result": {}
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAutorise"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Jeton du serveur (`[server] token` / `TODO_SERVER_TOKEN`)."
+      }
+    },
+    "parameters": {
+      "project": {
+        "name": "project",
+        "in": "query",
+        "description": "Projet (par défaut : projet courant).",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+$"
+        }
+      },
+      "id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Identifiant complet ou préfixe sans ambiguïté.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F-]{1,36}$"
+        }
+      },
+      "ifMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": false,
+        "description": "`ETag` lu avec la tâche : l'écriture n'est appliquée que si la tâche n'a pas changé (sinon `412`). `*` = inconditionnel.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "NonAutorise": {
+        "description": "Jeton manquant ou invalide.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erreur"
+            }
+          }
+        },
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RequeteInvalide": {
+        "description": "Requête mal formée : corps non JSON, champ ou paramètre inconnu, valeur du mauvais type.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erreur"
+            }
+          }
+        }
+      },
+      "Introuvable": {
+        "description": "Tâche, projet ou vue inconnus (`unknown_id`, `unknown_project`, `not_found`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erreur"
+            }
+          }
+        }
+      },
+      "Conflit": {
+        "description": "Conflit : hook « avant » qui refuse (`hook_refused`), dépendance, identifiant ambigu (`ambiguous_id`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erreur"
+            }
+          }
+        }
+      },
+      "PreconditionEchouee": {
+        "description": "La tâche a changé depuis la lecture (`precondition_failed`) ; l'`ETag` courant est dans l'en-tête.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erreur"
+            }
+          }
+        },
+        "headers": {
+          "ETag": {
+            "description": "Empreinte de la tâche (à renvoyer dans If-Match).",
+            "schema": {
+              "type": "string"
+            },
+            "example": "\"3f9a1c2b4d5e6f70\""
+          }
+        }
+      },
+      "ValeurInvalide": {
+        "description": "Valeur refusée (`invalid_date`, `empty_title`, `invalid_repeat`, `nothing_to_edit`…).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erreur"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Erreur": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "unknown_id"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "result": {
+            "type": "object",
+            "description": "Résultat d'écriture du CLI (écritures en échec).",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Note": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-11-26 20:18"
+          },
+          "texte": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "example": "edit"
+          }
+        }
+      },
+      "Tache": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "titre": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priorite": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "A FAIRE",
+              "TERMINE"
+            ]
+          },
+          "date_creation": {
+            "type": "string",
+            "example": "2026-11-26 20:18"
+          },
+          "date_echeance": {
+            "type": "string",
+            "nullable": true,
+            "example": "2026-11-27"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recurrence": {
+            "type": "string",
+            "nullable": true,
+            "example": "1w"
+          },
+          "apres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Identifiants dont la tâche dépend."
+          },
+          "bloquee_par": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Dépendances non terminées."
+          },
+          "date_terminee": {
+            "type": "string",
+            "nullable": true
+          },
+          "demarree": {
+            "type": "string",
+            "nullable": true
+          },
+          "suivante": {
+            "type": "string",
+            "nullable": true,
+            "description": "Occurrence suivante (récurrente terminée)."
+          },
+          "ancre": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            }
+          },
+          "pieces_jointes": {
+            "type": "array",
+            "items": {}
+          }
+        }
+      },
+      "TacheEntree": {
+        "type": "object",
+        "required": [
+          "titre"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "titre": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priorite": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "date_echeance": {
+            "type": "string",
+            "example": "demain"
+          },
+          "recurrence": {
+            "type": "string",
+            "example": "weekly"
+          },
+          "tags": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "string",
+                "description": "Séparés par des virgules."
+              }
+            ]
+          },
+          "apres": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Identifiants dont la tâche dépend."
+          },
+          "saisie_rapide": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "TacheModification": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "titre": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "priorite": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "date_echeance": {
+            "type": "string",
+            "nullable": true,
+            "description": "`null` : supprimer l'échéance."
+          },
+          "recurrence": {
+            "type": "string",
+            "nullable": true,
+            "description": "`null` : supprimer la récurrence."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Remplace les tags (`[]` : tous supprimés)."
+          },
+          "apres": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Remplace les dépendances (`[]` : aucune)."
+          },
+          "ajouter_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "retirer_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string",
+            "description": "Note ajoutée à la tâche."
+          }
+        }
+      },
+      "Ecriture": {
+        "type": "object",
+        "required": [
+          "ok",
+          "action",
+          "count",
+          "tasks",
+          "errors"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "string"
+          },
+          "project": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tache"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "to": {
+            "type": "string",
+            "description": "Projet cible (move)."
+          }
+        }
+      },
+      "Projets": {
+        "type": "object",
+        "properties": {
+          "courant": {
+            "type": "string"
+          },
+          "projets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "projet": {
+                  "type": "string"
+                },
+                "a_faire": {
+                  "type": "integer"
+                },
+                "terminees": {
+                  "type": "integer"
+                },
+                "archivees": {
+                  "type": "integer"
+                },
+                "courant": {
+                  "type": "boolean"
+                },
+                "dossier": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Agenda": {
+        "type": "object",
+        "properties": {
+          "debut": {
+            "type": "string"
+          },
+          "fin": {
+            "type": "string"
+          },
+          "en_retard": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tache"
+            }
+          },
+          "jours": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string"
+                },
+                "taches": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Tache"
+                  }
+                }
+              }
+            }
+          },
+          "plus_tard": {
+            "type": "integer"
+          },
+          "sans_echeance": {
+            "type": "integer"
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "description": "Compteurs ; un compteur `tag.NOM` par tag.",
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "terminees": {
+            "type": "integer"
+          },
+          "pourcentage_termine": {
+            "type": "integer"
+          },
+          "terminees_aujourdhui": {
+            "type": "integer"
+          },
+          "terminees_7_jours": {
+            "type": "integer"
+          },
+          "priorite_high": {
+            "type": "integer"
+          },
+          "priorite_medium": {
+            "type": "integer"
+          },
+          "priorite_low": {
+            "type": "integer"
+          },
+          "en_retard": {
+            "type": "integer"
+          },
+          "pour_aujourdhui": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": {
+          "type": "integer"
+        }
+      },
+      "Vues": {
+        "type": "object",
+        "properties": {
+          "projet": {
+            "type": "string"
+          },
+          "vues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "vue": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "commande": {
+                  "type": "string"
+                },
+                "creee": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
