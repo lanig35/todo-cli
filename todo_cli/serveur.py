@@ -51,6 +51,27 @@ _STATUT_422 = ("invalid_date", "invalid_priority", "invalid_repeat", "invalid_du
                "nothing_to_edit", "empty_id", "invalid_project_name")
 
 
+_SWAGGER = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/"
+_SWAGGER_CSS, _SWAGGER_JS = _SWAGGER + "swagger-ui.css", _SWAGGER + "swagger-ui-bundle.js"
+_SWAGGER_CSS_SRI = "sha384-wxLW6kwyHktdDGr6Pv1zgm/VGJh99lfUbzSn6HNHBENZlCN7W602k9VkGdxuFvPn"
+_SWAGGER_JS_SRI = "sha384-wmyclcVGX/WhUkdkATwhaK1X1JtiNrr2EoYJ+diV3vj4v6OC5yCeSu+yW13SYJep"
+_PAGE_SWAGGER = """<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>todo-cli · API (Swagger UI)</title>
+  <link rel="stylesheet" href="{css}" integrity="{css_sri}" crossorigin="anonymous">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="{js}" integrity="{js_sri}" crossorigin="anonymous"></script>
+  <script src="{init}"></script>
+</body>
+</html>
+"""
+
+
 class ErreurApi(Exception):
     """Erreur renvoyée telle quelle au client : {"error": {"code", "message"}}."""
 
@@ -302,7 +323,7 @@ def creer_application(token=None, delai=None, taille_max=None, web=None):
 
     @app.before_request
     def authentifier():
-        if not request.path.startswith(PREFIXE + "/") or request.path in (PREFIXE + "/health", PREFIXE + "/openapi.json"):
+        if not request.path.startswith(PREFIXE + "/") or request.path in (PREFIXE + "/health", PREFIXE + "/openapi.json", PREFIXE + "/docs"):
             return None                      # l'interface web a sa propre garde (session) : voir web.py
         fourni = request.headers.get("Authorization", "")
         schema, _, valeur = fourni.partition(" ")
@@ -366,7 +387,20 @@ def creer_application(token=None, delai=None, taille_max=None, web=None):
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "openapi.json"), encoding="utf-8") as f:
             description = json.load(f)
         description["info"]["version"] = __version__
+        # « Try it out » doit viser ce serveur-ci (hôte et schéma vus par le client, y compris derrière un proxy), pas 127.0.0.1
+        description["servers"] = [{"url": request.url_root.rstrip("/") + PREFIXE}]
         return repondre(description)
+
+    @app.get(PREFIXE + "/docs")
+    def documentation():
+        """Swagger UI (chargé depuis jsDelivr, version fixée et empreintes SRI) sur le document OpenAPI du serveur."""
+        from flask import url_for
+        page = _PAGE_SWAGGER.format(css=_SWAGGER_CSS, js=_SWAGGER_JS, css_sri=_SWAGGER_CSS_SRI, js_sri=_SWAGGER_JS_SRI,
+                                    init=url_for("static", filename="swagger-init.js"))
+        r = make_response(page)
+        r.headers["Content-Type"] = "text/html; charset=utf-8"
+        r.headers["Cache-Control"] = "no-store"
+        return r
 
     @app.get(PREFIXE + "/projects")
     def projets():
