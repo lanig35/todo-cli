@@ -22,6 +22,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Projets : plusieurs listes indépendantes (perso, travail…), chacune avec son archive, ses sauvegardes et son `undo` (`project`, `-p`)
 - Journal des actions et des erreurs, lisible avec `journalctl -t todo`
 - Configuration par fichier INI, variables d'environnement et options (`todo config`)
+- `report review` : revue hebdomadaire en lecture seule, avec rappel (`reminder`) et envoi par cron
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
 - Notes datées sur les tâches (`note`, ou `-m` sur `done`, `undone`, `postpone`, `edit`, `remove`)
@@ -766,7 +767,9 @@ TODO_SERVER_TOKEN=… TODO_SERVER_PROXY=1 gunicorn --workers 1 --threads 8 --tim
 **Un seul `--workers`** : les écritures et la vérification `If-Match` sont sérialisées par un verrou de processus.
 
 L'API est décrite en **OpenAPI 3.0** (`todo_cli/openapi.json`), servie sans jeton sur `GET /api/v1/openapi.json` : importable dans
-Swagger UI, Redoc, Postman, Insomnia ou `openapi-generator` pour produire un client dans un autre langage. Les tests vérifient que
+Swagger UI, Redoc, Postman, Insomnia ou `openapi-generator` pour produire un client dans un autre langage. Le serveur propose aussi
+sa propre **Swagger UI** sur `/api/v1/docs` (page publique ; le bouton « Authorize » prend le jeton ; Swagger UI est chargé depuis jsDelivr, avec
+version fixée et empreintes SRI, donc le navigateur doit pouvoir joindre ce CDN). Les tests vérifient que
 le document décrit exactement les routes réelles et que les réponses respectent ses schémas. Réglage `[server] proxy`
 (`TODO_SERVER_PROXY`) : derrière un proxy HTTPS de confiance seulement.
 
@@ -1222,6 +1225,7 @@ todo report done                      # bilan des tâches terminées ces 7 derni
 todo report done --since 1m --until 2w --with-archive
 todo report active                    # tâches en cours (démarrées, pas terminées), la plus ancienne d'abord
 todo report cycle --by tag            # délai démarrage → fin des tâches terminées, par tag (voir « Suivi du temps »)
+todo report review                    # revue hebdomadaire : semaine écoulée, points à traiter, semaine à venir (voir plus bas)
 ```
 
 | Rapport | Contenu | Options |
@@ -1233,6 +1237,7 @@ todo report cycle --by tag            # délai démarrage → fin des tâches te
 | `done` | tâches terminées entre `--since` (7d par défaut) et `--until` (aujourd'hui), dates incluses, regroupées par jour, le plus récent d'abord | `--since`, `--until`, `--with-archive` |
 | `active` | tâches **démarrées et pas terminées**, la plus ancienne d'abord, avec le temps écoulé | — |
 | `cycle` | délai démarrage → fin (nombre, moyenne, médiane, plus court, plus long) des tâches terminées entre `--since` (30d par défaut) et `--until`, avec ou sans regroupement | `--since`, `--until`, `--by tag\|prio`, `--with-archive` |
+| `review` | revue hebdomadaire (voir ci-dessous) | `--days`, `--older-than`, `--limit` |
 
 Les dates de `--since`, `--until` et `--older-than` suivent les formats de `--done-after` : `7d`, `2w`, `1m`, `1y`,
 `hier`, `aujourd'hui` ou `AAAA-MM-JJ` ; une date future est refusée. L'archive n'est lue qu'avec `--with-archive`.
@@ -1256,6 +1261,38 @@ au format de `list --format json`, plus `attend` pour `blocked`, `jours_retard` 
 "jours": [{"date", "taches": [...]}]}`. `active` : `{"date", "total", "taches": [...]}` (chaque tâche avec `ecoule_minutes`). `cycle` : `{"depuis", "jusqu_a",
 "avec_archive", "par", "mesurees", "sans_demarrage", "unite": "minutes", "groupes": [{"nom", "nombre", "moyenne", "mediane", "min", "max"}],
 "taches": [...]}` (chaque tâche avec `delai_minutes`).
+
+#### Revue hebdomadaire
+
+`todo report review` est un rapport **en lecture seule** (il ne modifie rien) à lire une fois par semaine. Il tient en six sections :
+
+| Section | Contenu |
+|---|---|
+| Terminées cette semaine | tâches terminées pendant les `--days` derniers jours (7 par défaut, aujourd'hui compris), archive comprise |
+| En retard | échéance dépassée, les plus en retard d'abord |
+| En cours | démarrées (`task start`) et pas terminées, avec le temps écoulé |
+| Bloquées | en attente d'une dépendance encore à faire |
+| Qui traînent | sans échéance, créées il y a au moins `--older-than` (30d par défaut) |
+| Semaine à venir | échéances des `--days` prochains jours, jour par jour ; le reste est compté (« plus tard », « sans échéance ») |
+
+L'en-tête donne le bilan (terminées, créées, à faire, en retard). En format `text`, chaque section est limitée à `--limit` tâches (10 par
+défaut) et indique la commande qui donne la suite. `plain` et `table` : une ligne par tâche, colonnes `section` (`terminee`, `retard`,
+`en_cours`, `bloquee`, `traine`, `a_venir`), `id`, `priorite`, `date`, `titre`. `json` : `{"date", "depuis", "jusqu_a", "jours", "bilan",
+"terminees", "en_retard", "en_cours", "bloquees", "qui_trainent", "a_venir"}` (chaque section `{"total", "taches": [...]}` ; `a_venir`
+regroupe les tâches par `jours` et ajoute `plus_tard` et `sans_echeance`). Réglages `[review]` : `days`, `stale`, `limit`, `day`.
+Comme les autres rapports, elle peut être enregistrée comme vue (`todo view save revue report review --days 14`).
+
+Pour **être prévenu** : `[review] day = fri` (ou `TODO_REVIEW_DAY=fri`) fait signaler le jour de la revue par `todo reminder check`
+(ligne « 📋 Jour de la revue hebdomadaire », y compris quand aucune tâche n'est en retard ; `--once-a-day` l'affiche une seule fois ;
+`--write-status` l'ajoute au résumé de l'invite ; `--format json` ajoute la clé `revue`). Pour **recevoir le rapport** par courriel :
+`examples/cron/revue-hebdomadaire.sh` (options : `REVUE_DEST`, `REVUE_SUJET`, `REVUE_OPTIONS`, `REVUE_PROJET`, `TODO_BIN`) :
+
+```cron
+# Rappel dans le terminal le vendredi (réglage [review] day = fri), et rapport par courriel le vendredi à 17 h
+0 17 * * 5   TODO_BIN=/home/vous/bin/todo REVUE_DEST=vous@example.org /home/vous/bin/revue-hebdomadaire.sh
+```
+
+Sans commande `mail`, le script écrit le rapport sur sa sortie : `cron` l'envoie alors à `MAILTO`.
 
 ```bash
 todo report overdue --format json | jq -r '.taches[] | "\(.jours_retard) j  \(.titre)"'
@@ -1694,7 +1731,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `vues.py` | vues enregistrées : fichier `views.json`, validation, groupe `view` |
 | `ecriture_json.py` | sortie JSON des commandes d'écriture (`--format json`) |
 | `hooks.py` | hooks : commandes lancées après une modification |
-| `openapi.json` | Description OpenAPI 3.0 de l'API (servie par `/api/v1/openapi.json`) |
+| `openapi.json` | Description OpenAPI 3.0 de l'API (servie par `/api/v1/openapi.json`, présentée par `/api/v1/docs`) |
 | `client.py` | Client Python (`requests`) de l'API REST |
 | `tui.py`, `tui_modele.py` | TUI curses (mise en page, boucle) et son modèle sans écran |
 | `web.py` + `templates/`, `static/` | Interface web (pages Jinja, Bootstrap, session, CSRF) |

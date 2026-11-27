@@ -1,4 +1,4 @@
-"""Rapports : tags, tâches bloquées, en retard, qui traînent, bilan des tâches terminées, tâches en cours et délais.
+"""Rapports : tags, tâches bloquées, en retard, qui traînent, bilan des tâches terminées, tâches en cours, délais et revue hebdomadaire.
 
 Chaque rapport existe dans les quatre formats habituels :
   text  affichage décoré (pager automatique), table  tableau aligné sans couleur,
@@ -8,7 +8,7 @@ Les rapports lisent la base sans la modifier.
 """
 import json
 import statistics
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import couleurs, dependances
 from .affichage import _afficher_texte
@@ -286,3 +286,152 @@ def rapport_delais(depuis, jusqu_a, avec_archive=False, par=None, fmt="text", pa
     rangees = [[g["nom"], str(g["nombre"]), str(g["moyenne"]), str(g["mediane"]), str(g["min"]), str(g["max"])] for g in groupes]
     _sortie(fmt, ("GROUPE", "NOMBRE", "MOYENNE (MIN)", "MÉDIANE (MIN)", "MIN", "MAX"), rangees,
             "Aucune tâche terminée et démarrée sur cette période.", texte, pager)
+
+
+# ---------------------------------------------------------------------------------------------- revue hebdomadaire
+def construire_revue(taches, archivees, aujourdhui, jours, avant, maintenant=None):
+    """Données de la revue : la semaine écoulée (`jours` jours, aujourd'hui compris) et la semaine à venir.
+
+    Fonction pure (testable) : `taches` et `archivees` sont les listes lues dans la base ; `avant` est la date au plus tard
+    de création des tâches « qui traînent ». Les durées (en cours) sont calendaires.
+    """
+    maintenant = maintenant or datetime.now()
+    depuis = aujourdhui - timedelta(days=jours - 1)
+    fin = aujourdhui + timedelta(days=jours - 1)
+    a_faire = [t for t in taches if t['statut'] == STATUT_A_FAIRE]
+
+    def dans_la_periode(valeur):
+        jour = _jour(valeur)
+        return jour is not None and depuis <= jour <= aujourdhui
+
+    terminees = [t for t in taches + archivees if t['statut'] == STATUT_TERMINE and dans_la_periode(t.get('date_terminee'))]
+    terminees.sort(key=lambda t: (t['date_terminee'], t['id']), reverse=True)
+    creees = [t for t in taches + archivees if dans_la_periode(t.get('date_creation'))]
+
+    retards = []
+    for t in a_faire:
+        echeance = _jour(t['date_echeance'])
+        if echeance is not None and echeance < aujourdhui:
+            retards.append({**t, "jours_retard": (aujourdhui - echeance).days})
+    retards.sort(key=lambda t: (-t["jours_retard"], -PRIORITES.index(t['priorite']), t.get('date_creation') or "", t['id']))
+
+    en_cours = []
+    for t in a_faire:
+        debut = lire_instant(t.get('demarree'))
+        if debut is not None:
+            en_cours.append({**t, "ecoule_minutes": duree_minutes(debut, maintenant), "_debut": debut})
+    en_cours.sort(key=lambda t: (t["_debut"], t['id']))
+    for t in en_cours:
+        del t["_debut"]
+
+    par_id = {t['id']: t for t in taches}
+    bloquees = []
+    for t in dependances.annoter(taches):
+        if t['bloquee_par']:
+            bloquees.append({**t, "attend": [{"id": d, "titre": par_id[d]['titre']} for d in t['bloquee_par'] if d in par_id]})
+    bloquees.sort(key=lambda t: (t['date_echeance'] or "9999-12-31",) + _ordre(t))
+
+    trainent = []
+    for t in a_faire:
+        creation = _jour(t.get('date_creation'))
+        if not t['date_echeance'] and creation is not None and creation <= avant:
+            trainent.append({**t, "age_jours": (aujourdhui - creation).days})
+    trainent.sort(key=lambda t: (-t["age_jours"], -PRIORITES.index(t['priorite']), t['id']))
+
+    par_jour, plus_tard, sans_echeance = {}, 0, 0
+    for t in a_faire:
+        echeance = _jour(t['date_echeance'])
+        if echeance is None:
+            sans_echeance += 1
+        elif echeance > fin:
+            plus_tard += 1
+        elif echeance >= aujourdhui:
+            par_jour.setdefault(echeance, []).append(t)
+    for j in par_jour:
+        par_jour[j].sort(key=_ordre)
+    jours_avenir = [{"date": j.isoformat(), "taches": par_jour[j]} for j in sorted(par_jour)]
+
+    return {
+        "date": aujourdhui.isoformat(), "depuis": depuis.isoformat(), "jusqu_a": aujourdhui.isoformat(), "jours": jours,
+        "bilan": {"terminees": len(terminees), "creees": len(creees), "a_faire": len(a_faire), "en_retard": len(retards),
+                  "en_cours": len(en_cours), "bloquees": len(bloquees), "qui_trainent": len(trainent),
+                  "a_venir": sum(len(j["taches"]) for j in jours_avenir)},
+        "terminees": {"total": len(terminees), "taches": terminees},
+        "en_retard": {"total": len(retards), "taches": retards},
+        "en_cours": {"total": len(en_cours), "taches": en_cours},
+        "bloquees": {"total": len(bloquees), "taches": bloquees},
+        "qui_trainent": {"avant": avant.isoformat(), "total": len(trainent), "taches": trainent},
+        "a_venir": {"debut": aujourdhui.isoformat(), "fin": fin.isoformat(), "total": sum(len(j["taches"]) for j in jours_avenir),
+                    "jours": jours_avenir, "plus_tard": plus_tard, "sans_echeance": sans_echeance},
+    }
+
+
+def rapport_revue(jours=7, avant=None, libelle_avant="30d", limite=10, fmt="text", pager=True):
+    """Revue hebdomadaire en lecture seule : bilan de la semaine écoulée, ce qui demande une décision, semaine à venir."""
+    aujourdhui = datetime.now().date()
+    avant = avant or aujourdhui - timedelta(days=30)
+    revue = construire_revue(_lire_taches(), _lire_archive(), aujourdhui, jours, avant)
+    if fmt == "json":
+        _en_json(revue)
+        return
+
+    b = revue["bilan"]
+    rangees = []
+    for t in revue["terminees"]["taches"]:
+        rangees.append(["terminee", t['id'], t['priorite'], t['date_terminee'], t['titre']])
+    for t in revue["en_retard"]["taches"]:
+        rangees.append(["retard", t['id'], t['priorite'], t['date_echeance'], t['titre']])
+    for t in revue["en_cours"]["taches"]:
+        rangees.append(["en_cours", t['id'], t['priorite'], t['demarree'], t['titre']])
+    for t in revue["bloquees"]["taches"]:
+        rangees.append(["bloquee", t['id'], t['priorite'], t['date_echeance'] or "", t['titre']])
+    for t in revue["qui_trainent"]["taches"]:
+        rangees.append(["traine", t['id'], t['priorite'], t['date_creation'][:10], t['titre']])
+    for j in revue["a_venir"]["jours"]:
+        for t in j["taches"]:
+            rangees.append(["a_venir", t['id'], t['priorite'], j["date"], t['titre']])
+    if fmt in ("plain", "table"):
+        _sortie(fmt, ("SECTION", "ID", "PRIO", "DATE", "TITRE"), rangees, "Rien à signaler.", [], pager)
+        return
+
+    def bloc(titre, taches, annexe=None, conseil=""):
+        lignes = [_titre(titre)]
+        if not taches:
+            lignes.append(f"  {couleurs.CLR_DIM}Rien à signaler.{couleurs.CLR_RESET}")
+            return lignes
+        for t in taches[:limite]:
+            lignes.append(_ligne_tache(t) + (annexe(t) if annexe else ""))
+        if len(taches) > limite:
+            lignes.append(f"  {couleurs.CLR_DIM}… et {len(taches) - limite} autre(s){' (' + conseil + ')' if conseil else ''}{couleurs.CLR_RESET}")
+        return lignes
+
+    depuis, fin = _parse_date(revue["depuis"]), _parse_date(revue["a_venir"]["fin"])
+    texte = [_titre(f"📋 REVUE : {_libelle_jour(depuis, aujourdhui)} → {_libelle_jour(aujourdhui, aujourdhui)}"),
+             f"  {couleurs.CLR_BOLD}{b['terminees']}{couleurs.CLR_RESET} terminée(s) · {couleurs.CLR_BOLD}{b['creees']}{couleurs.CLR_RESET} créée(s) · "
+             f"{couleurs.CLR_BOLD}{b['a_faire']}{couleurs.CLR_RESET} à faire"
+             + (f" · {couleurs.CLR_DEL}{b['en_retard']} en retard{couleurs.CLR_RESET}" if b['en_retard'] else "")]
+    texte += bloc("✅ TERMINÉES CETTE SEMAINE", revue["terminees"]["taches"], lambda t: f" {couleurs.CLR_DIM}[{t['date_terminee'][:10]}]{couleurs.CLR_RESET}",
+                  f"todo report done --since {jours}d")
+    texte += bloc("⏰ EN RETARD", revue["en_retard"]["taches"], lambda t: f" {couleurs.CLR_DEL}[{t['jours_retard']} j.]{couleurs.CLR_RESET}",
+                  "todo report overdue")
+    texte += bloc("▶️  EN COURS", revue["en_cours"]["taches"], lambda t: f" {couleurs.CLR_TODO}[▶ {duree_lisible(t['ecoule_minutes'])}]{couleurs.CLR_RESET}",
+                  "todo report active")
+    texte += bloc("🔒 BLOQUÉES", revue["bloquees"]["taches"], lambda t: f" {couleurs.CLR_DIM}↳ attend : "
+                  + ", ".join(a['titre'] for a in t['attend']) + couleurs.CLR_RESET, "todo report blocked")
+    texte += bloc(f"🕸️  QUI TRAÎNENT (sans échéance, créées il y a {libelle_avant} ou plus)", revue["qui_trainent"]["taches"],
+                  lambda t: f" {couleurs.CLR_DIM}[créée il y a {t['age_jours']} j.]{couleurs.CLR_RESET}", f"todo report stale --older-than {libelle_avant}")
+    texte.append(_titre(f"📅 SEMAINE À VENIR : {_libelle_jour(aujourdhui, aujourdhui)} → {_libelle_jour(fin, aujourdhui)}"))
+    av, restant = revue["a_venir"], limite
+    if not av["jours"]:
+        texte.append(f"  {couleurs.CLR_DIM}Rien d'échu sur cette période.{couleurs.CLR_RESET}")
+    for j in av["jours"]:
+        if restant <= 0:
+            texte.append(f"  {couleurs.CLR_DIM}… et {av['total'] - (limite - restant)} autre(s) (todo agenda --days {jours}){couleurs.CLR_RESET}")
+            break
+        texte.append(f"\n  {couleurs.CLR_BOLD}{_libelle_jour(_parse_date(j['date']), aujourdhui).capitalize()}{couleurs.CLR_RESET} "
+                     f"{couleurs.CLR_DIM}({len(j['taches'])}){couleurs.CLR_RESET}")
+        for t in j["taches"][:restant]:
+            texte.append(_ligne_tache(t))
+        restant -= len(j["taches"])
+    texte += _pied(f"{av['total']} échéance(s) cette semaine", f"{av['plus_tard']} plus tard", f"{av['sans_echeance']} sans échéance")
+    _afficher_texte("\n".join(texte), pager)

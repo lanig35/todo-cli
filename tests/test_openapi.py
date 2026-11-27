@@ -88,6 +88,8 @@ def test_toutes_les_routes_sont_documentees_et_inversement(spec, app):
         if not regle.rule.startswith(serveur.PREFIXE + "/"):
             continue
         chemin = regle.rule.removeprefix(serveur.PREFIXE)
+        if chemin == "/docs":  # page HTML de Swagger UI, pas une opération de l'API
+            continue
         chemin = chemin.replace("<id_>", "{id}").replace("<nom>", "{nom}")
         for methode in regle.methods - {"HEAD", "OPTIONS"}:
             if "<action>" in chemin:
@@ -119,7 +121,34 @@ def test_document_servi_sans_jeton(app, spec):
     servi = r.get_json()
     assert servi["info"]["version"] == __version__
     servi["info"]["version"] = spec["info"]["version"]
+    assert servi.pop("servers") == [{"url": "http://localhost/api/v1"}]
+    spec = {k: v for k, v in spec.items() if k != "servers"}
     assert servi == spec
+
+
+def test_serveur_du_document_suit_l_hote_et_le_schema_vus(app):
+    r = app.test_client().get(serveur.PREFIXE + "/openapi.json", base_url="https://todo.example.org")
+    assert r.get_json()["servers"] == [{"url": "https://todo.example.org/api/v1"}]
+
+
+# ---------------------------------------------------------------- Swagger UI
+def test_page_swagger_sans_jeton_et_pointe_vers_le_document(app):
+    r = app.test_client().get(serveur.PREFIXE + "/docs")
+    assert r.status_code == 200 and r.mimetype == "text/html"
+    page = r.get_data(as_text=True)
+    assert 'id="swagger-ui"' in page and "swagger-ui-dist@" in page and "integrity=" in page
+    assert "/static/swagger-init.js" in page
+    assert r.headers["Cache-Control"] == "no-store"
+
+
+def test_script_d_initialisation_servi_et_vise_openapi_json(app):
+    r = app.test_client().get("/static/swagger-init.js")
+    assert r.status_code == 200
+    assert 'url: "openapi.json"' in r.get_data(as_text=True)
+
+
+def test_la_page_swagger_n_est_pas_dans_le_contrat(spec):
+    assert "/docs" not in spec["paths"]
 
 
 def test_validateur_externe(spec):

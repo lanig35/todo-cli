@@ -219,7 +219,15 @@ curl -s http://127.0.0.1:8765/api/v1/health            # la version a changé
 
 ## 9. OpenAPI
 
-L'API est décrite par `todo_cli/openapi.json` (OpenAPI 3.0), servie **sans jeton** sur `GET /api/v1/openapi.json`. Quelques usages :
+L'API est décrite par `todo_cli/openapi.json` (OpenAPI 3.0), servie **sans jeton** sur `GET /api/v1/openapi.json` (le champ `servers` suit
+l'hôte et le schéma vus par le serveur, y compris derrière un proxy avec `[server] proxy`).
+
+**Swagger UI intégrée** : `https://todo.example.org/api/v1/docs` (page publique, comme le document). Cliquer sur « Authorize » et saisir
+le jeton pour tester les routes (« Try it out »). Swagger UI vient de jsDelivr (version fixée, empreintes SRI) : si les postes clients n'ont
+pas accès à Internet, servir plutôt `swagger-ui-dist` vous-même. Pas de réglage CSP à adapter côté proxy, sauf si vous en imposez une :
+autoriser `cdn.jsdelivr.net` en `script-src` et `style-src`.
+
+Autres usages :
 
 ```bash
 curl -s https://todo.example.org/api/v1/openapi.json > openapi.json

@@ -20,7 +20,7 @@ from .formats import imprimer_plain, tableau
 _NOM = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")
 # Commandes de lecture seule qu'on peut mémoriser (nom canonique du journal)
 COMMANDES_AUTORISEES = ("list", "next", "agenda", "stats", "report_tags", "report_blocked", "report_overdue", "report_stale",
-                        "report_done", "report_active", "report_cycle")
+                        "report_done", "report_active", "report_cycle", "report_review")
 _OPTIONS_PROJET = ("-p", "--project")
 
 

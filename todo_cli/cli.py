@@ -19,7 +19,8 @@ from .dates import _decaler
 from .filtres import MSG_FORMATS_DATE_PASSEE, parser_instant, resoudre_date_passee
 from .saisie import analyser_titre
 from .prochaine import afficher_prochaines
-from .rapports import rapport_bloquees, rapport_delais, rapport_en_cours, rapport_retards, rapport_stagnantes, rapport_tags, rapport_terminees
+from .rapports import (rapport_bloquees, rapport_delais, rapport_en_cours, rapport_retards, rapport_revue, rapport_stagnantes,
+                       rapport_tags, rapport_terminees)
 from .rappel import activer_rappels, afficher_etat_rappels, desactiver_rappels, rappeler
 from .sauvegardes import annuler_derniere_action, reinitialiser_base, restaurer_base
 from .seed import peupler_fausses_taches
@@ -611,6 +612,16 @@ def _args_rapport_tags(p):
     _args_sortie_rapport(p)
 
 
+def _args_rapport_review(p):
+    p.add_argument('--days', type=_entier_positif, default=None, metavar='N',
+                   help="Durée de la revue en jours : semaine écoulée et semaine à venir (défaut : 7, ou [review] days)")
+    p.add_argument('--older-than', type=str, default=None, metavar='DURÉE',
+                   help="« Qui traînent » : tâches sans échéance créées il y a au moins cette durée (défaut : 30d, ou [review] stale)")
+    p.add_argument('--limit', type=int, default=None, metavar='N',
+                   help="Nombre maximal de tâches listées par section en format text (défaut : 10, ou [review] limit)")
+    _args_sortie_rapport(p)
+
+
 def _args_rapport_stale(p):
     p.add_argument('--older-than', type=str, default='30d', metavar='DURÉE',
                    help="Créées il y a au moins cette durée : 30d (défaut), 2w, 6m, 1y, hier ou AAAA-MM-JJ")
@@ -896,6 +907,7 @@ _GROUPES = [
         ('done', 'report_done', _args_rapport_done, 'Bilan des tâches terminées sur une période', {}),
         ('active', 'report_active', _args_rapport_active, 'Tâches en cours (démarrées, pas terminées) et temps écoulé', {}),
         ('cycle', 'report_cycle', _args_rapport_cycle, 'Délai démarrage → fin des tâches terminées', {}),
+        ('review', 'report_review', _args_rapport_review, 'Revue hebdomadaire : bilan de la semaine, points à traiter, semaine à venir', {}),
     ]),
     ('view', "Vues enregistrées : une commande de lecture mémorisée sous un nom (par projet)", [
         ('save', 'view_save', _args_vue_enregistrer, 'Enregistrer une vue (list, next, agenda, report … avec ses options)', {}),
@@ -1051,7 +1063,7 @@ def _mode_verrou(args):
     if c in ('project_rename', 'project_delete'):
         return verrou.EXCLUSIF         # sur le projet visé (voir main)
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
-             'report_stale', 'report_done', 'report_active', 'report_cycle', 'view_list', 'view_show', 'hooks_queue', 'hooks_flush', 'hooks_clear', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
+             'report_stale', 'report_done', 'report_active', 'report_cycle', 'report_review', 'view_list', 'view_show', 'hooks_queue', 'hooks_flush', 'hooks_clear', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
@@ -1431,6 +1443,15 @@ def main():
         jusqu_a = _date_passee(args.until, '--until') or datetime.now().date()
         _plage_vide(depuis, jusqu_a, '--since', '--until')
         rapport_delais(depuis, jusqu_a, args.with_archive, args.by, args.format, pager=reglages.obtenir('general', 'pager', args.pager))
+    elif args.commande == 'report_review':
+        if args.days is not None and args.days > 90:
+            journal.echec("days_limit")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --days ne peut pas dépasser 90.")
+            sys.exit(1)
+        jours = reglages.obtenir('review', 'days', args.days)
+        ancien = reglages.obtenir('review', 'stale', args.older_than)
+        rapport_revue(jours, _date_passee(ancien, '--older-than'), ancien, reglages.obtenir('review', 'limit', args.limit),
+                      args.format, pager=reglages.obtenir('general', 'pager', args.pager))
     elif args.commande == 'project_current':
         succes = projets.afficher_courant(config.projet(), config.origine_projet(), args.format)
     elif args.commande == 'project_list':

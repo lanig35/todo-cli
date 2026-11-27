@@ -3,6 +3,20 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.14.0] - 2026-11-27
+
+### Ajouté
+
+- **Swagger UI** : page `GET /api/v1/docs` (publique) qui charge Swagger UI et pointe vers `openapi.json`. Le champ `servers` du document
+  servi suit l'hôte et le schéma de la requête, de sorte que « Try it out » vise le bon serveur, y compris derrière un proxy.
+- **Revue hebdomadaire** : `todo report review`, rapport en lecture seule en six sections (terminées de la semaine, en retard, en cours,
+  bloquées, qui traînent, semaine à venir) avec bilan chiffré. Formats text, table, plain et json ; options `--days`, `--older-than`,
+  `--limit` ; réglages `[review] days`, `stale`, `limit` ; utilisable comme vue enregistrée.
+- **Rappel de revue** : `[review] day` (`mon` … `sun`, `TODO_REVIEW_DAY`) fait signaler le jour de la revue par `todo reminder check`
+  (texte, `--once-a-day`, résumé `--write-status`, clé `revue` du JSON).
+- `examples/cron/revue-hebdomadaire.sh` : envoie le rapport par courriel (ou l'écrit sur la sortie, pour `MAILTO`), avec un exemple
+  de crontab.
+
 ## [3.13.0] - 2026-11-26
 
 ### Ajouté
@@ -590,6 +604,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 [3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
 [3.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.11.0
 [3.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.12.0
+[3.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.14.0
 [3.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.13.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0
 [3.7.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.7.0

@@ -130,6 +130,18 @@ def afficher_etat_rappels(fmt="text"):
 
 
 # --------------------------------------------------------------------------- contenu
+_JOURS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def jour_de_revue(aujourdhui):
+    """Vrai si [review] day désigne le jour de la semaine d'`aujourdhui` (vide = pas de rappel de revue)."""
+    return reglages.obtenir("review", "day") == _JOURS[aujourdhui.weekday()]
+
+
+def _ligne_revue():
+    return f" {couleurs.CLR_BOLD}📋 Jour de la revue hebdomadaire{couleurs.CLR_RESET} {couleurs.CLR_DIM}→ todo report review{couleurs.CLR_RESET}"
+
+
 def _ordre(t):
     """Priorité haute d'abord, puis échéance la plus ancienne, puis création, id (déterministe)."""
     return (-PRIORITES.index(t['priorite']), t['date_echeance'], t.get('date_creation') or "", t['id'])
@@ -167,7 +179,7 @@ def _compteurs(retards, du_jour, a_venir):
     return morceaux
 
 
-def resume_une_ligne(retards, du_jour, a_venir):
+def resume_une_ligne(retards, du_jour, a_venir, revue=False):
     """Résumé court, sans couleur, pour l'invite du shell ; chaîne vide s'il n'y a rien."""
     morceaux = []
     if retards:
@@ -176,7 +188,12 @@ def resume_une_ligne(retards, du_jour, a_venir):
         morceaux.append(f"{len(du_jour)} aujourd'hui")
     if a_venir:
         morceaux.append(f"{len(a_venir)} à venir")
-    return ("⚠ " + " · ".join(morceaux) + " ") if morceaux else ""
+    if not (morceaux or revue):
+        return ""
+    texte = ("⚠ " + " · ".join(morceaux)) if morceaux else ""
+    if revue:
+        texte += (" · " if morceaux else "") + "📋 revue"
+    return texte + " "
 
 
 def _ligne(t, aujourdhui):
@@ -185,10 +202,13 @@ def _ligne(t, aujourdhui):
             f"{_libelle_echeance(t, aujourdhui)}{etiquette_projet(t)} {couleurs.CLR_DIM}(id: {t['id'][:8]}){couleurs.CLR_RESET}")
 
 
-def texte_rappel(retards, du_jour, a_venir, aujourdhui, limite):
-    """Le rappel complet (en-tête, `limite` tâches au plus, pied de page), ou '' s'il n'y a rien."""
+def texte_rappel(retards, du_jour, a_venir, aujourdhui, limite, revue=False):
+    """Le rappel complet (en-tête, `limite` tâches au plus, pied de page), ou '' s'il n'y a rien.
+
+    `revue` ajoute l'invitation à la revue hebdomadaire (seule, s'il n'y a pas de tâche à signaler).
+    """
     if not (retards or du_jour or a_venir):
-        return ""
+        return _ligne_revue() if revue else ""
     couleur = couleurs.CLR_DEL if retards else couleurs.CLR_P_HIGH
     lignes = [f" {couleur}{couleurs.CLR_BOLD}⚠️  {' · '.join(_compteurs(retards, du_jour, a_venir))}{couleurs.CLR_RESET}"]
     toutes = retards + du_jour + a_venir
@@ -197,6 +217,8 @@ def texte_rappel(retards, du_jour, a_venir, aujourdhui, limite):
         lignes.append(f"   {couleurs.CLR_DIM}… et {len(toutes) - limite} autre(s){couleurs.CLR_RESET}")
     suite = "todo next" if not retards else "todo list --overdue"
     lignes.append(f" {couleurs.CLR_DIM}→ {suite}{couleurs.CLR_RESET}")
+    if revue:
+        lignes.append(_ligne_revue())
     return "\n".join(lignes)
 
 
@@ -221,6 +243,7 @@ def rappel_json(bientot=0):
         "actif": etat["actif"],
         "desactive_par": etat["desactive_par"],
         "bientot_jours": bientot,
+        "revue": {"jour": reglages.obtenir("review", "day") or None, "aujourdhui": bool(etat["actif"] and jour_de_revue(aujourdhui))},
         "compteurs": {"retards": len(retards), "aujourdhui": len(du_jour), "a_venir": len(a_venir),
                       "total": len(retards) + len(du_jour) + len(a_venir)},
         "retards": _taches_json(retards, aujourdhui),
@@ -258,10 +281,10 @@ def rappeler(limite=5, bientot=0, une_fois_par_jour=False, ecrire_statut=False, 
     retards, du_jour, a_venir = construire_rappel(_lire_taches(), aujourdhui, bientot)
 
     if ecrire_statut:
-        _ecrire(config.REMIND_STATUS, resume_une_ligne(retards, du_jour, a_venir))
+        _ecrire(config.REMIND_STATUS, resume_une_ligne(retards, du_jour, a_venir, jour_de_revue(aujourdhui)))
         return
 
-    texte = texte_rappel(retards, du_jour, a_venir, aujourdhui, limite)
+    texte = texte_rappel(retards, du_jour, a_venir, aujourdhui, limite, jour_de_revue(aujourdhui))
     if not texte:
         return
     if une_fois_par_jour:
