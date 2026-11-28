@@ -3,6 +3,20 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.15.0] - 2026-11-28
+
+### Ajouté
+
+- **`todo admin doctor`** : diagnostic de la base, du stockage et de la configuration, en lecture seule. Il lit les entrées brutes
+  (entrées illisibles, statut, échéance, récurrence et dates incorrects, dépendances cassées ou circulaires, doublons liste/archive,
+  pièces jointes manquantes ou orphelines, fichier des vues, file du webhook, réglages et variables `TODO_…` inconnus, commandes de
+  hooks introuvables, droits du dossier de stockage, espace disque, moteur DBM, absence de sauvegarde). Constats classés en `erreur`,
+  `avertissement` et `info`, avec un code stable ; formats text, table, plain et json ; `--all-projects`, `--strict`,
+  `--no-attachments`. Code de sortie `1` en cas d'erreur (`--strict` : aussi pour un avertissement).
+- **`todo admin doctor --fix`** : répare ce qui ne perd aucune information utile (priorité ou instant de démarrage invalides, date de
+  fin d'une tâche à faire, éléments invalides de `tags` et `apres`, dépendances vers des tâches disparues), avec confirmation
+  (`--yes`), simulation (`--dry-run`), verrou exclusif et sauvegarde avant et après : `todo undo` annule. Un projet à la fois.
+
 ## [3.14.0] - 2026-11-27
 
 ### Ajouté
@@ -604,6 +618,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 [3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
 [3.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.11.0
 [3.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.12.0
+[3.15.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.15.0
 [3.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.14.0
 [3.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.13.0
 [3.8.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.8.0

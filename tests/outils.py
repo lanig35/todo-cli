@@ -91,7 +91,7 @@ class Todo:
         self.fichier_log = self.dossier / "todo.log"
         # Journal coupé par défaut : jamais de message dans le vrai journald ni dans ~/.local/state
         env.update(TODO_DB_DIR=str(self.db_dir), TODO_CONFIG=str(self.fichier_config), TODO_LOG_TARGET="off",
-                   TODO_LOG_FILE=str(self.fichier_log), PYTHONDONTWRITEBYTECODE="1", TERM="xterm", TODO_NO_DEPRECATION="1", TODO_FORMAT="text")
+                   TODO_LOG_FILE=str(self.fichier_log), PYTHONDONTWRITEBYTECODE="1", TERM="xterm", TODO_FORMAT="text")
         self.env = env
 
     def _env(self, supplementaire):
