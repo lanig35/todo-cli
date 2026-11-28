@@ -245,14 +245,14 @@ def test_list_marque_les_taches_en_cours(deux):
 
 def test_show_affiche_depart_et_delai(deux):
     todo, a, _ = deux
-    todo("task", "start", a, "--at", "2d 10:00")
+    todo("task", "start", a, "--at", "2d 00:00")                         # minuit : « 2 j » quelle que soit l'heure du test
     texte = todo("show", a, "--format", "text").texte
-    assert f"Démarrée le : {instant(-2, '10:00')}" in texte and "depuis 2 j" in texte
+    assert f"Démarrée le : {instant(-2, '00:00')}" in texte and "depuis 2 j" in texte
     todo("done", a)
     texte = todo("show", a, "--format", "text").texte
     assert "Délai" in texte and "durée calendaire" in texte and "depuis" not in texte
     ligne = [l.split("\t") for l in todo("show", a, "--format", "plain").sortie.splitlines()]
-    assert ["demarree", instant(-2, "10:00")] in ligne
+    assert ["demarree", instant(-2, "00:00")] in ligne
 
 
 def test_json_de_list_porte_demarree(deux):
@@ -299,7 +299,7 @@ def test_report_active(deux):
     todo, a, b = deux
     todo("add", "Fini")
     todo("task", "start", a, "--at", "hier 9:00")
-    todo("task", "start", b, "--at", "2d 8:00")
+    todo("task", "start", b, "--at", "2d 00:00")        # minuit : « 2 j » quelle que soit l'heure du test
     todo("task", "start", todo.id_de("Fini"))
     todo("done", todo.id_de("Fini"))
     lignes = plain(todo, "report", "active")
