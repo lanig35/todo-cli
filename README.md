@@ -352,6 +352,14 @@ todo list --has-files                             # tâches qui ont des pièces 
 ```
 
 - **Stockage** : `<dossier du projet>/attachments/<id de la tâche>/<nom>` (voir *Stockage*), en 0600 dans des dossiers 0700.
+  Le réglage `[attachments] dir` (ou `TODO_ATTACHMENTS_DIR`) choisit un autre dossier, par exemple sur un disque
+  sauvegardé : les copies vont alors dans `<dir>/<projet>/<id de la tâche>/<nom>` (`default` pour le projet par
+  défaut). `~` est accepté ; un chemin relatif part du dossier de stockage, pas du dossier courant. Le dossier
+  `<dir>` n'est jamais modifié (seuls `<dir>/<projet>` et dessous passent en 0700). Les fichiers déjà copiés **ne
+  sont pas déplacés** quand on change le réglage : `attachment check` les signale manquants tant que vous ne les
+  avez pas copiés à la main (`mv <ancien>/attachments/* <dir>/<projet>/`). `project rename` déplace les pièces avec
+  le projet, `project delete` les met dans `<dir>/.trash/<nom>-AAAAMMJJ-HHMMSS/`. Les pièces ajoutées avec `--link`
+  ne sont pas concernées (elles restent où elles sont).
   Les métadonnées (nom, date, taille, empreinte SHA-256, commentaire) sont dans la tâche : elles apparaissent dans
   `show`, `--format json` (`"pieces_jointes"`) et `attachment list --format json|plain|table`, où `chemin` et
   `present` indiquent si le fichier est bien là (`lien` pour une pièce liée ; en `plain`, c'est la dernière colonne).
@@ -1477,6 +1485,7 @@ batch_confirm = 5       # actions en lot par filtre : confirmation à partir de 
 
 [attachments]
 max_size = 10           # taille maximale d'une pièce jointe, en Mo (0 = pas de limite)
+dir =                   # dossier des pièces jointes copiées (vide = attachments/ dans chaque projet)
 opener =                # commande d'ouverture (less, evince…) ; vide = xdg-open, sinon seul le chemin est affiché
 
 [hooks]
@@ -1521,6 +1530,7 @@ soon = 0
 | `general` | `lock_timeout` | `10` (secondes, 0 = pas d'attente) | `TODO_LOCK_TIMEOUT` | — |
 | `general` | `batch_confirm` | `5` (0 = jamais de confirmation) | `TODO_BATCH_CONFIRM` | `-y` |
 | `attachments` | `max_size` | `10` (Mo ; 0 = pas de limite) | `TODO_ATTACHMENTS_MAX_SIZE` | — |
+| `attachments` | `dir` | *(vide : `<dossier du projet>/attachments`)* | `TODO_ATTACHMENTS_DIR` | — |
 | `attachments` | `opener` | *(vide : `xdg-open` en session graphique, sinon affiche le chemin)* | `TODO_ATTACHMENTS_OPENER` | — |
 | `hooks` | `enabled` | `true` | `TODO_HOOKS_ENABLED` | — |
 | `hooks` | `timeout` | `10` (secondes) | `TODO_HOOKS_TIMEOUT` | — |
@@ -1851,7 +1861,7 @@ status checks to pass* (cocher `pytest (Python`3.13`).
 | Autres projets | `~/.local/share/todo/projects/<nom>/` (mêmes fichiers : base, archive, sauvegardes, verrou) |
 | Projets supprimés | `~/.local/share/todo/.trash/<nom>-AAAAMMJJ-HHMMSS/` |
 | Vues enregistrées | `<dossier du projet>/views.json` |
-| Pièces jointes | `<dossier du projet>/attachments/<id de la tâche>/<nom>` ; corbeille : `attachments/.trash/<id>/<horodatage>/` |
+| Pièces jointes | `<dossier du projet>/attachments/<id de la tâche>/<nom>` (ou `<attachments.dir>/<projet>/<id de la tâche>/<nom>`) ; corbeille : `attachments/.trash/<id>/<horodatage>/` |
 | Journal (cible `file`) | `~/.local/state/todo/todo.log` |
 | État du rappel | `~/.local/share/todo/remind_off`, `remind_last`, `remind_status` |
 | Archive (projet `default`) | `~/.local/share/todo/todo_archive*` |

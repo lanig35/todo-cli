@@ -572,3 +572,140 @@ def test_check_est_journalise(tache, fichiers):
     (fichiers / "avis.txt").unlink()
     todo("attachment", "check", env={"TODO_LOG_TARGET": "file", "TODO_LOG_LEVEL": "warning"})
     assert any("attachment_check_failed" in l and "manquantes=1" in l for l in todo.journal())
+
+
+# ------------------------------------------------------------------ [attachments] dir
+@pytest.fixture
+def ailleurs(todo, fichiers):
+    """Instance dont les pièces jointes vivent dans un dossier choisi."""
+    cible = todo.dossier / "pj"
+    env = {"TODO_ATTACHMENTS_DIR": str(cible)}
+    todo("add", "Dossier impôts")
+    return todo, todo.id_de("Dossier impôts"), cible, env
+
+
+def test_dir_les_copies_vont_dans_le_dossier_choisi(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    assert todo("attachment", "add", i, fichiers / "avis.txt", env=env).code == 0
+    complet = todo.une("Dossier impôts")["id"]
+    assert (cible / "default" / complet / "avis.txt").read_text() == "avis d'imposition\n"
+    assert not dossier_pj(todo).exists()
+    assert stat.S_IMODE(os.stat(cible / "default").st_mode) == 0o700
+    assert stat.S_IMODE(os.stat(cible / "default" / complet).st_mode) == 0o700
+    assert stat.S_IMODE(os.stat(cible).st_mode) != 0o700            # le dossier de l'utilisateur n'est pas modifié
+    r = todo("attachment", "check", env=env)
+    assert r.code == 0
+
+
+def test_dir_open_save_remove_gc(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("attachment", "add", i, fichiers / "avis.txt", fichiers / "scan.bin", env=env)
+    complet = todo.une("Dossier impôts")["id"]
+    assert "avis" in todo("attachment", "open", i, "1", env={**env, "TODO_ATTACHMENTS_OPENER": "cat"}).sortie
+    sortie = todo.dossier / "sortie"
+    sortie.mkdir()
+    assert todo("attachment", "save", i, "1", "--to", sortie, env=env).code == 0 and (sortie / "avis.txt").exists()
+    assert todo("attachment", "remove", i, "1", env=env).code == 0
+    assert list((cible / "default" / ".trash" / complet).glob("*/avis.txt"))
+    assert todo("attachment", "check", env=env).code == 0           # la corbeille n'est pas une erreur
+    assert todo("attachment", "gc", "-y", env=env).code == 0
+    assert not (cible / "default" / ".trash").exists()
+
+
+def test_dir_check_detecte_manquant_modifie_orphelin(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("attachment", "add", i, fichiers / "avis.txt", fichiers / "scan.bin", env=env)
+    complet = todo.une("Dossier impôts")["id"]
+    (cible / "default" / complet / "avis.txt").unlink()
+    (cible / "default" / complet / "scan.bin").write_bytes(b"autre")
+    (cible / "default" / complet / "intrus.txt").write_text("x")
+    r = todo("attachment", "check", env=env)
+    assert r.code == 1
+    assert "manquant" in r.sortie and "modifi" in r.sortie and "intrus.txt" in r.sortie
+
+
+def test_dir_relatif_part_du_dossier_de_stockage(todo, fichiers):
+    todo("add", "T")
+    i = todo.id_de("T")
+    env = {"TODO_ATTACHMENTS_DIR": "pieces"}
+    assert todo("attachment", "add", i, fichiers / "avis.txt", env=env).code == 0
+    assert list((todo.db_dir / "pieces" / "default").glob("*/avis.txt"))
+
+
+def test_dir_dans_le_fichier_de_configuration(todo, fichiers):
+    cible = todo.dossier / "viaconf"
+    todo.config(f"[attachments]\ndir = {cible}\n")
+    todo("add", "T")
+    todo("attachment", "add", todo.id_de("T"), fichiers / "avis.txt")
+    assert list((cible / "default").glob("*/avis.txt"))
+
+
+def test_dir_un_dossier_par_projet(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("project", "create", "travail")
+    todo("add", "B", "-p", "travail")
+    b = todo("list", "-p", "travail", "--format", "json").json()[0]["id"][:8]
+    todo("attachment", "add", b, fichiers / "scan.bin", "-p", "travail", env=env)
+    assert list((cible / "travail").glob("*/scan.bin"))
+
+
+def test_dir_task_move_emmene_les_fichiers(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("project", "create", "travail")
+    todo("attachment", "add", i, fichiers / "avis.txt", env=env)
+    complet = todo.une("Dossier impôts")["id"]
+    assert todo("task", "move", i, "--to", "travail", env=env).code == 0
+    assert not (cible / "default" / complet).exists()
+    assert (cible / "travail" / complet / "avis.txt").exists()
+    assert (cible / "travail" / complet).stat().st_mode & 0o777 == 0o700
+
+
+def test_dir_renommer_un_projet_deplace_les_pieces(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("project", "create", "travail")
+    todo("add", "B", "-p", "travail")
+    b = todo("list", "-p", "travail", "--format", "json").json()[0]["id"][:8]
+    todo("attachment", "add", b, fichiers / "scan.bin", "-p", "travail", env=env)
+    assert todo("project", "rename", "travail", "bureau", env=env).code == 0
+    assert not (cible / "travail").exists() and list((cible / "bureau").glob("*/scan.bin"))
+    assert todo("attachment", "check", "-p", "bureau", env=env).code == 0
+
+
+def test_dir_renommer_refuse_si_le_dossier_cible_existe(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("project", "create", "travail")
+    todo("add", "B", "-p", "travail")
+    b = todo("list", "-p", "travail", "--format", "json").json()[0]["id"][:8]
+    todo("attachment", "add", b, fichiers / "scan.bin", "-p", "travail", env=env)
+    (cible / "bureau").mkdir()
+    assert todo("project", "rename", "travail", "bureau", env=env).code == 1
+    assert "travail" in todo("project", "list", env=env).sortie           # rien n'a été renommé
+    assert list((cible / "travail").glob("*/scan.bin"))
+
+
+def test_dir_supprimer_un_projet_met_les_pieces_en_corbeille(ailleurs, fichiers):
+    todo, i, cible, env = ailleurs
+    todo("project", "create", "travail")
+    todo("add", "B", "-p", "travail")
+    b = todo("list", "-p", "travail", "--format", "json").json()[0]["id"][:8]
+    todo("attachment", "add", b, fichiers / "scan.bin", "-p", "travail", env=env)
+    r = todo("project", "delete", "travail", "-y", "--force", env=env)
+    assert r.code == 0 and "Pièces jointes" in r.sortie
+    assert not (cible / "travail").exists()
+    assert list((cible / ".trash").glob("travail-*/*/scan.bin"))
+
+
+def test_dir_les_fichiers_existants_ne_sont_pas_deplaces(tache, fichiers):
+    todo, i = tache
+    todo("attachment", "add", i, fichiers / "avis.txt")                     # sans réglage : emplacement par défaut
+    complet = todo.une("Dossier impôts")["id"]
+    env = {"TODO_ATTACHMENTS_DIR": str(todo.dossier / "pj")}
+    r = todo("attachment", "check", env=env)
+    assert r.code == 1 and "manquant" in r.sortie
+    assert (dossier_pj(todo, complet) / "avis.txt").exists()
+    assert todo("attachment", "check").code == 0                            # retour au défaut : tout est retrouvé
+
+
+def test_dir_reglage_visible(todo):
+    assert todo("config", "get", "attachments.dir").sortie.strip() == ""
+    assert "TODO_ATTACHMENTS_DIR" in todo("config", "show").sortie or "dir" in todo("config", "show").sortie

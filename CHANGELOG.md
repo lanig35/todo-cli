@@ -3,6 +3,16 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le projet le
 [versionnement sémantique](https://semver.org/lang/fr/).
 
+## [3.16.0] - 2026-11-28
+
+### Ajouté
+
+- **Dossier des pièces jointes configurable** : `[attachments] dir` / `TODO_ATTACHMENTS_DIR`. Les copies sont rangées dans
+  `<dir>/<projet>/<id de la tâche>/<nom>` ; `~` accepté, chemin relatif depuis le dossier de stockage. Le dossier choisi n'est jamais
+  modifié, les droits 0700 ne s'appliquent qu'à `<dir>/<projet>` et dessous. Corbeille, `gc`, `check`, `task move` et
+  `doctor` suivent ce dossier ; `project rename` déplace les pièces (tout ou rien) et `project delete` les met dans `<dir>/.trash/`.
+  Les fichiers déjà copiés ne sont pas migrés automatiquement. Sans réglage, rien ne change.
+
 ## [3.15.0] - 2026-11-28
 
 ### Ajouté
@@ -618,6 +628,7 @@ Pour qui utilisait le dépôt avant la 1.0 :
 [3.10.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.10.0
 [3.11.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.11.0
 [3.12.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.12.0
+[3.16.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.16.0
 [3.15.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.15.0
 [3.14.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.14.0
 [3.13.0]: https://github.com/lanig35/todo-cli/releases/tag/v3.13.0

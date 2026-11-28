@@ -98,6 +98,9 @@ REGLAGES = (
             choix=("", "mon", "tue", "wed", "thu", "fri", "sat", "sun")),
     Reglage("attachments", "max_size", "int", 10,
             "Taille maximale d'une pièce jointe, en Mo (todo attachment add) ; 0 = pas de limite.", minimum=0),
+    Reglage("attachments", "dir", "texte", "",
+            "Dossier des pièces jointes (copies) ; vide = `attachments/` dans le dossier de chaque projet. Sinon `<dir>/<projet>/<id de la tâche>/<nom>` "
+            "(~ accepté ; un chemin relatif part du dossier de stockage). Les fichiers déjà copiés ne sont pas déplacés (voir le README)."),
     Reglage("attachments", "opener", "texte", "",
             "Commande qui ouvre une pièce jointe (`todo attachment open`), par exemple `less` ou `evince` ; vide = xdg-open dans une "
             "session graphique, sinon le chemin du fichier est seulement affiché."),
