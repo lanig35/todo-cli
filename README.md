@@ -22,6 +22,7 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Projets : plusieurs listes indépendantes (perso, travail…), chacune avec son archive, ses sauvegardes et son `undo` (`project`, `-p`)
 - Journal des actions et des erreurs, lisible avec `journalctl -t todo`
 - Configuration par fichier INI, variables d'environnement et options (`todo config`)
+- `admin doctor` : diagnostic de la base, du stockage et de la configuration, avec réparations sûres (`--fix`)
 - `report review` : revue hebdomadaire en lecture seule, avec rappel (`reminder`) et envoi par cron
 - `remind` : rappel des tâches en retard (terminal, `cron`, invite du shell)
 - `next` : la prochaine tâche à traiter ; `undo` : annuler la dernière modification
@@ -30,8 +31,8 @@ Les tâches sont stockées dans une base DBM locale, avec sauvegarde automatique
 - Hooks : une commande de votre choix lancée après chaque modification (`[hooks] on_done`, `on_change`…), ou un webhook HTTP intégré (`webhook_url`)
 - Interface texte `todo tui` (curses), cliente de l'API : utilisable en SSH
 - Interface web (Flask + Jinja + Bootstrap) servie par `todo serve`, à côté de l'API
-- API REST (Flask, optionnelle) : `todo serve` pour gérer les tâches à distance, avec jeton obligatoire et `ETag` / `If-Match`
-- Pièces jointes : des fichiers copiés dans le stockage de la tâche (`attachment add`, `open`, `save`), avec corbeille et `undo`
+- API REST (Flask, optionnelle) : `todo serve` pour gérer les tâches à distance, avec jeton obligatoire et `ETag` / `If-Match` ; description OpenAPI et page Swagger UI (`/api/v1/docs`)
+- Pièces jointes : fichiers copiés (dans un dossier au choix, `[attachments] dir`) ou simples liens (`--link`), avec vérification (`attachment check`), corbeille et `undo`
 - Suivi du temps : instant de démarrage (`task start`, plusieurs tâches en cours à la fois), délai jusqu'à la fin, rapports `active` et `cycle`
 - Date de complétion et statistiques
 - Archivage des tâches terminées (consultation, recherche, récupération)
@@ -47,7 +48,7 @@ Python 3.11 ou plus est requis (développé avec Python 3.13). Aucune dépendanc
 
 ```bash
 pipx install git+https://github.com/lanig35/todo-cli          # dernière version de main
-pipx install git+https://github.com/lanig35/todo-cli@v2.5.0   # une version précise (tag)
+pipx install git+https://github.com/lanig35/todo-cli@v3.16.0  # une version précise (tag)
 pipx upgrade todo-cli                                          # mise à jour ; pipx uninstall todo-cli pour retirer
 ```
 
@@ -88,16 +89,16 @@ plus courantes ont un **raccourci** de premier niveau.
 | `archive` | `add`, `list`, `purge`, `restore` |
 | `reminder` | `check`, `enable`, `disable`, `status` |
 | `project` | `current`, `list`, `create`, `use`, `rename`, `delete` |
-| `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
+| `report` | `stats`, `agenda`, `tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle`, `review` |
 | `hooks` | `queue`, `flush`, `clear` (file d'attente du webhook) |
 | `server` | `serve` (API REST + interface web), `tui` (interface texte) |
 | `view` | `save`, `run`, `list`, `show`, `rename`, `remove` |
-| `config` | `show` (ou `list`), `path`, `init` |
+| `config` | `show` (ou `list`), `path`, `init`, `get`, `set`, `unset` |
 | `admin` | `undo`, `restore`, `reset`, `seed`, `doctor` |
 | `data` | `export`, `import` |
 
-Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo`, `serve` (= `task add`, `task list`, … `report agenda`,
-`admin undo`). `todo GROUPE --help` détaille un groupe.
+Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo`, `serve`, `tui` (= `task add`, `task list`, … `report agenda`,
+`admin undo`) ; `serve` et `tui` correspondent à `server serve` et `server tui`. `todo GROUPE --help` détaille un groupe.
 
 ### Migration depuis la 1.x et la 2.x
 
@@ -583,7 +584,7 @@ Corps de la requête (une requête par commande, pas par tâche), en-têtes `Con
 
 ```json
 {"event": "done", "project": "default", "count": 1, "ids": ["0d6a0a67-16c5-4995-8e2b-eea56700c8ad"],
- "version": "3.6.0", "time": "2026-11-22T22:30:12+0100",
+ "version": "3.16.0", "time": "2026-11-22T22:30:12+0100",
  "tasks": [{"id": "0d6a0a67-…", "titre": "Rapport", "statut": "TERMINE", "priorite": "high", "tags": ["pro"], "…": "…"}]}
 ```
 
@@ -1553,6 +1554,20 @@ soon = 0
 | `remind` | `enabled` | `true` | `TODO_REMIND_ENABLED` | — (voir ci-dessous) |
 | `remind` | `limit` | `5` | `TODO_REMIND_LIMIT` | `--limit` |
 | `remind` | `soon` | `0` | `TODO_REMIND_SOON` | `--soon` |
+| `review` | `days` | `7` (1 à 90) | `TODO_REVIEW_DAYS` | `--days` |
+| `review` | `stale` | `30d` | `TODO_REVIEW_STALE` | `--older-than` |
+| `review` | `limit` | `10` | `TODO_REVIEW_LIMIT` | `--limit` |
+| `review` | `day` | *(vide : pas de rappel)* ; `mon`…`sun` | `TODO_REVIEW_DAY` | — |
+| `client` | `url` | `http://127.0.0.1:8765` | `TODO_CLIENT_URL` | `--url` |
+| `client` | `token` | *(vide ; à défaut `TODO_SERVER_TOKEN`)* | `TODO_CLIENT_TOKEN` | — |
+| `client` | `timeout` | `15` (secondes) | `TODO_CLIENT_TIMEOUT` | — |
+| `server` | `host` | `127.0.0.1` | `TODO_SERVER_HOST` | `--host` |
+| `server` | `port` | `8765` (1 à 65535) | `TODO_SERVER_PORT` | `--port` |
+| `server` | `token` | *(vide : le serveur refuse de démarrer)* | `TODO_SERVER_TOKEN` | — |
+| `server` | `web` | `true` | `TODO_SERVER_WEB` | — |
+| `server` | `proxy` | `false` | `TODO_SERVER_PROXY` | — |
+| `server` | `timeout` | `30` (secondes par requête) | `TODO_SERVER_TIMEOUT` | — |
+| `server` | `max_body` | `65536` (octets, minimum 1024) | `TODO_SERVER_MAX_BODY` | — |
 | `log` | `level` | `info` | `TODO_LOG_LEVEL` | `--log-level` |
 | `log` | `target` | `auto` | `TODO_LOG_TARGET` | — |
 | `log` | `file` | `~/.local/state/todo/todo.log` | `TODO_LOG_FILE` | — |
@@ -1695,7 +1710,7 @@ Le document contient `format` (`todo-cli`), `version`, `exporte_le`, `compteurs`
 
 ### Sauvegardes et restauration
 
-Une sauvegarde est créée après chaque modification ; les 5 plus récentes sont conservées.
+Une sauvegarde est créée après chaque modification ; les 5 plus récentes sont conservées (`[general] keep_backups`).
 
 ```bash
 todo admin restore             # liste les sauvegardes (1 = la plus récente)
@@ -1797,7 +1812,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `archive.py` | archivage, consultation de l'archive, récupération |
 | `journal.py` | journal des actions et erreurs (journald, syslog, fichier) |
 | `reglages.py` | registre des réglages, lecture du fichier INI, précédence option > variable > fichier > défaut |
-| `configuration.py` | commande `config` (show, path, init) |
+| `configuration.py` | commande `config` (show, path, init, get, set, unset) |
 | `saisie.py` | saisie rapide (marqueurs dans le titre) |
 | `dependances.py` | dépendances entre tâches (`--after`) : blocage, cycles |
 | `filtres.py` | filtres communs à `list` et `archive list` (sans échéance, notes, dates de fin et d'archivage) |
@@ -1808,7 +1823,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `deplacement.py` | `task move` : déplacement de tâches entre projets, dépendances et sauvegardes |
 | `projets.py` | groupe `project` : current, list, create, use, rename, delete (corbeille) |
 | `diagnostic.py` | `admin doctor` : diagnostic de la base, du stockage et de la configuration, réparations sûres |
-| `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
+| `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle`, `review` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `formats.py` | formats de sortie (text, table, plain, json, choix automatique) et catalogue des colonnes `--columns` |
 | `affichage.py` | détail d'une tâche, liste (tri, filtres, pagination, pager), statistiques |
@@ -1833,14 +1848,13 @@ interne du code.
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"               # installe todo en mode éditable, avec pytest, pytest-xdist, faker, flask, requests
 python -m pytest -m smoke             # non-régression rapide : environ 300 tests, 1 à 2 minutes
-python -m pytest -n auto              # suite complète en parallèle (≈ 1 500 tests ; plus de 15 minutes sans -n)
+python -m pytest -n auto              # suite complète en parallèle (≈ 1 700 tests ; plus de 15 minutes sans -n)
 ```
 
 **Au quotidien**, on ne lance pas toute la suite : `-m smoke` après chaque modification, plus le fichier de la fonction touchée
 (`python -m pytest tests/test_hooks.py`) ou `-k mot`. La suite complète tourne en intégration continue (`-n auto`) et avant une
 version. Le sous-ensemble `smoke` est défini dans `tests/conftest.py` : les fichiers courts en entier, les 3 premiers tests (cas
 nominaux) des autres, et quelques tests bout en bout. Pour trouver les tests lents : `python -m pytest --durations=20 -n auto`.
-Deux tests du suivi du temps (`test_suivi_temps.py`) dépendent de l'heure de la journée et peuvent échouer tôt le matin.
 
 Le fichier `pyproject.toml` décrit le paquet (nom, extras, commande `todo`) et la configuration de pytest.
 La version n'y est écrite nulle part : elle est lue dans `todo_cli/__init__.py`, comme `todo --version` et
@@ -1851,7 +1865,7 @@ le CHANGELOG.
 Le workflow `.github/workflows/tests.yml` lance la suite sur Python 3.13 (Debian 13)
 à chaque PR et à chaque push sur `main`. Un nouveau push sur une branche annule l'exécution précédente.
 Pour exiger un résultat vert avant la fusion : *Settings → Branches → Branch protection rules → Require
-status checks to pass* (cocher `pytest (Python`3.13`).
+status checks to pass* (cocher `pytest (Python 3.13)`).
 
 ## Stockage
 
@@ -1900,7 +1914,7 @@ illisible est ignorée avec un avertissement au lieu de faire échouer la comman
 ## Versions et compatibilité
 
 ```bash
-todo --version      # todo 2.5.0
+todo --version      # todo 3.16.0
 ```
 
 Les versions suivent le [versionnement sémantique](https://semver.org/lang/fr/) : `1.0.1` corrige un
