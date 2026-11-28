@@ -93,7 +93,7 @@ plus courantes ont un **raccourci** de premier niveau.
 | `server` | `serve` (API REST + interface web), `tui` (interface texte) |
 | `view` | `save`, `run`, `list`, `show`, `rename`, `remove` |
 | `config` | `show` (ou `list`), `path`, `init` |
-| `admin` | `undo`, `restore`, `reset`, `seed` |
+| `admin` | `undo`, `restore`, `reset`, `seed`, `doctor` |
 | `data` | `export`, `import` |
 
 Raccourcis : `todo add`, `list`, `show`, `done`, `next`, `agenda`, `undo`, `serve` (= `task add`, `task list`, … `report agenda`,
@@ -1699,6 +1699,52 @@ annulée en restaurant cette sauvegarde (la n°2 juste après).
 Autres commandes : `todo admin reset` (vide la liste, avec confirmation et sauvegarde préalable ; `--include-archive` vide aussi l'archive, la confirmation en indique alors les effectifs, et `undo` rétablit tout) et
 `todo admin seed [N]` (ajoute N tâches factices, nécessite `faker`).
 
+### Diagnostic de la base (`admin doctor`)
+
+`todo admin doctor` contrôle l'état de la base, du stockage et de la configuration et signale ce qui cloche. Il lit les entrées
+**brutes** (la lecture normale corrige en silence une priorité invalide ou une récurrence incorrecte, ce qui cacherait les anomalies) et
+**ne modifie rien** sans `--fix`.
+
+```bash
+todo admin doctor                       # projet courant + environnement
+todo admin doctor --all-projects        # tous les projets
+todo admin doctor --strict              # code de sortie 1 aussi pour un avertissement (cron, CI)
+todo admin doctor --no-attachments      # sans vérifier les pièces jointes (empreintes : long avec de gros fichiers)
+todo admin doctor --format json | jq '.constats[] | select(.niveau == "erreur")'
+todo admin doctor --fix --dry-run       # montre ce qui serait réparé
+todo admin doctor --fix                 # répare, après confirmation (--yes pour la passer)
+```
+
+Chaque constat a un **niveau** (`erreur`, `avertissement`, `info`), un **code** stable, une portée (le projet, ou `environnement`),
+l'identifiant de la tâche concernée et un indicateur `reparable`. Le code de sortie vaut `1` s'il y a au moins une erreur
+(`--strict` : ou un avertissement), `0` sinon ; les `info` ne comptent jamais. Formats : `text`, `table`, `plain`
+(`niveau`, `code`, `portée`, `id`, `message`, séparés par des tabulations) et `json` (`ok`, `bilan`, `projets`, `constats` et, avec `--fix`,
+`reparations`).
+
+| Niveau | Code | Contrôle |
+|---|---|---|
+| erreur | `unreadable_entry` | entrée de la base ou de l'archive illisible (JSON invalide) : ignorée par `todo` |
+| erreur | `invalid_status` | statut autre que `A FAIRE` ou `TERMINE` |
+| erreur | `dependency_cycle`, `self_dependency` | dépendances circulaires, tâche qui s'attend elle-même |
+| erreur | `unknown_db_format`, `views_file_invalid` | base DBM illisible ou format inconnu ; fichier des vues illisible |
+| erreur | `attachment_missing` | pièce jointe dont le fichier (copie ou lien) est introuvable |
+| avertissement | `invalid_priority`, `invalid_started`, `todo_with_done_date`, `invalid_tags`, `invalid_dependencies` | valeurs incorrectes, **réparables** |
+| avertissement | `missing_title`, `invalid_due`, `invalid_recurrence`, `recurrence_without_due`, `invalid_dates` | titre, échéance, récurrence ou dates incorrects (à corriger avec `task edit`) |
+| avertissement | `duplicate_in_archive`, `archived_not_done` | tâche à la fois dans la liste et l'archive ; tâche archivée non terminée |
+| avertissement | `attachment_modified`, `attachment_orphan` | pièce dont le contenu a changé ; fichier du stockage que rien ne référence (`attachment gc`) |
+| avertissement | `config_warning`, `unknown_env_var`, `hook_command_not_found`, `invalid_webhook_url` | réglage inconnu ou invalide ; variable `TODO_…` inconnue (avec suggestion) ; commande de hook introuvable ; adresse de webhook invalide |
+| avertissement | `webhook_queue_unreadable`, `storage_group_writable`, `low_disk_space`, `invalid_project_dir` | file du webhook illisible ; dossier de stockage modifiable par d'autres comptes ; moins de 50 Mo libres ; dossier de projet au nom invalide |
+| info | `missing_dependency` | dépendance vers une tâche qui n'existe plus (elle ne bloque plus ; **réparable**) |
+| info | `done_without_date`, `missing_next`, `attachment_in_trash`, `no_backup`, `webhook_queue_pending`, `dbm_dumb` | informations : ancienne tâche terminée sans date, occurrence suivante introuvable, pièce dans la corbeille, aucune sauvegarde, événements du webhook en attente, moteur `dbm.dumb` |
+
+**Réparation (`--fix`).** Elle ne corrige que ce qui ne perd aucune information utile : priorité invalide remplacée par `medium`,
+instant de démarrage invalide retiré, date de fin sur une tâche à faire retirée, éléments invalides de `tags` et `apres` retirés,
+dépendances vers des tâches disparues retirées. Les autres champs (notes, pièces jointes, champs inconnus…) ne sont pas touchés. Elle prend le
+verrou exclusif, **sauvegarde avant et après** (`todo undo` annule la réparation) et s'applique à **un seul projet**
+(`-p PROJET` ; incompatible avec `--all-projects`). Les entrées illisibles, les statuts, les dates, les récurrences et les cycles ne sont jamais
+modifiés : le diagnostic les signale, à vous de les corriger (`task edit`, `data import --update`, `undo`). Sans terminal, `--fix` demande
+`--yes` (ou `--dry-run`).
+
 ### Codes de sortie
 
 | Code | Signification |
@@ -1751,6 +1797,7 @@ if todo show a1b2c3 --format json > tache.json; then jq .titre tache.json; fi
 | `prochaine.py` | commande `next` |
 | `deplacement.py` | `task move` : déplacement de tâches entre projets, dépendances et sauvegardes |
 | `projets.py` | groupe `project` : current, list, create, use, rename, delete (corbeille) |
+| `diagnostic.py` | `admin doctor` : diagnostic de la base, du stockage et de la configuration, réparations sûres |
 | `rapports.py` | rapports `report tags`, `blocked`, `overdue`, `stale`, `done`, `active`, `cycle` |
 | `agenda.py` | vue agenda (tâches regroupées par jour) |
 | `formats.py` | formats de sortie (text, table, plain, json, choix automatique) et catalogue des colonnes `--columns` |

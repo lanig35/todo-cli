@@ -14,6 +14,7 @@ from .stockage import _lire_taches
 from . import deplacement, projets, stockage
 from .deplacement import deplacer_taches
 from .configuration import afficher_chemin, afficher_config, ecrire_reglage, initialiser_config, lire_reglage, retirer_reglage
+from .diagnostic import diagnostiquer
 from .dates import MSG_FORMATS_DATE, _resoudre_date
 from .dates import _decaler
 from .filtres import MSG_FORMATS_DATE_PASSEE, parser_instant, resoudre_date_passee
@@ -662,6 +663,19 @@ def _args_reset(p):
                               help="Vide aussi l'archive (par défaut, reset ne touche qu'à la liste)")
 
 
+def _args_doctor(p):
+    p.add_argument('--fix', action='store_true',
+                   help="Répare ce qui peut l'être sans perte (valeurs invalides déjà ignorées, dépendances vers des tâches disparues…) : "
+                        "sauvegarde avant et après, `todo undo` annule ; un seul projet à la fois")
+    p.add_argument('--dry-run', action='store_true', help="Avec --fix : montre les réparations sans rien modifier")
+    p.add_argument('-y', '--yes', action='store_true', help="Avec --fix : ne pas demander de confirmation")
+    p.add_argument('--strict', action='store_true', help="Code de sortie 1 aussi en cas d'avertissement (par défaut : seulement pour une erreur)")
+    p.add_argument('--no-attachments', dest='sans_pieces', action='store_true',
+                   help="Ne pas vérifier les pièces jointes (le calcul des empreintes peut être long avec de gros fichiers)")
+    _ajouter_tous_projets(p)
+    p.add_argument('--format', choices=FORMATS, default=None, help='Format de sortie (voir `todo --help`)')
+
+
 def _args_undo(p):
     pass
 
@@ -927,6 +941,7 @@ _GROUPES = [
         ('tui', 'tui', _args_tui, "Interface texte (curses), cliente de l'API : todo tui [--url URL] [-p PROJET]", {}),
     ]),
     ('admin', "Maintenance de la base", [
+        ('doctor', 'doctor', _args_doctor, "Diagnostic de la base, du stockage et de la configuration (--fix répare le réparable)", {}),
         ('undo', 'undo', _args_undo, "Annuler la dernière modification (un second 'undo' la rétablit)", {}),
         ('restore', 'restore', _args_restore, "Lister les sauvegardes ou restaurer l'une d'elles", {}),
         ('reset', 'reset', _args_reset, 'Détruire le contenu de la base', {}),
@@ -1051,7 +1066,7 @@ def _completer_ligne():
 
 
 # Commandes qui ne déclenchent pas l'archivage automatique (elles gèrent déjà l'archive ou l'historique)
-_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete', 'attachment_gc',
+_SANS_ARCHIVAGE_AUTO = ('archive', 'unarchive', 'undo', 'restore', 'reset', 'import', 'seed', 'project_rename', 'project_delete', 'attachment_gc', 'doctor',
                         'view_save', 'view_rename', 'view_remove', 'hooks_queue', 'hooks_flush', 'hooks_clear')
 
 
@@ -1065,6 +1080,8 @@ def _mode_verrou(args):
     if c in ('list', 'show', 'next', 'agenda', 'stats', 'export', 'remind', 'report_tags', 'report_blocked', 'report_overdue',
              'report_stale', 'report_done', 'report_active', 'report_cycle', 'report_review', 'view_list', 'view_show', 'hooks_queue', 'hooks_flush', 'hooks_clear', 'attachment_list', 'attachment_check', 'attachment_open', 'attachment_save'):
         return verrou.PARTAGE
+    if c == 'doctor':
+        return verrou.EXCLUSIF if args.fix and not args.dry_run else verrou.PARTAGE
     if c == 'archive' and (args.lister or args.search is not None):
         return verrou.PARTAGE
     if c == 'note' and not args.texte and args.edit is None and args.delete is None:
@@ -1486,6 +1503,17 @@ def main():
         succes = vues.commande_renommer(args.ancien, args.nouveau, args.format)
     elif args.commande == 'view_remove':
         succes = vues.commande_supprimer(args.nom, args.format)
+    elif args.commande == 'doctor':
+        if args.fix and args.tous_projets:
+            journal.echec("invalid_combination")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --fix ne se combine pas avec --all-projects (un projet à la fois : -p PROJET).", file=sys.stderr)
+            sys.exit(1)
+        if (args.dry_run or args.yes) and not args.fix:
+            journal.echec("invalid_combination")
+            print(f" {couleurs.CLR_DEL}❌ Erreur :{couleurs.CLR_RESET} --dry-run et --yes s'utilisent avec --fix.", file=sys.stderr)
+            sys.exit(1)
+        succes = diagnostiquer(config.projets() if args.tous_projets else [config.projet()], args.fix, args.dry_run, args.yes,
+                               args.strict, not args.sans_pieces, args.format)
     elif args.commande == 'reset':
         reinitialiser_base(args.include_archive)
     else:
