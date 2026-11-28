@@ -2,7 +2,8 @@
 
 Chaque tâche porte une liste `pieces_jointes` (comme les notes) : `{"nom", "date", "taille", "sha256"}` et un
 `commentaire` facultatif. Les fichiers eux-mêmes vivent hors de la base DBM, dans
-`<dossier du projet>/attachments/<id de la tâche>/<nom>`. On **copie** : la tâche reste autonome si l'original
+`<dossier du projet>/attachments/<id de la tâche>/<nom>` (ou `<dir>/<projet>/<id de la tâche>/<nom>` avec le réglage
+`[attachments] dir`). On **copie** : la tâche reste autonome si l'original
 disparaît. Avec `--link`, on ne copie rien : la pièce porte `lien` (chemin absolu) et le fichier reste où il est ;
 `attachment check` signale alors un fichier déplacé, supprimé ou modifié. Une pièce se désigne par son numéro
 (à partir de 1), comme une note.
@@ -42,8 +43,23 @@ _BLOC = 1024 * 1024
 
 
 # ------------------------------------------------------------------------------------------ chemins
+def racine_configuree():
+    """Dossier `[attachments] dir` (`~` développé ; un chemin relatif part du dossier de stockage, jamais du dossier courant), ou None."""
+    valeur = reglages.obtenir("attachments", "dir").strip()
+    if not valeur:
+        return None
+    chemin = os.path.expanduser(valeur)
+    return os.path.normpath(chemin if os.path.isabs(chemin) else os.path.join(config.dossier(), chemin))
+
+
 def dossier(projet=None):
-    """Dossier des pièces jointes d'un projet (le courant par défaut)."""
+    """Dossier des pièces jointes d'un projet (le courant par défaut).
+
+    Par défaut `<dossier du projet>/attachments` ; avec `[attachments] dir`, `<dir>/<projet>` (`default` pour le projet par défaut).
+    """
+    racine = racine_configuree()
+    if racine:
+        return os.path.join(racine, projet or config.projet())
     base = config.DB_DIR if projet is None else config.dossier_du_projet(projet)
     return os.path.join(base, DOSSIER)
 
@@ -82,13 +98,17 @@ def _nom_libre(nom, pris):
     return f"{racine}-{n}{extension}"
 
 
-def _creer_dossier(chemin):
-    """Crée `chemin` ; lui et ses parents jusqu'à `attachments/` inclus sont en 0700 (makedirs n'applique `mode` qu'au dernier)."""
+def _creer_dossier(chemin, projet=None):
+    """Crée `chemin` ; lui et ses parents jusqu'au dossier des pièces du projet inclus sont en 0700 (makedirs n'applique `mode` qu'au dernier).
+
+    Avec `[attachments] dir`, le dossier choisi par l'utilisateur n'est jamais modifié : seul `<dir>/<projet>` et dessous le sont.
+    """
+    racine = dossier(projet)
     os.makedirs(chemin, mode=0o700, exist_ok=True)
     courant = chemin
     while True:
         os.chmod(courant, 0o700)
-        if os.path.basename(courant) == DOSSIER or os.path.dirname(courant) == courant:
+        if courant == racine or os.path.dirname(courant) == courant:
             return
         courant = os.path.dirname(courant)
 
@@ -109,7 +129,7 @@ def mettre_a_la_corbeille(id_complet, noms=None, projet=None):
         chemin = os.path.join(source, nom)
         if not os.path.lexists(chemin):
             continue
-        _creer_dossier(cible)
+        _creer_dossier(cible, projet)
         os.replace(chemin, os.path.join(cible, nom))
         deplaces += 1
     if not os.listdir(source):
@@ -169,13 +189,36 @@ def deplacer_vers_projet(id_complet, cible):
         return True
     try:
         destination = _dossier_tache(id_complet, cible)
-        _creer_dossier(os.path.dirname(destination))
+        _creer_dossier(os.path.dirname(destination), cible)
         shutil.move(source, destination)
         return True
     except OSError as e:
         rouge, raz = couleurs._couleurs_erreur()
         print(f" {rouge}⚠️{raz} Pièces jointes de {id_complet[:8]} non déplacées : {e}", file=sys.stderr)
         return False
+
+
+def renommer_projet(ancien, nouveau):
+    """Avec `[attachments] dir`, les pièces d'un projet vivent hors de son dossier : elles suivent son renommage (OSError si impossible)."""
+    racine = racine_configuree()
+    source = os.path.join(racine, ancien) if racine else None
+    if source and os.path.isdir(source):
+        cible = os.path.join(racine, nouveau)
+        if os.path.lexists(cible):
+            raise OSError(f"{cible} existe déjà")
+        os.rename(source, cible)
+
+
+def mettre_projet_a_la_corbeille(nom, nom_corbeille):
+    """Avec `[attachments] dir`, met les pièces d'un projet supprimé dans `<dir>/.trash/<nom_corbeille>/` ; retourne ce chemin, ou None."""
+    racine = racine_configuree()
+    source = os.path.join(racine, nom) if racine else None
+    if not (source and os.path.isdir(source)):
+        return None
+    cible = os.path.join(racine, CORBEILLE, nom_corbeille)
+    os.makedirs(os.path.dirname(cible), mode=0o700, exist_ok=True)
+    shutil.move(source, cible)
+    return cible
 
 
 # ------------------------------------------------------------------------------------- métadonnées

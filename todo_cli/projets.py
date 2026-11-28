@@ -10,7 +10,7 @@ import json
 import os
 import sys
 
-from . import config, couleurs, journal, reglages
+from . import config, couleurs, journal, pieces_jointes, reglages
 from .configuration import ecrire_reglage
 from .formats import imprimer_plain, tableau
 from .stockage import _charger_taches
@@ -143,7 +143,12 @@ def renommer(ancien, nouveau, fmt="text"):
     if config.existe(nouveau):
         return _refus("project_exists", f"le projet '{nouveau}' existe déjà", fmt, projet=nouveau)
     try:
-        config.renommer_projet(ancien, nouveau)
+        pieces_jointes.renommer_projet(ancien, nouveau)           # [attachments] dir : les pièces suivent le projet
+        try:
+            config.renommer_projet(ancien, nouveau)
+        except OSError:
+            pieces_jointes.renommer_projet(nouveau, ancien)       # retour en arrière : le renommage est tout ou rien
+            raise
     except OSError as e:
         return _refus("project_error", f"impossible de renommer '{ancien}' : {e.strerror or e}", fmt, projet=ancien)
     journal.noter(modifie=True, project_action="rename", target=ancien, new=nouveau)
@@ -190,11 +195,20 @@ def supprimer(nom, courant, oui=False, forcer=False, fmt="text"):
     except OSError as e:
         return _refus("project_error", f"impossible de supprimer '{nom}' : {e.strerror or e}", fmt, projet=nom)
     journal.noter(modifie=True, project_action="delete", target=nom)
+    pieces = None
+    try:
+        pieces = pieces_jointes.mettre_projet_a_la_corbeille(nom, os.path.basename(cible))
+    except OSError as e:
+        rouge, raz = couleurs._couleurs_erreur()
+        print(f" {rouge}⚠️{raz} Pièces jointes de '{nom}' non déplacées : {e.strerror or e}", file=sys.stderr)
     if fmt == "json":
-        print(json.dumps({"projet": nom, "supprime": True, "corbeille": cible}, indent=2, ensure_ascii=False))
+        print(json.dumps({"projet": nom, "supprime": True, "corbeille": cible, **({"corbeille_pieces_jointes": pieces} if pieces else {})},
+                         indent=2, ensure_ascii=False))
     elif fmt != "plain":
         print(f" 🗑️  Projet {couleurs.CLR_BOLD}{nom}{couleurs.CLR_RESET} déplacé dans la corbeille : {cible}\n"
               f"    {couleurs.CLR_DIM}Pour le récupérer : déplacez ce dossier vers "
               f"{config.dossier_du_projet(nom)}{couleurs.CLR_RESET}")
+        if pieces:
+            print(f"    {couleurs.CLR_DIM}Pièces jointes déplacées dans {pieces} (à remettre dans {os.path.join(pieces_jointes.racine_configuree(), nom)}){couleurs.CLR_RESET}")
     return True
 
